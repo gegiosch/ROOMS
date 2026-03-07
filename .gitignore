@@ -1,0 +1,4 @@
+.DS_Store
+*.gscript
+*.gsheet
+node_modules
