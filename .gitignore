@@ -2,3 +2,4 @@
 *.gscript
 *.gsheet
 node_modules
+.clasp.json
