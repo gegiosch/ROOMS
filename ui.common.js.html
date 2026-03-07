@@ -1,0 +1,123 @@
+<script>
+window.ROOMS_INITIAL_MODEL = window.ROOMS_INITIAL_MODEL || {};
+
+window.ROOMS_UI = {
+  call: function (methodName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        reject(new Error('google.script.run is unavailable in this context.'));
+        return;
+      }
+
+      var runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function (error) {
+          reject(new Error(error && error.message ? error.message : String(error)));
+        });
+
+      runner[methodName].apply(runner, args);
+    });
+  },
+
+  setNotice: function (element, message, kind) {
+    if (!element) {
+      return;
+    }
+
+    element.className = 'notice' + (kind ? ' ' + kind : '');
+    element.textContent = message || '';
+  },
+
+  clearNode: function (node) {
+    while (node && node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  },
+
+  el: function (tagName, className, text) {
+    var node = document.createElement(tagName);
+    if (className) {
+      node.className = className;
+    }
+    if (text != null) {
+      node.textContent = text;
+    }
+    return node;
+  },
+
+  fillSelect: function (select, options, valueField, labelField, selectedValue) {
+    this.clearNode(select);
+    options.forEach(function (option) {
+      var element = document.createElement('option');
+      element.value = option[valueField];
+      element.textContent = option[labelField];
+      if (selectedValue && selectedValue === option[valueField]) {
+        element.selected = true;
+      }
+      select.appendChild(element);
+    });
+  },
+
+  createEditableTable: function (mountNode, headers, rows, readOnly) {
+    this.clearNode(mountNode);
+    var wrap = this.el('div', 'table-wrap');
+    var table = this.el('table', readOnly ? 'compact-table' : '');
+    var thead = document.createElement('thead');
+    var headerRow = document.createElement('tr');
+
+    headers.forEach(function (header) {
+      headerRow.appendChild(ROOMS_UI.el('th', '', header));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    rows.forEach(function (row) {
+      tbody.appendChild(ROOMS_UI.createEditableRow_(headers, row, readOnly));
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    mountNode.appendChild(wrap);
+
+    return {
+      addRow: function () {
+        var row = {};
+        headers.forEach(function (header) {
+          row[header] = '';
+        });
+        tbody.appendChild(ROOMS_UI.createEditableRow_(headers, row, readOnly));
+      },
+      getRows: function () {
+        return Array.prototype.slice.call(tbody.querySelectorAll('tr')).map(function (tr) {
+          var result = {};
+          headers.forEach(function (header) {
+            var input = tr.querySelector('[data-header="' + header + '"]');
+            result[header] = input ? input.value : '';
+          });
+          return result;
+        }).filter(function (row) {
+          return headers.some(function (header) {
+            return String(row[header] || '').trim() !== '';
+          });
+        });
+      }
+    };
+  },
+
+  createEditableRow_: function (headers, row, readOnly) {
+    var tr = document.createElement('tr');
+    headers.forEach(function (header) {
+      var td = document.createElement('td');
+      td.className = 'editable-cell';
+      var input = document.createElement('input');
+      input.value = row[header] == null ? '' : row[header];
+      input.dataset.header = header;
+      input.disabled = Boolean(readOnly);
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+};
+</script>

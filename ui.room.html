@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include_('ui.common.css.html'); ?>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="app-header">
+        <div class="title-block">
+          <div class="eyebrow">Room Detail</div>
+          <h1 id="room-title">Caricamento...</h1>
+          <p class="subtitle" id="room-subtitle">Prenotazioni, disponibilità e ricorrenze.</p>
+        </div>
+        <div class="status-pill" id="room-user-pill">Utente non rilevato</div>
+      </header>
+
+      <section class="grid grid-3">
+        <article class="panel metric-card">
+          <h3>Stato attuale</h3>
+          <div class="metric-value" id="room-status">-</div>
+          <div class="muted" id="room-current-booking">Nessuna prenotazione in corso.</div>
+        </article>
+        <article class="panel metric-card">
+          <h3>Data</h3>
+          <div class="metric-value" id="room-date-label">-</div>
+          <div class="muted">Aggiorna la data per controllare il planning.</div>
+        </article>
+        <article class="panel metric-card">
+          <h3>Slot liberi</h3>
+          <div class="metric-value" id="room-free-count">0</div>
+          <div class="muted">Intervalli disponibili nella giornata selezionata.</div>
+        </article>
+      </section>
+
+      <section class="panel form-card" style="margin-top: 18px;">
+        <div class="toolbar">
+          <select class="select" id="room-select" style="max-width: 320px;"></select>
+          <input class="input" type="date" id="room-date-input" style="max-width: 180px;">
+          <button class="button secondary" id="room-refresh-button">Aggiorna</button>
+        </div>
+        <div id="room-notice" class="notice">Seleziona una stanza e carica i dati.</div>
+      </section>
+
+      <section class="grid grid-2" style="margin-top: 18px;">
+        <article class="panel table-card">
+          <div class="section-title">
+            <h3>Prenotazioni di oggi</h3>
+          </div>
+          <div id="bookings-table"></div>
+        </article>
+
+        <article class="panel table-card">
+          <div class="section-title">
+            <h3>Slot disponibili</h3>
+          </div>
+          <div id="free-slots-table"></div>
+        </article>
+      </section>
+
+      <section class="grid grid-2" style="margin-top: 18px;">
+        <article class="panel form-card">
+          <h3>Nuova prenotazione</h3>
+          <div class="grid">
+            <input class="input" type="text" id="booking-title" placeholder="Titolo">
+            <div class="grid grid-2">
+              <input class="input" type="time" id="booking-start">
+              <input class="input" type="time" id="booking-end">
+            </div>
+            <div class="grid grid-2">
+              <input class="input" type="text" id="booking-name" placeholder="Nome">
+              <input class="input" type="text" id="booking-surname" placeholder="Cognome">
+            </div>
+            <textarea class="textarea" id="booking-notes" placeholder="Note"></textarea>
+            <button class="button" id="booking-submit">Conferma prenotazione</button>
+          </div>
+        </article>
+
+        <article class="panel form-card">
+          <h3>Ricorrenza settimanale</h3>
+          <div class="grid">
+            <select class="select" id="recurring-weekday">
+              <option>Monday</option>
+              <option>Tuesday</option>
+              <option>Wednesday</option>
+              <option>Thursday</option>
+              <option>Friday</option>
+              <option>Saturday</option>
+              <option>Sunday</option>
+            </select>
+            <div class="grid grid-2">
+              <input class="input" type="date" id="recurring-start-date">
+              <input class="input" type="date" id="recurring-end-date">
+            </div>
+            <div class="grid grid-2">
+              <input class="input" type="time" id="recurring-start-time">
+              <input class="input" type="time" id="recurring-end-time">
+            </div>
+            <div class="toolbar">
+              <button class="button secondary" id="recurring-preview">Anteprima</button>
+              <button class="button" id="recurring-commit">Conferma serie</button>
+            </div>
+            <div id="recurring-result" class="notice">L'anteprima mostrerà validazioni, conflitti e date saltate.</div>
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <script>
+      window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+    </script>
+    <?!= include_('ui.common.js.html'); ?>
+    <script>
+      (function () {
+        var bootstrap = window.ROOMS_INITIAL_MODEL || {};
+        var currentModel = null;
+        var roomSelect = document.getElementById('room-select');
+        var dateInput = document.getElementById('room-date-input');
+        var notice = document.getElementById('room-notice');
+
+        function loadRoom() {
+          var resourceId = roomSelect.value || bootstrap.roomId;
+          var date = dateInput.value || bootstrap.date;
+
+          ROOMS_UI.setNotice(notice, 'Caricamento dati stanza...', '');
+          return ROOMS_UI.call('getRoomViewModel', resourceId, date)
+            .then(function (model) {
+              currentModel = model;
+              bootstrap.roomId = model.resource ? model.resource.ResourceId : resourceId;
+              bootstrap.date = model.date;
+              render(model);
+              ROOMS_UI.setNotice(notice, 'Dati aggiornati.', 'success');
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(notice, error.message, 'error');
+            });
+        }
+
+        function render(model) {
+          document.getElementById('room-title').textContent = model.resource ? model.resource.DisplayName : 'Stanza non trovata';
+          document.getElementById('room-subtitle').textContent = model.resource
+            ? model.resource.AreaLabel + ' / ' + model.resource.FloorLabel + ' / ' + model.resource.SideLabel
+            : 'Controlla ResourceId e configurazione.';
+          document.getElementById('room-user-pill').textContent = model.user && model.user.email ? model.user.email : 'Utente non autenticato';
+          document.getElementById('room-status').textContent = model.status === 'OCCUPIED' ? 'Occupata' : 'Libera';
+          document.getElementById('room-current-booking').textContent = model.currentBooking
+            ? 'In uso da ' + (model.currentBooking.BookerSurname || model.currentBooking.Title) + ' fino alle ' + model.currentBooking.EndTime
+            : 'Nessuna prenotazione in corso.';
+          document.getElementById('room-date-label').textContent = model.date;
+          document.getElementById('room-free-count').textContent = String(model.freeSlots.length || 0);
+
+          dateInput.value = model.date;
+          if (model.resources && model.resources.length) {
+            ROOMS_UI.fillSelect(roomSelect, model.resources, 'ResourceId', 'DisplayName', model.resource ? model.resource.ResourceId : bootstrap.roomId);
+          }
+
+          renderSimpleTable('bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato'], (model.bookings || []).map(function (booking) {
+            return [booking.StartTime + ' - ' + booking.EndTime, booking.Title, booking.BookerSurname, booking.Status];
+          }), 'Nessuna prenotazione per la data selezionata.');
+
+          renderSimpleTable('free-slots-table', ['Da', 'A'], (model.freeSlots || []).map(function (slot) {
+            return [slot.startTime, slot.endTime];
+          }), 'Nessuno slot libero disponibile.');
+        }
+
+        function renderSimpleTable(containerId, headers, rows, emptyText) {
+          var mount = document.getElementById(containerId);
+          ROOMS_UI.clearNode(mount);
+
+          if (!rows.length) {
+            mount.appendChild(ROOMS_UI.el('div', 'notice', emptyText));
+            return;
+          }
+
+          var wrap = ROOMS_UI.el('div', 'table-wrap');
+          var table = document.createElement('table');
+          var thead = document.createElement('thead');
+          var headerRow = document.createElement('tr');
+          headers.forEach(function (header) {
+            headerRow.appendChild(ROOMS_UI.el('th', '', header));
+          });
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          var tbody = document.createElement('tbody');
+          rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            row.forEach(function (cell) {
+              tr.appendChild(ROOMS_UI.el('td', '', cell));
+            });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          wrap.appendChild(table);
+          mount.appendChild(wrap);
+        }
+
+        function bookingPayload() {
+          return {
+            resourceId: roomSelect.value,
+            bookingDate: dateInput.value,
+            startTime: document.getElementById('booking-start').value,
+            endTime: document.getElementById('booking-end').value,
+            title: document.getElementById('booking-title').value,
+            bookerName: document.getElementById('booking-name').value,
+            bookerSurname: document.getElementById('booking-surname').value,
+            notes: document.getElementById('booking-notes').value
+          };
+        }
+
+        function recurringPayload() {
+          var payload = bookingPayload();
+          payload.weekday = document.getElementById('recurring-weekday').value;
+          payload.startDate = document.getElementById('recurring-start-date').value;
+          payload.endDate = document.getElementById('recurring-end-date').value;
+          payload.startTime = document.getElementById('recurring-start-time').value;
+          payload.endTime = document.getElementById('recurring-end-time').value;
+          return payload;
+        }
+
+        document.getElementById('room-refresh-button').addEventListener('click', loadRoom);
+
+        document.getElementById('booking-submit').addEventListener('click', function () {
+          ROOMS_UI.setNotice(notice, 'Creazione prenotazione...', '');
+          ROOMS_UI.call('createRoomBooking', bookingPayload())
+            .then(function (booking) {
+              ROOMS_UI.setNotice(notice, 'Prenotazione creata: ' + booking.BookingId, 'success');
+              loadRoom();
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(notice, error.message, 'error');
+            });
+        });
+
+        document.getElementById('recurring-preview').addEventListener('click', function () {
+          var target = document.getElementById('recurring-result');
+          ROOMS_UI.setNotice(target, 'Calcolo anteprima...', '');
+          ROOMS_UI.call('previewRecurringRoomBooking', recurringPayload())
+            .then(function (preview) {
+              var summary = 'Valide: ' + preview.validCount + ' / Saltate: ' + preview.skippedCount;
+              var details = preview.occurrences.slice(0, 10).map(function (item) {
+                return item.bookingDate + ' [' + item.status + ']' + (item.errors.length ? ' ' + item.errors.join(' | ') : '');
+              }).join('\n');
+              ROOMS_UI.setNotice(target, summary + (details ? '\n' + details : ''), 'success');
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(target, error.message, 'error');
+            });
+        });
+
+        document.getElementById('recurring-commit').addEventListener('click', function () {
+          var target = document.getElementById('recurring-result');
+          ROOMS_UI.setNotice(target, 'Creazione serie...', '');
+          ROOMS_UI.call('commitRecurringRoomBooking', recurringPayload())
+            .then(function (result) {
+              ROOMS_UI.setNotice(target, 'Serie creata: ' + result.seriesId + ' (' + result.createdCount + ' prenotazioni)', 'success');
+              loadRoom();
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(target, error.message, 'error');
+            });
+        });
+
+        dateInput.value = bootstrap.date || '';
+        document.getElementById('recurring-start-date').value = bootstrap.date || '';
+        document.getElementById('recurring-end-date').value = bootstrap.date || '';
+        loadRoom();
+      }());
+    </script>
+  </body>
+</html>

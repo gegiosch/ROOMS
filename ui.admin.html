@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include_('ui.common.css.html'); ?>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="app-header">
+        <div class="title-block">
+          <div class="eyebrow">Administration</div>
+          <h1>ROOMS Control Room</h1>
+          <p class="subtitle">Configurazione guidata da foglio, inventario risorse e tabelle di servizio.</p>
+        </div>
+        <div class="status-pill" id="admin-user-pill">Verifica permessi...</div>
+      </header>
+
+      <div id="admin-notice" class="notice">Caricamento pannello amministrativo...</div>
+      <div id="admin-root" class="stack" style="margin-top: 18px;"></div>
+    </div>
+
+    <script>
+      window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+    </script>
+    <?!= include_('ui.common.js.html'); ?>
+    <script>
+      (function () {
+        var adminRoot = document.getElementById('admin-root');
+        var notice = document.getElementById('admin-notice');
+        var editors = {};
+
+        function renderSection(tableName, tableData, readOnly) {
+          var card = ROOMS_UI.el('section', 'panel table-card');
+          var title = ROOMS_UI.el('div', 'section-title');
+          title.appendChild(ROOMS_UI.el('h3', '', tableName));
+
+          if (!readOnly) {
+            var controls = ROOMS_UI.el('div', 'toolbar');
+            var addButton = ROOMS_UI.el('button', 'button secondary', 'Nuova riga');
+            var saveButton = ROOMS_UI.el('button', 'button', 'Salva');
+            controls.appendChild(addButton);
+            controls.appendChild(saveButton);
+            title.appendChild(controls);
+
+            addButton.addEventListener('click', function () {
+              editors[tableName].addRow();
+            });
+
+            saveButton.addEventListener('click', function () {
+              ROOMS_UI.setNotice(notice, 'Salvataggio ' + tableName + '...', '');
+              ROOMS_UI.call('adminReplaceTable', tableName, editors[tableName].getRows())
+                .then(function (result) {
+                  ROOMS_UI.setNotice(notice, 'Tabella aggiornata: ' + result.tableName + ' (' + result.rowCount + ' righe)', 'success');
+                })
+                .catch(function (error) {
+                  ROOMS_UI.setNotice(notice, error.message, 'error');
+                });
+            });
+          }
+
+          card.appendChild(title);
+          var mount = ROOMS_UI.el('div', '');
+          card.appendChild(mount);
+          editors[tableName] = ROOMS_UI.createEditableTable(mount, tableData.headers, tableData.rows, readOnly);
+          adminRoot.appendChild(card);
+        }
+
+        ROOMS_UI.call('getAdminBootstrap')
+          .then(function (bootstrap) {
+            document.getElementById('admin-user-pill').textContent = bootstrap.user.email || 'Admin';
+            ROOMS_UI.setNotice(notice, 'Pannello amministrativo pronto.', 'success');
+            ROOMS_UI.clearNode(adminRoot);
+
+            renderSection('CONFIG', bootstrap.tables.CONFIG, false);
+            renderSection('ROOMS_RESOURCES', bootstrap.tables.ROOMS_RESOURCES, false);
+            renderSection('ROOMS_WEEK_SCHEDULE', bootstrap.tables.ROOMS_WEEK_SCHEDULE, false);
+            renderSection('ROOMS_HOLIDAYS', bootstrap.tables.ROOMS_HOLIDAYS, false);
+            renderSection('ROOMS_CLOSURES', bootstrap.tables.ROOMS_CLOSURES, false);
+            renderSection('ROOMS_SPECIAL_OPENINGS', bootstrap.tables.ROOMS_SPECIAL_OPENINGS, false);
+            renderSection('ROOMS_AUDIT', bootstrap.tables.ROOMS_AUDIT, true);
+          })
+          .catch(function (error) {
+            document.getElementById('admin-user-pill').textContent = 'Accesso negato';
+            ROOMS_UI.setNotice(notice, error.message, 'error');
+          });
+      }());
+    </script>
+  </body>
+</html>

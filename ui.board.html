@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include_('ui.common.css.html'); ?>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="app-header">
+        <div class="title-block">
+          <div class="eyebrow">Monitor Dashboard</div>
+          <h1 id="board-app-name">ROOMS</h1>
+          <p class="subtitle" id="board-school-name">IIS Alessandrini</p>
+        </div>
+        <div class="stack">
+          <div class="chip-row">
+            <span class="legend-pill"><span class="dot free"></span> Libera</span>
+            <span class="legend-pill"><span class="dot occupied"></span> Occupata</span>
+            <span class="legend-pill"><span class="dot next"></span> Prossima prenotazione</span>
+          </div>
+          <span class="status-pill" id="board-updated-at">Aggiornamento in corso...</span>
+        </div>
+      </header>
+
+      <section class="panel board-stage">
+        <div id="board-root"></div>
+      </section>
+    </div>
+
+    <script>
+      window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+    </script>
+    <?!= include_('ui.common.js.html'); ?>
+    <script>
+      (function () {
+        var state = window.ROOMS_INITIAL_MODEL || {};
+        var pageIndex = 0;
+        var rotationTimer = null;
+        var refreshTimer = null;
+
+        function render(model) {
+          state = model;
+          document.getElementById('board-app-name').textContent = model.appName || 'ROOMS';
+          document.getElementById('board-school-name').textContent = model.schoolName || '';
+          document.getElementById('board-updated-at').textContent = 'Aggiornato: ' + (model.generatedAtISO || '');
+
+          var root = document.getElementById('board-root');
+          ROOMS_UI.clearNode(root);
+
+          if (!model.pages || !model.pages.length) {
+            root.appendChild(ROOMS_UI.el('div', 'notice', 'Nessuna pagina configurata.'));
+            return;
+          }
+
+          var page = model.pages[pageIndex % model.pages.length];
+          var pageNode = ROOMS_UI.el('div', 'board-page');
+          var maxRow = Math.max.apply(null, page.rowIds);
+          pageNode.style.gridTemplateRows = 'repeat(' + maxRow + ', 92px)';
+
+          page.rowIds.forEach(function (rowId) {
+            var line = ROOMS_UI.el('div', 'board-line');
+            line.style.gridRow = String(rowId);
+            pageNode.appendChild(line);
+          });
+
+          page.tiles.forEach(function (tile) {
+            var tileNode = document.createElement('a');
+            tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
+            tileNode.href = '?page=room&room=' + encodeURIComponent(tile.resourceId);
+            tileNode.style.gridRow = String(tile.layoutRow);
+            tileNode.style.gridColumn = tile.layoutCol + ' / span ' + tile.layoutColSpan;
+
+            tileNode.appendChild(ROOMS_UI.el('div', 'room-meta', tile.floorLabel + ' / ' + tile.sideLabel));
+            tileNode.appendChild(ROOMS_UI.el('div', 'room-title', tile.displayName));
+
+            var lines = ROOMS_UI.el('div', 'room-lines');
+            lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
+            lines.appendChild(ROOMS_UI.el('div', '', 'NEXT: ' + tile.nextLabel));
+            tileNode.appendChild(lines);
+            pageNode.appendChild(tileNode);
+          });
+
+          root.appendChild(pageNode);
+        }
+
+        function rotate() {
+          if (!state.pages || state.pages.length < 2) {
+            return;
+          }
+          pageIndex = (pageIndex + 1) % state.pages.length;
+          render(state);
+        }
+
+        function refresh() {
+          ROOMS_UI.call('getBoardViewModel')
+            .then(function (model) {
+              pageIndex = pageIndex % Math.max(model.pages.length, 1);
+              render(model);
+            })
+            .catch(function (error) {
+              var root = document.getElementById('board-root');
+              ROOMS_UI.clearNode(root);
+              root.appendChild(ROOMS_UI.el('div', 'notice error', error.message));
+            });
+        }
+
+        render(state);
+        rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
+        refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);
+      }());
+    </script>
+  </body>
+</html>
