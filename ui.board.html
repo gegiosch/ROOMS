@@ -18,6 +18,7 @@
             <span class="legend-pill"><span class="dot occupied"></span> Occupata</span>
             <span class="legend-pill"><span class="dot next"></span> Prossima prenotazione</span>
           </div>
+          <span class="status-pill" id="board-page-indicator">Pagina 1/1</span>
           <span class="status-pill" id="board-updated-at">Aggiornamento in corso...</span>
         </div>
       </header>
@@ -35,14 +36,70 @@
       (function () {
         var state = window.ROOMS_INITIAL_MODEL || {};
         var pageIndex = 0;
-        var rotationTimer = null;
-        var refreshTimer = null;
+        var rotationTimer;
+        var refreshTimer;
+
+        function getBranchLabel(model, branchKey) {
+          return model.branchLabels && model.branchLabels[branchKey] ? model.branchLabels[branchKey] : branchKey;
+        }
+
+        function createTile(tile) {
+          var tileNode = document.createElement('a');
+          tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
+          tileNode.href = '?page=room&room=' + encodeURIComponent(tile.resourceId);
+          tileNode.appendChild(ROOMS_UI.el('div', 'room-title', tile.displayName));
+
+          var lines = ROOMS_UI.el('div', 'room-lines');
+          lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
+          lines.appendChild(ROOMS_UI.el('div', '', 'NEXT: ' + tile.nextLabel));
+          tileNode.appendChild(lines);
+
+          return tileNode;
+        }
+
+        function createBranchPanel(model, page, branchKey, sideClass, fallbackTitle) {
+          var branch = ROOMS_UI.el('section', 'branch-panel ' + sideClass);
+          branch.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || getBranchLabel(model, branchKey)));
+
+          var tiles = ROOMS_UI.el('div', 'branch-tiles');
+          var rooms = page.branches && page.branches[branchKey] ? page.branches[branchKey] : [];
+          if (!rooms.length) {
+            tiles.appendChild(ROOMS_UI.el('div', 'branch-empty', 'Nessuna stanza'));
+          } else {
+            rooms.forEach(function (tile) {
+              tiles.appendChild(createTile(tile));
+            });
+          }
+
+          branch.appendChild(tiles);
+          return branch;
+        }
+
+        function createFloorGroup(model, page, floorLabel, upperKey, lowerKey) {
+          var group = ROOMS_UI.el('section', 'floor-group');
+          group.appendChild(ROOMS_UI.el('div', 'floor-group-label', floorLabel));
+
+          var branches = ROOMS_UI.el('div', 'floor-group-branches');
+          branches.appendChild(createBranchPanel(model, page, upperKey, 'right', getBranchLabel(model, upperKey)));
+          branches.appendChild(createBranchPanel(model, page, lowerKey, 'right', getBranchLabel(model, lowerKey)));
+          group.appendChild(branches);
+          return group;
+        }
+
+        function activePage(model) {
+          if (!model.pages || !model.pages.length) {
+            return null;
+          }
+          return model.pages[pageIndex % model.pages.length];
+        }
 
         function render(model) {
           state = model;
           document.getElementById('board-app-name').textContent = model.appName || 'ROOMS';
           document.getElementById('board-school-name').textContent = model.schoolName || '';
           document.getElementById('board-updated-at').textContent = 'Aggiornato: ' + (model.generatedAtISO || '');
+          var visiblePageIndex = ((model.pages && model.pages.length) ? (pageIndex % model.pages.length) : 0) + 1;
+          document.getElementById('board-page-indicator').textContent = 'Pagina ' + visiblePageIndex + '/' + Math.max(model.pages ? model.pages.length : 0, 1);
 
           var root = document.getElementById('board-root');
           ROOMS_UI.clearNode(root);
@@ -52,35 +109,32 @@
             return;
           }
 
-          var page = model.pages[pageIndex % model.pages.length];
-          var pageNode = ROOMS_UI.el('div', 'board-page');
-          var maxRow = Math.max.apply(null, page.rowIds);
-          pageNode.style.gridTemplateRows = 'repeat(' + maxRow + ', 92px)';
+          var page = activePage(model);
+          var treeShell = ROOMS_UI.el('div', 'board-tree');
+          var leftColumn = ROOMS_UI.el('div', 'tree-left-column');
+          var centerColumn = ROOMS_UI.el('div', 'tree-center-column');
+          var rightColumn = ROOMS_UI.el('div', 'tree-right-column');
 
-          page.rowIds.forEach(function (rowId) {
-            var line = ROOMS_UI.el('div', 'board-line');
-            line.style.gridRow = String(rowId);
-            pageNode.appendChild(line);
-          });
+          leftColumn.appendChild(createBranchPanel(model, page, 'PA2', 'left', getBranchLabel(model, 'PA2')));
+          leftColumn.appendChild(createBranchPanel(model, page, 'PA1', 'left', getBranchLabel(model, 'PA1')));
 
-          page.tiles.forEach(function (tile) {
-            var tileNode = document.createElement('a');
-            tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
-            tileNode.href = '?page=room&room=' + encodeURIComponent(tile.resourceId);
-            tileNode.style.gridRow = String(tile.layoutRow);
-            tileNode.style.gridColumn = tile.layoutCol + ' / span ' + tile.layoutColSpan;
+          centerColumn.appendChild(ROOMS_UI.el('div', 'tree-spine'));
+          centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-2p', '2P'));
+          centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-1p', '1P'));
+          centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-pt', 'PT'));
 
-            tileNode.appendChild(ROOMS_UI.el('div', 'room-meta', tile.floorLabel + ' / ' + tile.sideLabel));
-            tileNode.appendChild(ROOMS_UI.el('div', 'room-title', tile.displayName));
+          rightColumn.appendChild(createFloorGroup(model, page, '2P', '2P_DX', '2P_SX'));
+          rightColumn.appendChild(createFloorGroup(model, page, '1P', '1P_DX', '1P_SX'));
+          rightColumn.appendChild(createBranchPanel(model, page, 'PT', 'right pt', getBranchLabel(model, 'PT')));
 
-            var lines = ROOMS_UI.el('div', 'room-lines');
-            lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
-            lines.appendChild(ROOMS_UI.el('div', '', 'NEXT: ' + tile.nextLabel));
-            tileNode.appendChild(lines);
-            pageNode.appendChild(tileNode);
-          });
+          treeShell.appendChild(leftColumn);
+          treeShell.appendChild(centerColumn);
+          treeShell.appendChild(rightColumn);
+          root.appendChild(treeShell);
 
-          root.appendChild(pageNode);
+          var labBlock = ROOMS_UI.el('div', 'lab-block');
+          labBlock.appendChild(createBranchPanel(model, page, 'LAB', 'lab', getBranchLabel(model, 'LAB')));
+          root.appendChild(labBlock);
         }
 
         function rotate() {
