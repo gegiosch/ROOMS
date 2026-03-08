@@ -253,16 +253,16 @@ body.board-monitor {
 body.board-monitor .page-shell {
   min-height: 100vh;
   height: 100vh;
-  padding: 10px 14px;
+  padding: 6px 12px 8px;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 8px;
+  gap: 4px;
 }
 
 body.board-monitor .app-header {
   margin-bottom: 0;
-  gap: 8px;
-  align-items: flex-start;
+  gap: 6px;
+  align-items: center;
 }
 
 body.board-monitor .eyebrow {
@@ -282,15 +282,29 @@ body.board-monitor .subtitle {
 
 body.board-monitor .status-pill,
 body.board-monitor .legend-pill {
-  padding: 5px 8px;
+  padding: 4px 7px;
   font-size: 11px;
 }
 
 body.board-monitor .board-stage {
-  padding: 6px;
+  padding: 4px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.board-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+body.board-monitor .board-topbar .chip-row {
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 body.board-monitor #board-root {
@@ -314,7 +328,7 @@ body.board-monitor #board-root {
 
 .board-tree {
   display: grid;
-  grid-template-columns: 360px 76px minmax(0, 1fr) 350px;
+  grid-template-columns: 392px 76px minmax(0, 1fr) 392px;
   gap: 12px;
   align-items: start;
 }
@@ -465,6 +479,10 @@ body.board-monitor #board-root {
   gap: 6px;
 }
 
+.branch-pa2 .branch-tiles {
+  grid-template-columns: repeat(2, minmax(168px, 1fr));
+}
+
 .branch-empty {
   padding: 6px;
   border-radius: 8px;
@@ -478,7 +496,7 @@ body.board-monitor #board-root {
 }
 
 .tree-lab-column .branch-tiles {
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(168px, 1fr));
   gap: 6px;
 }
 
