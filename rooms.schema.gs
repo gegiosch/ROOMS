@@ -54,7 +54,7 @@ ROOMS_APP.Schema = {
       'Notes'
     ];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.RESOURCES, headers);
-    this.seedMissingRows_(ROOMS_APP.SHEET_NAMES.RESOURCES, 'ResourceId', this.buildResourceRows_());
+    this.syncResourcesFromCanonical_(headers, this.buildResourceRows_());
   },
 
   ensureWeekSchedule: function () {
@@ -168,6 +168,68 @@ ROOMS_APP.Schema = {
     });
 
     ROOMS_APP.DB.appendRows(sheetName, missingRows);
+  },
+
+  syncResourcesFromCanonical_: function (headers, canonicalRows) {
+    var sheetName = ROOMS_APP.SHEET_NAMES.RESOURCES;
+    var existingRows = ROOMS_APP.DB.readRows(sheetName);
+    var existingBySortKey = {};
+    var existingByResourceId = {};
+    var existingByLayoutKey = {};
+    var self = this;
+
+    existingRows.forEach(function (row) {
+      var sortKey = ROOMS_APP.normalizeString(row.SortKey);
+      var resourceId = ROOMS_APP.normalizeString(row.ResourceId);
+      var layoutKey = self.buildResourceLayoutKey_(row);
+
+      if (sortKey && !existingBySortKey[sortKey]) {
+        existingBySortKey[sortKey] = row;
+      }
+      if (resourceId && !existingByResourceId[resourceId]) {
+        existingByResourceId[resourceId] = row;
+      }
+      if (layoutKey && !existingByLayoutKey[layoutKey]) {
+        existingByLayoutKey[layoutKey] = row;
+      }
+    });
+
+    var repairedRows = canonicalRows.map(function (canonicalRow) {
+      var existingRow =
+        existingBySortKey[canonicalRow.SortKey] ||
+        existingByResourceId[canonicalRow.ResourceId] ||
+        existingByLayoutKey[self.buildResourceLayoutKey_(canonicalRow)] ||
+        null;
+
+      return self.mergeResourceWithCanonical_(headers, canonicalRow, existingRow);
+    });
+
+    // Canonical inventory is the single source of truth for ROOMS_RESOURCES.
+    ROOMS_APP.DB.replaceRows(sheetName, headers, repairedRows);
+  },
+
+  buildResourceLayoutKey_: function (row) {
+    return [
+      ROOMS_APP.normalizeString(row.AreaCode).toUpperCase(),
+      ROOMS_APP.normalizeString(row.FloorCode).toUpperCase(),
+      ROOMS_APP.normalizeString(row.SideCode).toUpperCase(),
+      String(row.LayoutPage || ''),
+      String(row.LayoutRow || ''),
+      String(row.LayoutCol || '')
+    ].join('|');
+  },
+
+  mergeResourceWithCanonical_: function (headers, canonicalRow, existingRow) {
+    var row = {};
+    headers.forEach(function (header) {
+      row[header] = Object.prototype.hasOwnProperty.call(canonicalRow, header) ? canonicalRow[header] : '';
+    });
+
+    if (existingRow && !ROOMS_APP.normalizeString(row.Notes) && ROOMS_APP.normalizeString(existingRow.Notes)) {
+      row.Notes = existingRow.Notes;
+    }
+
+    return row;
   },
 
   setPlainTextSheet_: function (sheet, sheetName) {
