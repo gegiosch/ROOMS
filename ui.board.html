@@ -4,7 +4,7 @@
     <base target="_top">
     <?!= include_('ui.common.css.html'); ?>
   </head>
-  <body>
+  <body class="board-monitor">
     <div class="page-shell">
       <header class="app-header">
         <div class="title-block">
@@ -58,7 +58,8 @@
         }
 
         function createBranchPanel(model, page, branchKey, sideClass, fallbackTitle) {
-          var branch = ROOMS_UI.el('section', 'branch-panel ' + sideClass);
+          var branchClass = 'branch-panel ' + sideClass + ' branch-' + branchKey.toLowerCase().replace('_', '-');
+          var branch = ROOMS_UI.el('section', branchClass);
           branch.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || getBranchLabel(model, branchKey)));
 
           var tiles = ROOMS_UI.el('div', 'branch-tiles');
@@ -76,7 +77,7 @@
         }
 
         function createFloorGroup(model, page, floorLabel, upperKey, lowerKey) {
-          var group = ROOMS_UI.el('section', 'floor-group');
+          var group = ROOMS_UI.el('section', 'floor-group floor-group-' + floorLabel.toLowerCase());
           group.appendChild(ROOMS_UI.el('div', 'floor-group-label', floorLabel));
 
           var branches = ROOMS_UI.el('div', 'floor-group-branches');
@@ -91,6 +92,27 @@
             return null;
           }
           return model.pages[pageIndex % model.pages.length];
+        }
+
+        function applyFitScale() {
+          var shell = document.getElementById('board-fit-shell');
+          var canvas = document.getElementById('board-canvas');
+          if (!shell || !canvas) {
+            return;
+          }
+
+          var baseWidth = Number(canvas.dataset.baseWidth || 1600);
+          var baseHeight = Number(canvas.dataset.baseHeight || 840);
+          var scaleX = shell.clientWidth / baseWidth;
+          var scaleY = shell.clientHeight / baseHeight;
+          var scale = Math.min(scaleX, scaleY);
+
+          if (!isFinite(scale) || scale <= 0) {
+            scale = 1;
+          }
+
+          scale = Math.min(scale, 1);
+          canvas.style.transform = 'scale(' + scale + ')';
         }
 
         function render(model) {
@@ -130,11 +152,22 @@
           treeShell.appendChild(leftColumn);
           treeShell.appendChild(centerColumn);
           treeShell.appendChild(rightColumn);
-          root.appendChild(treeShell);
-
           var labBlock = ROOMS_UI.el('div', 'lab-block');
           labBlock.appendChild(createBranchPanel(model, page, 'LAB', 'lab', getBranchLabel(model, 'LAB')));
-          root.appendChild(labBlock);
+
+          var fitShell = ROOMS_UI.el('div', 'board-fit-shell');
+          fitShell.id = 'board-fit-shell';
+          var canvas = ROOMS_UI.el('div', 'board-canvas');
+          canvas.id = 'board-canvas';
+          canvas.dataset.baseWidth = '1600';
+          canvas.dataset.baseHeight = '840';
+          canvas.appendChild(treeShell);
+          canvas.appendChild(labBlock);
+          fitShell.appendChild(canvas);
+          root.appendChild(fitShell);
+
+          applyFitScale();
+          window.requestAnimationFrame(applyFitScale);
         }
 
         function rotate() {
@@ -159,6 +192,7 @@
         }
 
         render(state);
+        window.addEventListener('resize', applyFitScale);
         rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
         refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);
       }());
