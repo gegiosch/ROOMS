@@ -349,6 +349,63 @@ body.board-monitor #board-root {
   cursor: pointer;
 }
 
+.room-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(2, 6, 23, 0.5);
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 8px;
+}
+
+.room-panel {
+  width: min(760px, 96vw);
+  height: calc(100vh - 16px);
+  overflow: auto;
+  background: rgba(2, 6, 23, 0.98);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.55);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.room-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-panel-close {
+  min-height: 34px;
+}
+
+.room-panel-summary {
+  padding: 14px;
+}
+
+.room-panel-summary .metric-value {
+  font-size: 18px;
+}
+
+.room-panel-section {
+  padding: 14px;
+}
+
+.room-panel-section h3 {
+  margin: 0 0 10px;
+}
+
+.room-tile {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
 .board-fit-shell {
   width: 100%;
   height: 100%;
@@ -689,6 +746,16 @@ body.board-monitor #board-root {
   .board-floating-controls {
     right: 10px;
     bottom: 10px;
+  }
+
+  .room-panel-overlay {
+    padding: 0;
+  }
+
+  .room-panel {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
   }
 }
 </style>

@@ -31,9 +31,108 @@
       <a id="board-admin-button" class="board-floating-button admin" href="?page=admin" style="display:none;">⚙ Configura</a>
       <button id="board-fullscreen-toggle" class="board-floating-button fullscreen" type="button" title="Schermo intero" aria-label="Schermo intero">⛶</button>
     </div>
+    <div id="room-panel-overlay" class="room-panel-overlay" style="display:none;">
+      <aside class="room-panel" role="dialog" aria-modal="true" aria-label="Dettaglio aula">
+        <div class="room-panel-header">
+          <div>
+            <div class="eyebrow">Dettaglio Aula</div>
+            <h2 id="panel-room-title">Aula</h2>
+            <p class="subtitle" id="panel-room-meta">Caricamento...</p>
+          </div>
+          <button id="room-panel-close" class="button secondary room-panel-close" type="button">Chiudi</button>
+        </div>
+
+        <div id="panel-error" class="notice error" style="display:none;">Errore caricamento dati aula.</div>
+        <div id="panel-notice" class="notice">Seleziona un'aula.</div>
+
+        <section class="panel form-card room-panel-summary">
+          <div class="grid grid-3">
+            <div>
+              <h3>Stato</h3>
+              <div id="panel-status" class="metric-value">-</div>
+            </div>
+            <div>
+              <h3>Data</h3>
+              <div id="panel-date" class="metric-value">-</div>
+            </div>
+            <div>
+              <h3>Utente</h3>
+              <div id="panel-user" class="metric-value" style="font-size:18px;">-</div>
+            </div>
+          </div>
+          <p class="muted" id="panel-current-booking">Nessuna prenotazione in corso.</p>
+        </section>
+
+        <section class="panel table-card room-panel-section">
+          <h3>Prenotazioni di oggi</h3>
+          <div id="panel-bookings-table"></div>
+        </section>
+
+        <section class="panel table-card room-panel-section">
+          <h3>Prenotazioni future</h3>
+          <div id="panel-upcoming-table"></div>
+        </section>
+
+        <section class="panel table-card room-panel-section">
+          <h3>Le mie prenotazioni</h3>
+          <div id="panel-own-table"></div>
+        </section>
+
+        <section class="panel table-card room-panel-section">
+          <h3>Slot liberi</h3>
+          <div id="panel-free-slots-table"></div>
+        </section>
+
+        <section class="panel form-card room-panel-section">
+          <h3>Nuova prenotazione</h3>
+          <div class="grid">
+            <input class="input" type="text" id="panel-booking-title" placeholder="Titolo">
+            <div class="grid grid-2">
+              <input class="input" type="time" id="panel-booking-start">
+              <input class="input" type="time" id="panel-booking-end">
+            </div>
+            <div class="grid grid-2">
+              <input class="input" type="text" id="panel-booking-name" placeholder="Nome">
+              <input class="input" type="text" id="panel-booking-surname" placeholder="Cognome">
+            </div>
+            <textarea class="textarea" id="panel-booking-notes" placeholder="Note"></textarea>
+            <button class="button" id="panel-booking-submit" type="button">Conferma prenotazione</button>
+          </div>
+        </section>
+
+        <section class="panel form-card room-panel-section">
+          <h3>Ricorrenza settimanale (placeholder)</h3>
+          <div class="grid">
+            <select class="select" id="panel-recurring-weekday">
+              <option>Monday</option>
+              <option>Tuesday</option>
+              <option>Wednesday</option>
+              <option>Thursday</option>
+              <option>Friday</option>
+              <option>Saturday</option>
+              <option>Sunday</option>
+            </select>
+            <div class="grid grid-2">
+              <input class="input" type="date" id="panel-recurring-start-date">
+              <input class="input" type="date" id="panel-recurring-end-date">
+            </div>
+            <div class="grid grid-2">
+              <input class="input" type="time" id="panel-recurring-start-time">
+              <input class="input" type="time" id="panel-recurring-end-time">
+            </div>
+            <div class="toolbar">
+              <button class="button secondary" id="panel-recurring-preview" type="button">Anteprima</button>
+              <button class="button" id="panel-recurring-commit" type="button">Conferma serie</button>
+            </div>
+            <div id="panel-recurring-result" class="notice">Anteprima non eseguita.</div>
+          </div>
+        </section>
+      </aside>
+    </div>
 
     <script>
       window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+      window.ROOMS_INITIAL_ROOM_ID = <?!= JSON.stringify(initialRoomId || '') ?>;
     </script>
     <?!= include_('ui.common.js.html'); ?>
     <script>
@@ -44,15 +143,29 @@
         var refreshTimer;
         var fullscreenButton = document.getElementById('board-fullscreen-toggle');
         var adminButton = document.getElementById('board-admin-button');
+        var panelOverlay = document.getElementById('room-panel-overlay');
+        var panelCloseButton = document.getElementById('room-panel-close');
+        var panelNotice = document.getElementById('panel-notice');
+        var panelError = document.getElementById('panel-error');
+        var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
+        var panelState = {
+          isOpen: false,
+          resourceId: '',
+          model: null
+        };
 
         function getBranchLabel(model, branchKey) {
           return model.branchLabels && model.branchLabels[branchKey] ? model.branchLabels[branchKey] : branchKey;
         }
 
         function createTile(tile) {
-          var tileNode = document.createElement('a');
+          var tileNode = document.createElement('button');
+          tileNode.type = 'button';
           tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
-          tileNode.href = '?page=room&room=' + encodeURIComponent(tile.resourceId);
+          tileNode.dataset.resourceId = tile.resourceId;
+          tileNode.addEventListener('click', function () {
+            openRoomPanel(tile.resourceId);
+          });
           tileNode.appendChild(ROOMS_UI.el('div', 'room-title', tile.displayName));
 
           var lines = ROOMS_UI.el('div', 'room-lines');
@@ -180,6 +293,319 @@
           window.requestAnimationFrame(applyFitScale);
         }
 
+        function setText(id, value) {
+          var node = document.getElementById(id);
+          if (!node) {
+            return;
+          }
+          node.textContent = value == null ? '' : String(value);
+        }
+
+        function safeArray(value) {
+          return Array.isArray(value) ? value : [];
+        }
+
+        function showPanelError(message) {
+          if (!panelError) {
+            return;
+          }
+          panelError.style.display = 'block';
+          panelError.textContent = message || 'Errore caricamento dati aula.';
+        }
+
+        function hidePanelError() {
+          if (!panelError) {
+            return;
+          }
+          panelError.style.display = 'none';
+          panelError.textContent = '';
+        }
+
+        function isPanelOpen() {
+          return panelState.isOpen;
+        }
+
+        function openPanelShell() {
+          if (!panelOverlay) {
+            return;
+          }
+          panelOverlay.style.display = 'flex';
+          document.body.classList.add('room-panel-open');
+        }
+
+        function closeRoomPanel() {
+          panelState.isOpen = false;
+          panelState.resourceId = '';
+          panelState.model = null;
+          if (!panelOverlay) {
+            return;
+          }
+          panelOverlay.style.display = 'none';
+          document.body.classList.remove('room-panel-open');
+        }
+
+        function renderTable(mountId, headers, rows, emptyText) {
+          var mount = document.getElementById(mountId);
+          if (!mount) {
+            return;
+          }
+
+          ROOMS_UI.clearNode(mount);
+          if (!rows.length) {
+            mount.appendChild(ROOMS_UI.el('div', 'notice', emptyText));
+            return;
+          }
+
+          var wrap = ROOMS_UI.el('div', 'table-wrap');
+          var table = document.createElement('table');
+          var thead = document.createElement('thead');
+          var headerRow = document.createElement('tr');
+          headers.forEach(function (header) {
+            headerRow.appendChild(ROOMS_UI.el('th', '', header));
+          });
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          var tbody = document.createElement('tbody');
+          rows.forEach(function (cells) {
+            var tr = document.createElement('tr');
+            cells.forEach(function (cell) {
+              var td = document.createElement('td');
+              if (cell && typeof cell === 'object' && cell.nodeType === 1) {
+                td.appendChild(cell);
+              } else {
+                td.textContent = cell == null ? '' : String(cell);
+              }
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          wrap.appendChild(table);
+          mount.appendChild(wrap);
+        }
+
+        function bookingActionsNode(booking) {
+          var wrap = ROOMS_UI.el('div', 'chip-row');
+          if (!booking || !booking.CanManage) {
+            wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Solo lettura'));
+            return wrap;
+          }
+
+          var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
+          editButton.type = 'button';
+          editButton.addEventListener('click', function () {
+            var startTime = window.prompt('Nuovo orario inizio (HH:MM)', booking.StartTime || '');
+            if (startTime === null) {
+              return;
+            }
+            var endTime = window.prompt('Nuovo orario fine (HH:MM)', booking.EndTime || '');
+            if (endTime === null) {
+              return;
+            }
+            var title = window.prompt('Titolo prenotazione', booking.Title || '');
+            if (title === null) {
+              return;
+            }
+            ROOMS_UI.setNotice(panelNotice, 'Aggiornamento prenotazione...', '');
+            ROOMS_UI.call('updateRoomBooking', booking.BookingId, {
+              resourceId: panelState.resourceId,
+              bookingDate: booking.BookingDate || (panelState.model && panelState.model.date) || '',
+              startTime: startTime,
+              endTime: endTime,
+              title: title,
+              notes: booking.Notes || ''
+            }).then(function () {
+              ROOMS_UI.setNotice(panelNotice, 'Prenotazione aggiornata.', 'success');
+              loadRoomPanelData(panelState.resourceId, { date: booking.BookingDate || (panelState.model && panelState.model.date) || '' });
+              refresh();
+            }).catch(function (error) {
+              ROOMS_UI.setNotice(panelNotice, error.message || 'Errore aggiornamento prenotazione', 'error');
+            });
+          });
+          wrap.appendChild(editButton);
+
+          var cancelButton = ROOMS_UI.el('button', 'button warn', 'Annulla');
+          cancelButton.type = 'button';
+          cancelButton.addEventListener('click', function () {
+            if (!window.confirm('Confermare l\'annullamento di questa prenotazione?')) {
+              return;
+            }
+            ROOMS_UI.setNotice(panelNotice, 'Annullamento prenotazione...', '');
+            ROOMS_UI.call('cancelRoomBooking', booking.BookingId, '')
+              .then(function () {
+                ROOMS_UI.setNotice(panelNotice, 'Prenotazione annullata.', 'success');
+                loadRoomPanelData(panelState.resourceId, { date: booking.BookingDate || (panelState.model && panelState.model.date) || '' });
+                refresh();
+              })
+              .catch(function (error) {
+                ROOMS_UI.setNotice(panelNotice, error.message || 'Errore annullamento prenotazione', 'error');
+              });
+          });
+          wrap.appendChild(cancelButton);
+
+          return wrap;
+        }
+
+        function slotActionsNode(slot) {
+          var wrap = ROOMS_UI.el('div', 'chip-row');
+          var bookButton = ROOMS_UI.el('button', 'button secondary', 'Usa');
+          bookButton.type = 'button';
+          bookButton.addEventListener('click', function () {
+            document.getElementById('panel-booking-start').value = slot.startTime || '';
+            document.getElementById('panel-booking-end').value = slot.endTime || '';
+            ROOMS_UI.setNotice(panelNotice, 'Slot precompilato nel form.', '');
+          });
+          wrap.appendChild(bookButton);
+          return wrap;
+        }
+
+        function renderRoomPanel(model) {
+          var room = (model && model.resource) || null;
+          var roomFound = Boolean(room && room.ResourceId);
+          var bookings = safeArray(model && model.bookings);
+          var upcoming = safeArray(model && model.upcomingBookings);
+          var own = safeArray(model && model.ownBookings);
+          var freeSlots = safeArray(model && model.freeSlots);
+
+          setText('panel-room-title', roomFound ? room.DisplayName : 'Aula non trovata');
+          setText('panel-room-meta', roomFound
+            ? [room.AreaLabel || '', room.FloorLabel || '', room.SideLabel || ''].filter(function (value) { return Boolean(value); }).join(' / ')
+            : 'Dati aula non disponibili');
+          setText('panel-status', (model && model.status) || 'UNKNOWN');
+          setText('panel-date', (model && model.date) || '-');
+          setText('panel-user', (model && model.user && model.user.email) || 'Utente non autenticato');
+
+          if (model && model.currentBooking) {
+            setText('panel-current-booking', 'In uso da ' + (model.currentBooking.BookerSurname || model.currentBooking.Title || 'N/D') + ' fino alle ' + model.currentBooking.EndTime + '.');
+          } else {
+            setText('panel-current-booking', 'Nessuna prenotazione in corso.');
+          }
+
+          if (model && model.errorMessage) {
+            showPanelError(model.errorMessage);
+          } else if (!roomFound) {
+            showPanelError('Aula non trovata');
+          } else {
+            hidePanelError();
+          }
+
+          renderTable('panel-bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato', 'Azioni'], bookings.map(function (booking) {
+            return [
+              (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
+              booking.Title || '',
+              booking.BookerSurname || '',
+              booking.Status || '',
+              bookingActionsNode(booking)
+            ];
+          }), 'Nessuna prenotazione per la giornata.');
+
+          renderTable('panel-upcoming-table', ['Data', 'Orario', 'Titolo', 'Cognome', 'Azioni'], upcoming.map(function (booking) {
+            return [
+              booking.BookingDate || '',
+              (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
+              booking.Title || '',
+              booking.BookerSurname || '',
+              bookingActionsNode(booking)
+            ];
+          }), 'Nessuna prenotazione futura.');
+
+          renderTable('panel-own-table', ['Data', 'Orario', 'Titolo', 'Stato', 'Azioni'], own.map(function (booking) {
+            return [
+              booking.BookingDate || '',
+              (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
+              booking.Title || '',
+              booking.Status || '',
+              bookingActionsNode(booking)
+            ];
+          }), 'Nessuna prenotazione personale in questa aula.');
+
+          renderTable('panel-free-slots-table', ['Da', 'A', 'Azione'], freeSlots.map(function (slot) {
+            return [
+              slot.startTime || '',
+              slot.endTime || '',
+              slotActionsNode(slot)
+            ];
+          }), 'Nessuno slot libero disponibile.');
+
+          var identityName = model && model.user && model.user.firstName ? model.user.firstName : '';
+          var identitySurname = model && model.user && model.user.surname ? model.user.surname : '';
+          if (!document.getElementById('panel-booking-name').value) {
+            document.getElementById('panel-booking-name').value = identityName;
+          }
+          if (!document.getElementById('panel-booking-surname').value) {
+            document.getElementById('panel-booking-surname').value = identitySurname;
+          }
+          document.getElementById('panel-recurring-start-date').value = (model && model.date) || '';
+          document.getElementById('panel-recurring-end-date').value = (model && model.date) || '';
+        }
+
+        function loadRoomPanelData(resourceId, options) {
+          var requestDate = (options && options.date) || ((panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_());
+          ROOMS_UI.call('getRoomPanelData', resourceId, requestDate)
+            .then(function (model) {
+              panelState.model = model && typeof model === 'object' ? model : {};
+              renderRoomPanel(panelState.model);
+              if (!(options && options.silentNotice)) {
+                ROOMS_UI.setNotice(panelNotice, panelState.model.errorMessage || 'Dati aula aggiornati.', panelState.model.errorMessage ? 'error' : 'success');
+              }
+            })
+            .catch(function (error) {
+              showPanelError(error && error.message ? error.message : 'Errore caricamento aula');
+              ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore caricamento aula', 'error');
+            });
+        }
+
+        function ROOMS_APP_DATE_FALLBACK_() {
+          var now = new Date();
+          var yyyy = String(now.getFullYear());
+          var mm = ('0' + String(now.getMonth() + 1)).slice(-2);
+          var dd = ('0' + String(now.getDate())).slice(-2);
+          return [yyyy, mm, dd].join('-');
+        }
+
+        function openRoomPanel(resourceId) {
+          if (!resourceId) {
+            return;
+          }
+          panelState.isOpen = true;
+          panelState.resourceId = resourceId;
+          openPanelShell();
+          hidePanelError();
+          setText('panel-room-title', resourceId);
+          setText('panel-room-meta', 'Caricamento dati aula...');
+          ROOMS_UI.setNotice(panelNotice, 'Caricamento aula ' + resourceId + '...', '');
+          loadRoomPanelData(resourceId, { date: ROOMS_APP_DATE_FALLBACK_(), silentNotice: false });
+        }
+
+        function panelBookingPayload() {
+          return {
+            resourceId: panelState.resourceId,
+            bookingDate: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(),
+            startTime: document.getElementById('panel-booking-start').value,
+            endTime: document.getElementById('panel-booking-end').value,
+            title: document.getElementById('panel-booking-title').value,
+            bookerName: document.getElementById('panel-booking-name').value,
+            bookerSurname: document.getElementById('panel-booking-surname').value,
+            notes: document.getElementById('panel-booking-notes').value
+          };
+        }
+
+        function panelRecurringPayload() {
+          return {
+            resourceId: panelState.resourceId,
+            weekday: document.getElementById('panel-recurring-weekday').value,
+            startDate: document.getElementById('panel-recurring-start-date').value,
+            endDate: document.getElementById('panel-recurring-end-date').value,
+            startTime: document.getElementById('panel-recurring-start-time').value,
+            endTime: document.getElementById('panel-recurring-end-time').value,
+            title: document.getElementById('panel-booking-title').value,
+            bookerName: document.getElementById('panel-booking-name').value,
+            bookerSurname: document.getElementById('panel-booking-surname').value,
+            notes: document.getElementById('panel-booking-notes').value
+          };
+        }
+
         function isFullscreenActive() {
           return Boolean(document.fullscreenElement);
         }
@@ -210,6 +636,9 @@
         }
 
         function rotate() {
+          if (isPanelOpen()) {
+            return;
+          }
           if (!state.pages || state.pages.length < 2) {
             return;
           }
@@ -222,6 +651,9 @@
             .then(function (model) {
               pageIndex = pageIndex % Math.max(model.pages.length, 1);
               render(model);
+              if (isPanelOpen() && panelState.resourceId) {
+                loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(), silentNotice: true });
+              }
             })
             .catch(function (error) {
               var root = document.getElementById('board-root');
@@ -235,10 +667,77 @@
         if (fullscreenButton) {
           fullscreenButton.addEventListener('click', toggleFullscreen);
         }
+        if (panelCloseButton) {
+          panelCloseButton.addEventListener('click', closeRoomPanel);
+        }
+        if (panelOverlay) {
+          panelOverlay.addEventListener('click', function (event) {
+            if (event.target === panelOverlay) {
+              closeRoomPanel();
+            }
+          });
+        }
+        window.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape' && isPanelOpen()) {
+            closeRoomPanel();
+          }
+        });
+
+        document.getElementById('panel-booking-submit').addEventListener('click', function () {
+          if (!panelState.resourceId) {
+            ROOMS_UI.setNotice(panelNotice, 'Seleziona prima un\'aula.', 'error');
+            return;
+          }
+          ROOMS_UI.setNotice(panelNotice, 'Creazione prenotazione in corso...', '');
+          ROOMS_UI.call('createRoomBooking', panelBookingPayload())
+            .then(function () {
+              ROOMS_UI.setNotice(panelNotice, 'Prenotazione creata.', 'success');
+              loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_() });
+              refresh();
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore creazione prenotazione', 'error');
+            });
+        });
+
+        document.getElementById('panel-recurring-preview').addEventListener('click', function () {
+          if (!panelState.resourceId) {
+            ROOMS_UI.setNotice(panelNotice, 'Seleziona prima un\'aula.', 'error');
+            return;
+          }
+          ROOMS_UI.call('previewRecurringRoomBooking', panelRecurringPayload())
+            .then(function (preview) {
+              ROOMS_UI.setNotice(document.getElementById('panel-recurring-result'), 'Valide: ' + preview.validCount + ' / Saltate: ' + preview.skippedCount, 'success');
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(document.getElementById('panel-recurring-result'), error && error.message ? error.message : 'Errore anteprima ricorrenza', 'error');
+            });
+        });
+
+        document.getElementById('panel-recurring-commit').addEventListener('click', function () {
+          if (!panelState.resourceId) {
+            ROOMS_UI.setNotice(panelNotice, 'Seleziona prima un\'aula.', 'error');
+            return;
+          }
+          ROOMS_UI.call('commitRecurringRoomBooking', panelRecurringPayload())
+            .then(function (result) {
+              ROOMS_UI.setNotice(document.getElementById('panel-recurring-result'), 'Serie creata: ' + result.seriesId + ' (' + result.createdCount + ' prenotazioni)', 'success');
+              loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_() });
+              refresh();
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(document.getElementById('panel-recurring-result'), error && error.message ? error.message : 'Errore conferma ricorrenza', 'error');
+            });
+        });
+
         document.addEventListener('fullscreenchange', updateFullscreenButton);
         updateFullscreenButton();
         rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
         refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);
+
+        if (initialRoomId) {
+          openRoomPanel(initialRoomId);
+        }
       }());
     </script>
   </body>
