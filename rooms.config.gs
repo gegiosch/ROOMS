@@ -9,6 +9,7 @@ ROOMS_APP.SHEET_NAMES = {
   RESOURCES: 'ROOMS_RESOURCES',
   BOOKINGS: 'ROOMS_BOOKINGS',
   AUDIT: 'ROOMS_AUDIT',
+  ADMINS: 'ROOMS_ADMINS',
   HOLIDAYS: 'ROOMS_HOLIDAYS',
   CLOSURES: 'ROOMS_CLOSURES',
   WEEK_SCHEDULE: 'ROOMS_WEEK_SCHEDULE',
@@ -20,6 +21,7 @@ ROOMS_APP.DEFAULT_CONFIG_ROWS = [
   { Key: 'APP_NAME', Value: 'ROOMS', Notes: 'Standalone room management web app.' },
   { Key: 'SCHOOL_NAME', Value: 'IIS Alessandrini', Notes: 'School name displayed in the UI.' },
   { Key: 'TIMEZONE', Value: 'Europe/Rome', Notes: 'Apps Script and booking timezone.' },
+  { Key: 'ALLOWED_DOMAIN', Value: 'iisalessandrini.org', Notes: 'Only this email domain can perform booking actions.' },
   { Key: 'BOOKING_ENABLED', Value: 'TRUE', Notes: 'Global booking switch.' },
   { Key: 'ALLOW_RECURRING', Value: 'TRUE', Notes: 'Enable weekly recurring reservations.' },
   { Key: 'MAX_DURATION_MIN', Value: '180', Notes: 'Normal user max duration in minutes.' },
@@ -110,6 +112,54 @@ ROOMS_APP.listConfiguredAdmins = function () {
     .filter(function (value) {
       return Boolean(value);
     });
+};
+
+ROOMS_APP.getAllowedDomain = function () {
+  return ROOMS_APP.normalizeString(ROOMS_APP.getConfigValue('ALLOWED_DOMAIN', 'iisalessandrini.org')).toLowerCase();
+};
+
+ROOMS_APP.getEmailDomain = function (email) {
+  var normalized = ROOMS_APP.normalizeEmail(email);
+  if (normalized.indexOf('@') < 0) {
+    return '';
+  }
+  return normalized.split('@')[1];
+};
+
+ROOMS_APP.isEmailInDomain = function (email, expectedDomain) {
+  var domain = ROOMS_APP.normalizeString(expectedDomain).toLowerCase();
+  if (!domain) {
+    return true;
+  }
+  return ROOMS_APP.getEmailDomain(email) === domain;
+};
+
+ROOMS_APP.toNameCase = function (value) {
+  var token = ROOMS_APP.normalizeString(value).toLowerCase();
+  if (!token) {
+    return '';
+  }
+
+  return token.charAt(0).toUpperCase() + token.slice(1);
+};
+
+ROOMS_APP.extractIdentityFromEmail = function (email) {
+  var normalized = ROOMS_APP.normalizeEmail(email);
+  var localPart = normalized.split('@')[0] || '';
+  var parts = localPart.split(/[._-]+/).filter(function (part) {
+    return Boolean(part);
+  });
+  var firstName = parts.length ? ROOMS_APP.toNameCase(parts[0]) : '';
+  var surname = parts.length > 1 ? ROOMS_APP.toNameCase(parts[parts.length - 1]) : '';
+  var displayName = [firstName, surname].filter(function (part) {
+    return Boolean(part);
+  }).join(' ');
+
+  return {
+    firstName: firstName,
+    surname: surname,
+    displayName: displayName
+  };
 };
 
 ROOMS_APP.asBoolean = function (value) {

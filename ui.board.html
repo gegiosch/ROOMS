@@ -27,6 +27,10 @@
         <div id="board-root"></div>
       </section>
     </div>
+    <div class="board-floating-controls">
+      <a id="board-admin-button" class="board-floating-button admin" href="?page=admin" style="display:none;">⚙ Configura</a>
+      <button id="board-fullscreen-toggle" class="board-floating-button fullscreen" type="button" title="Schermo intero" aria-label="Schermo intero">⛶</button>
+    </div>
 
     <script>
       window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
@@ -38,6 +42,8 @@
         var pageIndex = 0;
         var rotationTimer;
         var refreshTimer;
+        var fullscreenButton = document.getElementById('board-fullscreen-toggle');
+        var adminButton = document.getElementById('board-admin-button');
 
         function getBranchLabel(model, branchKey) {
           return model.branchLabels && model.branchLabels[branchKey] ? model.branchLabels[branchKey] : branchKey;
@@ -122,6 +128,9 @@
           document.getElementById('board-updated-at').textContent = 'Aggiornato: ' + (model.generatedAtISO || '');
           var visiblePageIndex = ((model.pages && model.pages.length) ? (pageIndex % model.pages.length) : 0) + 1;
           document.getElementById('board-page-indicator').textContent = 'Pagina ' + visiblePageIndex + '/' + Math.max(model.pages ? model.pages.length : 0, 1);
+          if (adminButton) {
+            adminButton.style.display = (model.user && model.user.isAdmin) ? 'inline-flex' : 'none';
+          }
 
           var root = document.getElementById('board-root');
           ROOMS_UI.clearNode(root);
@@ -171,6 +180,35 @@
           window.requestAnimationFrame(applyFitScale);
         }
 
+        function isFullscreenActive() {
+          return Boolean(document.fullscreenElement);
+        }
+
+        function updateFullscreenButton() {
+          if (!fullscreenButton) {
+            return;
+          }
+          if (isFullscreenActive()) {
+            fullscreenButton.textContent = '✕';
+            fullscreenButton.title = 'Esci da schermo intero';
+            fullscreenButton.setAttribute('aria-label', 'Esci da schermo intero');
+          } else {
+            fullscreenButton.textContent = '⛶';
+            fullscreenButton.title = 'Schermo intero';
+            fullscreenButton.setAttribute('aria-label', 'Schermo intero');
+          }
+        }
+
+        function toggleFullscreen() {
+          if (isFullscreenActive()) {
+            document.exitFullscreen();
+            return;
+          }
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+          }
+        }
+
         function rotate() {
           if (!state.pages || state.pages.length < 2) {
             return;
@@ -194,6 +232,11 @@
 
         render(state);
         window.addEventListener('resize', applyFitScale);
+        if (fullscreenButton) {
+          fullscreenButton.addEventListener('click', toggleFullscreen);
+        }
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        updateFullscreenButton();
         rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
         refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);
       }());

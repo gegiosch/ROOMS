@@ -311,6 +311,44 @@ body.board-monitor #board-root {
   height: 100%;
 }
 
+.board-floating-controls {
+  position: fixed;
+  right: 12px;
+  bottom: 10px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.board-floating-button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.88);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.45);
+}
+
+.board-floating-button.admin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.board-floating-button.fullscreen {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  cursor: pointer;
+}
+
 .board-fit-shell {
   width: 100%;
   height: 100%;
@@ -646,6 +684,11 @@ body.board-monitor #board-root {
 
   .app-header {
     flex-direction: column;
+  }
+
+  .board-floating-controls {
+    right: 10px;
+    bottom: 10px;
   }
 }
 </style>

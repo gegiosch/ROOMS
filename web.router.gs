@@ -16,6 +16,7 @@ function doGet(e) {
     }
 
     if (page === 'admin') {
+      ROOMS_APP.Auth.requireAdmin();
       return renderTemplate_('ui.admin', {
         pageTitle: 'Admin',
         initialModelJson: JSON.stringify({
@@ -64,6 +65,10 @@ function cancelRoomBooking(bookingId, notes) {
   return ROOMS_APP.Booking.cancelBooking(bookingId, notes);
 }
 
+function updateRoomBooking(bookingId, payload) {
+  return ROOMS_APP.Booking.updateBooking(bookingId, payload || {});
+}
+
 function previewRecurringRoomBooking(payload) {
   return ROOMS_APP.Recurring.previewWeekly(payload);
 }
@@ -76,6 +81,7 @@ function getAdminBootstrap() {
   var user = ROOMS_APP.Auth.requireAdmin();
   var tableNames = [
     ROOMS_APP.SHEET_NAMES.CONFIG,
+    ROOMS_APP.SHEET_NAMES.ADMINS,
     ROOMS_APP.SHEET_NAMES.RESOURCES,
     ROOMS_APP.SHEET_NAMES.WEEK_SCHEDULE,
     ROOMS_APP.SHEET_NAMES.HOLIDAYS,
@@ -106,6 +112,7 @@ function adminReplaceTable(tableName, rows) {
   ROOMS_APP.Auth.requireAdmin();
   var allowed = {};
   allowed[ROOMS_APP.SHEET_NAMES.CONFIG] = true;
+  allowed[ROOMS_APP.SHEET_NAMES.ADMINS] = true;
   allowed[ROOMS_APP.SHEET_NAMES.RESOURCES] = true;
   allowed[ROOMS_APP.SHEET_NAMES.WEEK_SCHEDULE] = true;
   allowed[ROOMS_APP.SHEET_NAMES.HOLIDAYS] = true;
@@ -156,6 +163,12 @@ function routeApiRequest_(payload) {
   }
   if (action === 'createBooking') {
     return ROOMS_APP.Booking.createBooking(payload);
+  }
+  if (action === 'updateBooking') {
+    return ROOMS_APP.Booking.updateBooking(payload.bookingId, payload);
+  }
+  if (action === 'cancelBooking') {
+    return ROOMS_APP.Booking.cancelBooking(payload.bookingId, payload.notes);
   }
   if (action === 'previewRecurring') {
     return ROOMS_APP.Recurring.previewWeekly(payload);

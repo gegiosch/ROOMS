@@ -91,6 +91,26 @@
       </section>
 
       <section class="grid grid-2" style="margin-top: 12px;">
+        <article class="panel table-card">
+          <div class="section-title">
+            <h3>Prenotazioni future</h3>
+          </div>
+          <div id="upcoming-table">
+            <div class="notice">Prenotazioni future: <strong id="upcoming-count">0</strong></div>
+          </div>
+        </article>
+
+        <article class="panel table-card">
+          <div class="section-title">
+            <h3>Le mie prenotazioni aula</h3>
+          </div>
+          <div id="own-bookings-table">
+            <div class="notice">Le mie prenotazioni: <strong id="own-bookings-count">0</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid grid-2" style="margin-top: 12px;">
         <article class="panel form-card">
           <h3>Prenotazione</h3>
           <p class="muted">Controlli prenotazione disponibili sotto (modalita' progressive enhancement).</p>
@@ -207,6 +227,8 @@
           var bookings = safeArray(currentModel && currentModel.bookings);
           var slots = safeArray(currentModel && currentModel.slots);
           var freeSlots = safeArray(currentModel && currentModel.freeSlots);
+          var upcoming = safeArray(currentModel && currentModel.upcomingBookings);
+          var ownBookings = safeArray(currentModel && currentModel.ownBookings);
           var roomFound = Boolean(resource && resource.ResourceId);
 
           setText('requested-room-id', (currentModel && (currentModel.requestedResourceId || (resource && resource.ResourceId))) || '-');
@@ -220,6 +242,8 @@
           setText('room-free-count', freeSlots.length);
           setText('bookings-count', bookings.length);
           setText('slots-count', slots.length);
+          setText('upcoming-count', upcoming.length);
+          setText('own-bookings-count', ownBookings.length);
           setText('debug-room-id', (currentModel && (currentModel.requestedResourceId || (resource && resource.ResourceId))) || '-');
           setText('debug-room-found', roomFound ? 'TRUE' : 'FALSE');
           setText('debug-bookings-count', bookings.length);
@@ -280,6 +304,8 @@
         function renderTables(currentModel) {
           var bookings = safeArray(currentModel && currentModel.bookings);
           var freeSlots = safeArray(currentModel && currentModel.freeSlots);
+          var upcoming = safeArray(currentModel && currentModel.upcomingBookings);
+          var ownBookings = safeArray(currentModel && currentModel.ownBookings);
 
           renderSimpleTable('bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato'], bookings.map(function (booking) {
             return [booking.StartTime + ' - ' + booking.EndTime, booking.Title || '', booking.BookerSurname || '', booking.Status || ''];
@@ -288,6 +314,14 @@
           renderSimpleTable('free-slots-table', ['Da', 'A'], freeSlots.map(function (slot) {
             return [slot.startTime || '', slot.endTime || ''];
           }), 'Nessuno slot libero disponibile.');
+
+          renderSimpleTable('upcoming-table', ['Data', 'Orario', 'Titolo', 'Cognome'], upcoming.map(function (booking) {
+            return [booking.BookingDate || '', (booking.StartTime || '') + ' - ' + (booking.EndTime || ''), booking.Title || '', booking.BookerSurname || ''];
+          }), 'Nessuna prenotazione futura.');
+
+          renderSimpleTable('own-bookings-table', ['Data', 'Orario', 'Titolo', 'Stato'], ownBookings.map(function (booking) {
+            return [booking.BookingDate || '', (booking.StartTime || '') + ' - ' + (booking.EndTime || ''), booking.Title || '', booking.Status || ''];
+          }), 'Nessuna prenotazione personale in questa aula.');
         }
 
         function render(currentModel) {

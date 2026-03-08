@@ -3,6 +3,7 @@ var ROOMS_APP = ROOMS_APP || {};
 ROOMS_APP.Recurring = {
   previewWeekly: function (payload) {
     var actor = ROOMS_APP.Auth.getUserContext();
+    ROOMS_APP.Auth.assertAllowedDomain(actor.email);
     if (!ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true) && !actor.isAdmin) {
       throw new Error('Recurring bookings are disabled.');
     }
@@ -52,6 +53,7 @@ ROOMS_APP.Recurring = {
   commitWeekly: function (payload) {
     var preview = this.previewWeekly(payload);
     var actor = ROOMS_APP.Auth.getUserContext();
+    ROOMS_APP.Auth.assertAllowedDomain(actor.email);
     var seriesId = Utilities.getUuid();
     var created = [];
 

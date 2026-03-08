@@ -16,6 +16,7 @@ ROOMS_APP.Board = {
 
   getBoardViewModel: function () {
     ROOMS_APP.Schema.ensureAll();
+    var user = ROOMS_APP.Auth.getUserContext();
     var now = new Date();
     var nowIso = ROOMS_APP.toIsoDateTime(now);
     var today = ROOMS_APP.toIsoDate(now);
@@ -75,6 +76,10 @@ ROOMS_APP.Board = {
       palette: ROOMS_APP.PALETTE,
       appName: ROOMS_APP.getConfigValue('APP_NAME', 'ROOMS'),
       schoolName: ROOMS_APP.getConfigValue('SCHOOL_NAME', 'IIS Alessandrini'),
+      user: {
+        email: user.email,
+        isAdmin: user.isAdmin
+      },
       branchOrder: this.BRANCH_ORDER_.slice(),
       branchLabels: this.BRANCH_LABELS_,
       pages: pages

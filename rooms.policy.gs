@@ -95,6 +95,7 @@ ROOMS_APP.Policy = {
   validateBookingRequest: function (request, actor) {
     var user = actor || ROOMS_APP.Auth.getUserContext();
     var errors = [];
+    var emailIdentity = ROOMS_APP.extractIdentityFromEmail(user.email);
     var normalized = {
       resourceId: ROOMS_APP.normalizeString(request.resourceId || request.ResourceId),
       bookingDate: ROOMS_APP.toIsoDate(request.bookingDate || request.BookingDate),
@@ -107,6 +108,21 @@ ROOMS_APP.Policy = {
       seriesId: ROOMS_APP.normalizeString(request.seriesId || request.SeriesId),
       bookingId: ROOMS_APP.normalizeString(request.bookingId || request.BookingId)
     };
+
+    if (!normalized.bookerName && emailIdentity.firstName) {
+      normalized.bookerName = emailIdentity.firstName;
+    }
+    if (!normalized.bookerSurname && emailIdentity.surname) {
+      normalized.bookerSurname = emailIdentity.surname;
+    }
+
+    if (!user.email) {
+      errors.push('User authentication is required.');
+    }
+
+    if (!ROOMS_APP.isEmailInDomain(user.email, ROOMS_APP.getAllowedDomain())) {
+      errors.push('Operazione consentita solo con account ' + ROOMS_APP.getAllowedDomain() + '.');
+    }
 
     if (!ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true) && !user.isAdmin) {
       errors.push('Booking is currently disabled.');

@@ -12,11 +12,13 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.BOOKINGS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.AUDIT] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.ADMINS] = true;
     return sheets;
   }()),
 
   ensureAll: function () {
     this.ensureConfig();
+    this.ensureAdmins();
     this.ensureResources();
     this.ensureBookings_();
     this.ensureAudit_();
@@ -31,6 +33,12 @@ ROOMS_APP.Schema = {
     var headers = ['Key', 'Value', 'Notes'];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.CONFIG, headers);
     this.seedMissingRows_(ROOMS_APP.SHEET_NAMES.CONFIG, 'Key', ROOMS_APP.DEFAULT_CONFIG_ROWS);
+  },
+
+  ensureAdmins: function () {
+    var headers = ['Email', 'Role', 'Enabled', 'Notes'];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.ADMINS, headers);
+    this.seedAdminsFromLegacyConfig_(headers);
   },
 
   ensureResources: function () {
@@ -168,6 +176,49 @@ ROOMS_APP.Schema = {
     });
 
     ROOMS_APP.DB.appendRows(sheetName, missingRows);
+  },
+
+  seedAdminsFromLegacyConfig_: function (headers) {
+    var sheetName = ROOMS_APP.SHEET_NAMES.ADMINS;
+    var existingRows = ROOMS_APP.DB.readRows(sheetName);
+    var existingByEmail = {};
+
+    existingRows.forEach(function (row) {
+      var email = ROOMS_APP.normalizeEmail(row.Email);
+      if (email && !existingByEmail[email]) {
+        existingByEmail[email] = row;
+      }
+    });
+
+    var configRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.CONFIG);
+    var adminConfigRow = configRows.filter(function (row) {
+      return row.Key === 'ADMIN_GROUP_EMAIL';
+    })[0];
+    var legacyEmails = String(adminConfigRow && adminConfigRow.Value || '')
+      .split(',')
+      .map(function (entry) {
+        return ROOMS_APP.normalizeEmail(entry);
+      })
+      .filter(function (entry) {
+        return entry && entry.charAt(0) !== '@';
+      });
+
+    var toAppend = [];
+    legacyEmails.forEach(function (email) {
+      if (existingByEmail[email]) {
+        return;
+      }
+      toAppend.push({
+        Email: email,
+        Role: 'ADMIN',
+        Enabled: 'TRUE',
+        Notes: 'Migrato da CONFIG.ADMIN_GROUP_EMAIL'
+      });
+    });
+
+    if (toAppend.length) {
+      ROOMS_APP.DB.appendRows(sheetName, toAppend);
+    }
   },
 
   syncResourcesFromCanonical_: function (headers, canonicalRows) {
@@ -353,6 +404,10 @@ function ensureConfig() {
 
 function ensureResources() {
   ROOMS_APP.Schema.ensureResources();
+}
+
+function ensureAdmins() {
+  ROOMS_APP.Schema.ensureAdmins();
 }
 
 function ensureWeekSchedule() {
