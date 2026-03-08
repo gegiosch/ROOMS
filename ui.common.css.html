@@ -152,6 +152,34 @@ a {
   background: rgba(2, 6, 23, 0.72);
 }
 
+.input,
+.select {
+  color-scheme: dark;
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23CBD5F5'%3E%3Cpath d='M5.5 7.5a1 1 0 0 1 1.7-.7L10 9.6l2.8-2.8a1 1 0 1 1 1.4 1.4l-3.5 3.5a1 1 0 0 1-1.4 0L5.8 8.2a1 1 0 0 1-.3-.7Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px 16px;
+}
+
+.input[type="date"]::-webkit-calendar-picker-indicator,
+.input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(90%) sepia(10%) saturate(342%) hue-rotate(185deg) brightness(97%) contrast(96%);
+  opacity: 0.95;
+  cursor: pointer;
+}
+
+.input[type="date"]::-webkit-datetime-edit,
+.input[type="time"]::-webkit-datetime-edit {
+  color: #e5e7eb;
+}
+
 .textarea {
   min-height: 110px;
   resize: vertical;
@@ -688,10 +716,12 @@ body.board-monitor #board-root {
   text-decoration: none;
   box-shadow: 0 4px 10px rgba(2, 6, 23, 0.22);
   color: #e5e7eb;
+  -webkit-text-fill-color: #e5e7eb;
 }
 
 .room-tile * {
   color: inherit;
+  -webkit-text-fill-color: inherit;
 }
 
 .room-tile.free {
