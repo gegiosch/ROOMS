@@ -47,8 +47,23 @@ ROOMS_APP.Slots = {
       closeTime: opening.closeTime,
       bookings: bookings,
       slots: slots,
-      freeSlots: this.mergeFreeSlots_(slots)
+      freeSlots: this.buildFreeSlots_(opening, bookings, slots)
     };
+  },
+
+  buildFreeSlots_: function (opening, bookings, slots) {
+    if (!opening || !opening.isOpen) {
+      return [];
+    }
+
+    if (!bookings || !bookings.length) {
+      return [{
+        startTime: opening.openTime,
+        endTime: opening.closeTime
+      }];
+    }
+
+    return this.mergeFreeSlots_(slots || []);
   },
 
   mergeFreeSlots_: function (slots) {

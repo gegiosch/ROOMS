@@ -370,6 +370,31 @@ body.board-monitor #board-root {
   padding: 12px;
   display: grid;
   gap: 10px;
+  color: #e5e7eb;
+}
+
+.room-panel .subtitle,
+.room-panel .muted {
+  color: #94a3b8;
+}
+
+.room-panel .notice {
+  color: #e5e7eb;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.room-panel .notice.error {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.45);
+}
+
+.room-panel table {
+  min-width: 0;
+}
+
+.room-panel .grid > * {
+  min-width: 0;
 }
 
 .room-panel-header {
@@ -389,6 +414,43 @@ body.board-monitor #board-root {
 
 .room-panel-summary .metric-value {
   font-size: 18px;
+  color: #e5e7eb;
+}
+
+.room-panel-summary .grid.grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.panel-user-value {
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.room-panel-toolbar {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.room-panel-toolbar .input {
+  max-width: 220px;
+}
+
+.panel-time-label {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.clock-icon {
+  color: #fbbf24;
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.35));
+  margin-right: 4px;
 }
 
 .room-panel-section {
@@ -397,6 +459,7 @@ body.board-monitor #board-root {
 
 .room-panel-section h3 {
   margin: 0 0 10px;
+  color: #e5e7eb;
 }
 
 .room-tile {

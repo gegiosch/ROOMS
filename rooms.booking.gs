@@ -181,6 +181,7 @@ ROOMS_APP.Booking = {
   },
 
   buildRoomFallbackModel_: function (requestedResourceId, dateString, errorMessage) {
+    var roomConfig = this.getRoomConfig_();
     return {
       ok: false,
       errorMessage: errorMessage || 'Dati aula non disponibili',
@@ -194,10 +195,12 @@ ROOMS_APP.Booking = {
       freeSlots: [],
       slots: [],
       isOpen: false,
+      openTime: roomConfig.openTime,
+      closeTime: roomConfig.closeTime,
       status: 'UNKNOWN',
       currentBooking: null,
       user: ROOMS_APP.Auth.getUserContext(),
-      config: this.getRoomConfig_()
+      config: roomConfig
     };
   },
 
@@ -249,6 +252,8 @@ ROOMS_APP.Booking = {
         freeSlots: timeline.freeSlots || [],
         slots: timeline.slots || [],
         isOpen: timeline.isOpen,
+        openTime: timeline.openTime || this.getRoomConfig_().openTime,
+        closeTime: timeline.closeTime || this.getRoomConfig_().closeTime,
         status: current ? 'OCCUPIED' : 'FREE',
         currentBooking: current,
         user: user,
@@ -280,7 +285,10 @@ ROOMS_APP.Booking = {
     return {
       bookingEnabled: ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true),
       allowRecurring: ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true),
-      showBookerName: ROOMS_APP.getBooleanConfig('SHOW_BOOKER_NAME', false)
+      showBookerName: ROOMS_APP.getBooleanConfig('SHOW_BOOKER_NAME', false),
+      slotMinutes: ROOMS_APP.getNumberConfig('SLOT_MINUTES', 30),
+      openTime: ROOMS_APP.getConfigValue('OPEN_TIME', '08:00'),
+      closeTime: ROOMS_APP.getConfigValue('CLOSE_TIME', '18:00')
     };
   },
 

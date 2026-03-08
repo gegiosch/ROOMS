@@ -57,10 +57,14 @@
             </div>
             <div>
               <h3>Utente</h3>
-              <div id="panel-user" class="metric-value" style="font-size:18px;">-</div>
+              <div id="panel-user" class="metric-value panel-user-value">-</div>
             </div>
           </div>
           <p class="muted" id="panel-current-booking">Nessuna prenotazione in corso.</p>
+          <div class="toolbar room-panel-toolbar">
+            <input class="input" type="date" id="panel-date-input">
+            <button class="button secondary" id="panel-date-refresh" type="button">Aggiorna giorno</button>
+          </div>
         </section>
 
         <section class="panel table-card room-panel-section">
@@ -87,9 +91,10 @@
           <h3>Nuova prenotazione</h3>
           <div class="grid">
             <input class="input" type="text" id="panel-booking-title" placeholder="Titolo">
+            <div class="panel-time-label"><span class="clock-icon">🕒</span> Seleziona fascia oraria</div>
             <div class="grid grid-2">
-              <input class="input" type="time" id="panel-booking-start">
-              <input class="input" type="time" id="panel-booking-end">
+              <select class="select" id="panel-booking-start"></select>
+              <select class="select" id="panel-booking-end"></select>
             </div>
             <div class="grid grid-2">
               <input class="input" type="text" id="panel-booking-name" placeholder="Nome">
@@ -104,21 +109,22 @@
           <h3>Ricorrenza settimanale (placeholder)</h3>
           <div class="grid">
             <select class="select" id="panel-recurring-weekday">
-              <option>Monday</option>
-              <option>Tuesday</option>
-              <option>Wednesday</option>
-              <option>Thursday</option>
-              <option>Friday</option>
-              <option>Saturday</option>
-              <option>Sunday</option>
+              <option value="Monday">Lunedì</option>
+              <option value="Tuesday">Martedì</option>
+              <option value="Wednesday">Mercoledì</option>
+              <option value="Thursday">Giovedì</option>
+              <option value="Friday">Venerdì</option>
+              <option value="Saturday">Sabato</option>
+              <option value="Sunday">Domenica</option>
             </select>
             <div class="grid grid-2">
               <input class="input" type="date" id="panel-recurring-start-date">
               <input class="input" type="date" id="panel-recurring-end-date">
             </div>
+            <div class="panel-time-label"><span class="clock-icon">🕒</span> Fascia oraria ricorrenza</div>
             <div class="grid grid-2">
-              <input class="input" type="time" id="panel-recurring-start-time">
-              <input class="input" type="time" id="panel-recurring-end-time">
+              <select class="select" id="panel-recurring-start-time"></select>
+              <select class="select" id="panel-recurring-end-time"></select>
             </div>
             <div class="toolbar">
               <button class="button secondary" id="panel-recurring-preview" type="button">Anteprima</button>
@@ -147,11 +153,15 @@
         var panelCloseButton = document.getElementById('room-panel-close');
         var panelNotice = document.getElementById('panel-notice');
         var panelError = document.getElementById('panel-error');
+        var panelDateInput = document.getElementById('panel-date-input');
+        var panelDateRefresh = document.getElementById('panel-date-refresh');
         var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
         var panelState = {
           isOpen: false,
           resourceId: '',
-          model: null
+          model: null,
+          editingBookingId: '',
+          editingBookingDate: ''
         };
 
         function getBranchLabel(model, branchKey) {
@@ -305,6 +315,109 @@
           return Array.isArray(value) ? value : [];
         }
 
+        function toMinutes(value) {
+          var parts = String(value || '').split(':');
+          if (parts.length !== 2) {
+            return -1;
+          }
+          var hours = Number(parts[0]);
+          var minutes = Number(parts[1]);
+          if (!isFinite(hours) || !isFinite(minutes)) {
+            return -1;
+          }
+          return hours * 60 + minutes;
+        }
+
+        function toTimeLabel(totalMinutes) {
+          var hours = Math.floor(totalMinutes / 60);
+          var minutes = totalMinutes % 60;
+          return ('0' + String(hours)).slice(-2) + ':' + ('0' + String(minutes)).slice(-2);
+        }
+
+        function buildSlotTimePoints(model) {
+          var config = (model && model.config) || {};
+          var slotMinutes = Number(config.slotMinutes || 30);
+          if (!isFinite(slotMinutes) || slotMinutes <= 0) {
+            slotMinutes = 30;
+          }
+          var openTime = (model && model.openTime) || config.openTime || '08:00';
+          var closeTime = (model && model.closeTime) || config.closeTime || '18:00';
+          var openMinutes = toMinutes(openTime);
+          var closeMinutes = toMinutes(closeTime);
+          if (openMinutes < 0 || closeMinutes < 0 || closeMinutes <= openMinutes) {
+            return [];
+          }
+
+          var points = [];
+          var cursor = openMinutes;
+          while (cursor <= closeMinutes) {
+            points.push(toTimeLabel(cursor));
+            cursor += slotMinutes;
+          }
+          if (points[points.length - 1] !== toTimeLabel(closeMinutes)) {
+            points.push(toTimeLabel(closeMinutes));
+          }
+          return points;
+        }
+
+        function fillTimeSelect(selectNode, values, selectedValue) {
+          if (!selectNode) {
+            return;
+          }
+          ROOMS_UI.clearNode(selectNode);
+          if (!values || !values.length) {
+            var emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = '--';
+            selectNode.appendChild(emptyOption);
+            return;
+          }
+          values.forEach(function (value) {
+            var option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            if (selectedValue && selectedValue === value) {
+              option.selected = true;
+            }
+            selectNode.appendChild(option);
+          });
+          if (!selectNode.value && values.length) {
+            selectNode.value = values[0];
+          }
+        }
+
+        function syncEndSelect(startSelect, endSelect, allPoints) {
+          if (!startSelect || !endSelect) {
+            return;
+          }
+          var startMinutes = toMinutes(startSelect.value);
+          var availableEnds = allPoints.filter(function (value) {
+            return toMinutes(value) > startMinutes;
+          });
+          fillTimeSelect(endSelect, availableEnds, endSelect.value);
+          if (!endSelect.value && availableEnds.length) {
+            endSelect.value = availableEnds[0];
+          }
+        }
+
+        function refreshTimeSelects(model) {
+          var points = buildSlotTimePoints(model);
+          var startPoints = points.slice(0, Math.max(points.length - 1, 0));
+          var endPoints = points.slice(1);
+          var bookingStart = document.getElementById('panel-booking-start');
+          var bookingEnd = document.getElementById('panel-booking-end');
+          var recurringStart = document.getElementById('panel-recurring-start-time');
+          var recurringEnd = document.getElementById('panel-recurring-end-time');
+
+          fillTimeSelect(bookingStart, startPoints, bookingStart && bookingStart.value);
+          fillTimeSelect(bookingEnd, endPoints, bookingEnd && bookingEnd.value);
+          fillTimeSelect(recurringStart, startPoints, recurringStart && recurringStart.value);
+          fillTimeSelect(recurringEnd, endPoints, recurringEnd && recurringEnd.value);
+
+          syncEndSelect(bookingStart, bookingEnd, points);
+          syncEndSelect(recurringStart, recurringEnd, points);
+        }
+
         function showPanelError(message) {
           if (!panelError) {
             return;
@@ -337,11 +450,29 @@
           panelState.isOpen = false;
           panelState.resourceId = '';
           panelState.model = null;
+          panelState.editingBookingId = '';
+          panelState.editingBookingDate = '';
           if (!panelOverlay) {
             return;
           }
           panelOverlay.style.display = 'none';
           document.body.classList.remove('room-panel-open');
+        }
+
+        function setBookingSubmitLabel() {
+          var submitNode = document.getElementById('panel-booking-submit');
+          if (!submitNode) {
+            return;
+          }
+          submitNode.textContent = panelState.editingBookingId ? 'Salva modifica prenotazione' : 'Conferma prenotazione';
+        }
+
+        function resetBookingForm() {
+          panelState.editingBookingId = '';
+          panelState.editingBookingDate = '';
+          document.getElementById('panel-booking-title').value = '';
+          document.getElementById('panel-booking-notes').value = '';
+          setBookingSubmitLabel();
         }
 
         function renderTable(mountId, headers, rows, emptyText) {
@@ -395,33 +526,18 @@
           var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
           editButton.type = 'button';
           editButton.addEventListener('click', function () {
-            var startTime = window.prompt('Nuovo orario inizio (HH:MM)', booking.StartTime || '');
-            if (startTime === null) {
-              return;
-            }
-            var endTime = window.prompt('Nuovo orario fine (HH:MM)', booking.EndTime || '');
-            if (endTime === null) {
-              return;
-            }
-            var title = window.prompt('Titolo prenotazione', booking.Title || '');
-            if (title === null) {
-              return;
-            }
-            ROOMS_UI.setNotice(panelNotice, 'Aggiornamento prenotazione...', '');
-            ROOMS_UI.call('updateRoomBooking', booking.BookingId, {
-              resourceId: panelState.resourceId,
-              bookingDate: booking.BookingDate || (panelState.model && panelState.model.date) || '',
-              startTime: startTime,
-              endTime: endTime,
-              title: title,
-              notes: booking.Notes || ''
-            }).then(function () {
-              ROOMS_UI.setNotice(panelNotice, 'Prenotazione aggiornata.', 'success');
-              loadRoomPanelData(panelState.resourceId, { date: booking.BookingDate || (panelState.model && panelState.model.date) || '' });
-              refresh();
-            }).catch(function (error) {
-              ROOMS_UI.setNotice(panelNotice, error.message || 'Errore aggiornamento prenotazione', 'error');
-            });
+            panelState.editingBookingId = booking.BookingId || '';
+            panelState.editingBookingDate = booking.BookingDate || (panelState.model && panelState.model.date) || '';
+            document.getElementById('panel-booking-title').value = booking.Title || '';
+            document.getElementById('panel-booking-notes').value = booking.Notes || '';
+            document.getElementById('panel-booking-name').value = booking.BookerName || document.getElementById('panel-booking-name').value;
+            document.getElementById('panel-booking-surname').value = booking.BookerSurname || document.getElementById('panel-booking-surname').value;
+            document.getElementById('panel-booking-start').value = booking.StartTime || document.getElementById('panel-booking-start').value;
+            var points = buildSlotTimePoints(panelState.model || {});
+            syncEndSelect(document.getElementById('panel-booking-start'), document.getElementById('panel-booking-end'), points);
+            document.getElementById('panel-booking-end').value = booking.EndTime || document.getElementById('panel-booking-end').value;
+            setBookingSubmitLabel();
+            ROOMS_UI.setNotice(panelNotice, 'Modifica in corso: aggiorna i campi e salva.', '');
           });
           wrap.appendChild(editButton);
 
@@ -453,7 +569,9 @@
           bookButton.type = 'button';
           bookButton.addEventListener('click', function () {
             document.getElementById('panel-booking-start').value = slot.startTime || '';
-            document.getElementById('panel-booking-end').value = slot.endTime || '';
+            var points = buildSlotTimePoints(panelState.model || {});
+            syncEndSelect(document.getElementById('panel-booking-start'), document.getElementById('panel-booking-end'), points);
+            document.getElementById('panel-booking-end').value = slot.endTime || document.getElementById('panel-booking-end').value;
             ROOMS_UI.setNotice(panelNotice, 'Slot precompilato nel form.', '');
           });
           wrap.appendChild(bookButton);
@@ -475,6 +593,9 @@
           setText('panel-status', (model && model.status) || 'UNKNOWN');
           setText('panel-date', (model && model.date) || '-');
           setText('panel-user', (model && model.user && model.user.email) || 'Utente non autenticato');
+          if (panelDateInput) {
+            panelDateInput.value = (model && model.date) || '';
+          }
 
           if (model && model.currentBooking) {
             setText('panel-current-booking', 'In uso da ' + (model.currentBooking.BookerSurname || model.currentBooking.Title || 'N/D') + ' fino alle ' + model.currentBooking.EndTime + '.');
@@ -492,7 +613,7 @@
 
           renderTable('panel-bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato', 'Azioni'], bookings.map(function (booking) {
             return [
-              (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
+              '🕒 ' + ((booking.StartTime || '') + ' - ' + (booking.EndTime || '')),
               booking.Title || '',
               booking.BookerSurname || '',
               booking.Status || '',
@@ -503,7 +624,7 @@
           renderTable('panel-upcoming-table', ['Data', 'Orario', 'Titolo', 'Cognome', 'Azioni'], upcoming.map(function (booking) {
             return [
               booking.BookingDate || '',
-              (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
+              '🕒 ' + ((booking.StartTime || '') + ' - ' + (booking.EndTime || '')),
               booking.Title || '',
               booking.BookerSurname || '',
               bookingActionsNode(booking)
@@ -513,7 +634,7 @@
           renderTable('panel-own-table', ['Data', 'Orario', 'Titolo', 'Stato', 'Azioni'], own.map(function (booking) {
             return [
               booking.BookingDate || '',
-              (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
+              '🕒 ' + ((booking.StartTime || '') + ' - ' + (booking.EndTime || '')),
               booking.Title || '',
               booking.Status || '',
               bookingActionsNode(booking)
@@ -522,11 +643,11 @@
 
           renderTable('panel-free-slots-table', ['Da', 'A', 'Azione'], freeSlots.map(function (slot) {
             return [
-              slot.startTime || '',
-              slot.endTime || '',
+              '🕒 ' + (slot.startTime || ''),
+              '🕒 ' + (slot.endTime || ''),
               slotActionsNode(slot)
             ];
-          }), 'Nessuno slot libero disponibile.');
+          }), model && model.isOpen ? 'Nessuno slot libero disponibile.' : 'Aula chiusa nel giorno selezionato.');
 
           var identityName = model && model.user && model.user.firstName ? model.user.firstName : '';
           var identitySurname = model && model.user && model.user.surname ? model.user.surname : '';
@@ -536,12 +657,19 @@
           if (!document.getElementById('panel-booking-surname').value) {
             document.getElementById('panel-booking-surname').value = identitySurname;
           }
+          refreshTimeSelects(model);
           document.getElementById('panel-recurring-start-date').value = (model && model.date) || '';
           document.getElementById('panel-recurring-end-date').value = (model && model.date) || '';
+          var weekdaySelect = document.getElementById('panel-recurring-weekday');
+          var weekdayValue = weekdayFromIsoDate((model && model.date) || '');
+          if (weekdaySelect && weekdayValue) {
+            weekdaySelect.value = weekdayValue;
+          }
+          setBookingSubmitLabel();
         }
 
         function loadRoomPanelData(resourceId, options) {
-          var requestDate = (options && options.date) || ((panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_());
+          var requestDate = (options && options.date) || (panelDateInput && panelDateInput.value) || ((panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_());
           ROOMS_UI.call('getRoomPanelData', resourceId, requestDate)
             .then(function (model) {
               panelState.model = model && typeof model === 'object' ? model : {};
@@ -564,6 +692,15 @@
           return [yyyy, mm, dd].join('-');
         }
 
+        function weekdayFromIsoDate(dateValue) {
+          if (!dateValue) {
+            return '';
+          }
+          var date = new Date(dateValue + 'T12:00:00');
+          var weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          return weekdays[date.getDay()] || '';
+        }
+
         function openRoomPanel(resourceId) {
           if (!resourceId) {
             return;
@@ -572,16 +709,17 @@
           panelState.resourceId = resourceId;
           openPanelShell();
           hidePanelError();
+          resetBookingForm();
           setText('panel-room-title', resourceId);
           setText('panel-room-meta', 'Caricamento dati aula...');
           ROOMS_UI.setNotice(panelNotice, 'Caricamento aula ' + resourceId + '...', '');
-          loadRoomPanelData(resourceId, { date: ROOMS_APP_DATE_FALLBACK_(), silentNotice: false });
+          loadRoomPanelData(resourceId, { date: (panelDateInput && panelDateInput.value) || ROOMS_APP_DATE_FALLBACK_(), silentNotice: false });
         }
 
         function panelBookingPayload() {
           return {
             resourceId: panelState.resourceId,
-            bookingDate: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(),
+            bookingDate: (panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(),
             startTime: document.getElementById('panel-booking-start').value,
             endTime: document.getElementById('panel-booking-end').value,
             title: document.getElementById('panel-booking-title').value,
@@ -683,15 +821,60 @@
           }
         });
 
+        document.getElementById('panel-booking-start').addEventListener('change', function () {
+          var model = panelState.model || {};
+          var points = buildSlotTimePoints(model);
+          syncEndSelect(document.getElementById('panel-booking-start'), document.getElementById('panel-booking-end'), points);
+        });
+        document.getElementById('panel-recurring-start-time').addEventListener('change', function () {
+          var model = panelState.model || {};
+          var points = buildSlotTimePoints(model);
+          syncEndSelect(document.getElementById('panel-recurring-start-time'), document.getElementById('panel-recurring-end-time'), points);
+        });
+        if (panelDateRefresh) {
+          panelDateRefresh.addEventListener('click', function () {
+            if (!panelState.resourceId) {
+              ROOMS_UI.setNotice(panelNotice, 'Seleziona prima un\'aula.', 'error');
+              return;
+            }
+            loadRoomPanelData(panelState.resourceId, { date: (panelDateInput && panelDateInput.value) || ROOMS_APP_DATE_FALLBACK_() });
+          });
+        }
+        if (panelDateInput) {
+          panelDateInput.addEventListener('change', function () {
+            if (!panelState.resourceId) {
+              return;
+            }
+            loadRoomPanelData(panelState.resourceId, { date: panelDateInput.value || ROOMS_APP_DATE_FALLBACK_(), silentNotice: true });
+          });
+        }
+
         document.getElementById('panel-booking-submit').addEventListener('click', function () {
           if (!panelState.resourceId) {
             ROOMS_UI.setNotice(panelNotice, 'Seleziona prima un\'aula.', 'error');
             return;
           }
+          if (panelState.editingBookingId) {
+            var editingDate = panelState.editingBookingDate || (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_();
+            ROOMS_UI.setNotice(panelNotice, 'Aggiornamento prenotazione in corso...', '');
+            ROOMS_UI.call('updateRoomBooking', panelState.editingBookingId, panelBookingPayload())
+              .then(function () {
+                ROOMS_UI.setNotice(panelNotice, 'Prenotazione aggiornata.', 'success');
+                resetBookingForm();
+                loadRoomPanelData(panelState.resourceId, { date: editingDate });
+                refresh();
+              })
+              .catch(function (error) {
+                ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore aggiornamento prenotazione', 'error');
+              });
+            return;
+          }
+
           ROOMS_UI.setNotice(panelNotice, 'Creazione prenotazione in corso...', '');
           ROOMS_UI.call('createRoomBooking', panelBookingPayload())
             .then(function () {
               ROOMS_UI.setNotice(panelNotice, 'Prenotazione creata.', 'success');
+              resetBookingForm();
               loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_() });
               refresh();
             })
