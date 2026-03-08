@@ -1,37 +1,57 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 function doGet(e) {
-  ROOMS_APP.Schema.ensureAll();
-  var page = (e && e.parameter && e.parameter.page) || 'board';
+  var params = (e && e.parameter) || {};
+  var page = params.page || 'board';
 
-  if (page === 'api') {
-    return jsonResponse_(routeApiRequest_((e && e.parameter) || {}));
-  }
+  try {
+    ROOMS_APP.Schema.ensureAll();
 
-  if (page === 'room') {
-    return renderTemplate_('ui.room', {
-      pageTitle: 'Room',
-      initialModelJson: JSON.stringify({
-        page: 'room',
-        roomId: (e && e.parameter && e.parameter.room) || '',
-        date: (e && e.parameter && e.parameter.date) || ROOMS_APP.toIsoDate(new Date())
-      })
+    if (page === 'api') {
+      return jsonResponse_(routeApiRequest_(params));
+    }
+
+    if (page === 'room') {
+      var roomId = normalizeRoomIdParam_(params);
+      var roomDate = params.date || ROOMS_APP.toIsoDate(new Date());
+      return renderTemplate_('ui.room', {
+        pageTitle: 'Room',
+        initialModelJson: JSON.stringify({
+          page: 'room',
+          roomId: roomId,
+          resourceId: roomId,
+          date: roomDate
+        })
+      });
+    }
+
+    if (page === 'admin') {
+      return renderTemplate_('ui.admin', {
+        pageTitle: 'Admin',
+        initialModelJson: JSON.stringify({
+          page: 'admin'
+        })
+      });
+    }
+
+    return renderTemplate_('ui.board', {
+      pageTitle: 'Board',
+      initialModelJson: JSON.stringify(ROOMS_APP.Board.getBoardViewModel())
     });
-  }
+  } catch (error) {
+    if (page === 'room') {
+      return renderTemplate_('ui.room', {
+        pageTitle: 'Room',
+        initialModelJson: JSON.stringify(ROOMS_APP.Booking.buildRoomFallbackModel_(
+          normalizeRoomIdParam_(params),
+          params.date || ROOMS_APP.toIsoDate(new Date()),
+          'Errore caricamento pagina aula'
+        ))
+      });
+    }
 
-  if (page === 'admin') {
-    return renderTemplate_('ui.admin', {
-      pageTitle: 'Admin',
-      initialModelJson: JSON.stringify({
-        page: 'admin'
-      })
-    });
+    throw error;
   }
-
-  return renderTemplate_('ui.board', {
-    pageTitle: 'Board',
-    initialModelJson: JSON.stringify(ROOMS_APP.Board.getBoardViewModel())
-  });
 }
 
 function doPost(e) {
@@ -45,7 +65,7 @@ function getBoardViewModel() {
 }
 
 function getRoomViewModel(resourceId, dateString) {
-  return ROOMS_APP.Booking.getRoomViewModel(resourceId, dateString);
+  return ROOMS_APP.Booking.getRoomViewModel(ROOMS_APP.normalizeString(resourceId), dateString);
 }
 
 function createRoomBooking(payload) {
@@ -144,7 +164,7 @@ function routeApiRequest_(payload) {
     return ROOMS_APP.Board.getBoardViewModel();
   }
   if (action === 'room') {
-    return ROOMS_APP.Booking.getRoomViewModel(payload.resourceId, payload.date);
+    return ROOMS_APP.Booking.getRoomViewModel(normalizeRoomIdParam_(payload), payload.date);
   }
   if (action === 'createBooking') {
     return ROOMS_APP.Booking.createBooking(payload);
@@ -166,4 +186,8 @@ function jsonResponse_(payload) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function normalizeRoomIdParam_(payload) {
+  return ROOMS_APP.normalizeString((payload && (payload.resourceId || payload.room || payload.roomId)) || '');
 }

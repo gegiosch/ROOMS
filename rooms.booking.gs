@@ -87,35 +87,104 @@ ROOMS_APP.Booking = {
     return booking;
   },
 
+  buildRoomFallbackModel_: function (requestedResourceId, dateString, errorMessage) {
+    return {
+      ok: false,
+      errorMessage: errorMessage || 'Dati aula non disponibili',
+      date: dateString || ROOMS_APP.toIsoDate(new Date()),
+      requestedResourceId: ROOMS_APP.normalizeString(requestedResourceId),
+      resource: null,
+      resources: [],
+      bookings: [],
+      ownBookings: [],
+      freeSlots: [],
+      slots: [],
+      isOpen: false,
+      status: 'UNKNOWN',
+      currentBooking: null,
+      user: ROOMS_APP.Auth.getUserContext(),
+      config: this.getRoomConfig_()
+    };
+  },
+
   getRoomViewModel: function (resourceId, dateString) {
     var date = dateString || ROOMS_APP.toIsoDate(new Date());
-    var allResources = ROOMS_APP.Board.listResources_();
-    var selectedResourceId = resourceId || (allResources[0] ? allResources[0].ResourceId : '');
-    var resource = ROOMS_APP.Policy.getResource(selectedResourceId);
-    var bookings = resource ? this.listBookingsForDay(selectedResourceId, date) : [];
-    var timeline = resource ? ROOMS_APP.Slots.getDaySlots(selectedResourceId, date) : { bookings: [], freeSlots: [], isOpen: false };
-    var now = new Date();
-    var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
-    var current = bookings.filter(function (booking) {
-      return booking.StartTime <= currentTime && booking.EndTime > currentTime;
-    })[0] || null;
+    var requestedResourceId = ROOMS_APP.normalizeString(resourceId || '');
+    var user = ROOMS_APP.Auth.getUserContext();
 
-    return {
-      date: date,
-      resource: resource,
-      bookings: bookings,
-      freeSlots: timeline.freeSlots,
-      slots: timeline.slots || [],
-      isOpen: timeline.isOpen,
-      status: current ? 'OCCUPIED' : 'FREE',
-      currentBooking: current,
-      user: ROOMS_APP.Auth.getUserContext(),
-      resources: allResources,
-      config: {
-        bookingEnabled: ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true),
-        allowRecurring: ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true),
-        showBookerName: ROOMS_APP.getBooleanConfig('SHOW_BOOKER_NAME', false)
+    try {
+      var allResources = ROOMS_APP.Board.listResources_();
+      if (!allResources.length) {
+        var emptyModel = this.buildRoomFallbackModel_(requestedResourceId, date, 'Dati aula non disponibili');
+        emptyModel.user = user;
+        return emptyModel;
       }
+
+      var resource = requestedResourceId
+        ? this.findResourceByAnyKey_(allResources, requestedResourceId)
+        : allResources[0];
+      if (requestedResourceId && !resource) {
+        var notFoundModel = this.buildRoomFallbackModel_(requestedResourceId, date, 'Aula non trovata');
+        notFoundModel.user = user;
+        notFoundModel.resources = allResources;
+        return notFoundModel;
+      }
+
+      var selectedResourceId = resource ? resource.ResourceId : '';
+      var bookings = resource ? this.listBookingsForDay(selectedResourceId, date) : [];
+      var timeline = resource ? ROOMS_APP.Slots.getDaySlots(selectedResourceId, date) : { bookings: [], freeSlots: [], slots: [], isOpen: false };
+      var now = new Date();
+      var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
+      var current = bookings.filter(function (booking) {
+        return booking.StartTime <= currentTime && booking.EndTime > currentTime;
+      })[0] || null;
+      var ownBookings = bookings.filter(function (booking) {
+        return booking.BookerEmail === user.email;
+      });
+
+      return {
+        ok: true,
+        errorMessage: '',
+        date: date,
+        requestedResourceId: requestedResourceId,
+        resource: resource,
+        bookings: bookings,
+        ownBookings: ownBookings,
+        freeSlots: timeline.freeSlots || [],
+        slots: timeline.slots || [],
+        isOpen: timeline.isOpen,
+        status: current ? 'OCCUPIED' : 'FREE',
+        currentBooking: current,
+        user: user,
+        resources: allResources,
+        config: this.getRoomConfig_()
+      };
+    } catch (error) {
+      var fallback = this.buildRoomFallbackModel_(requestedResourceId, date, 'Errore caricamento pagina aula');
+      fallback.user = user;
+      fallback.debugMessage = String(error && error.message ? error.message : error);
+      return fallback;
+    }
+  },
+
+  findResourceByAnyKey_: function (resources, requestedResourceId) {
+    var normalized = ROOMS_APP.normalizeString(requestedResourceId).toUpperCase();
+    var requestedSlug = ROOMS_APP.slugify(requestedResourceId);
+
+    return resources.filter(function (resource) {
+      var resourceId = ROOMS_APP.normalizeString(resource.ResourceId).toUpperCase();
+      var displayName = ROOMS_APP.normalizeString(resource.DisplayName);
+      return resourceId === normalized ||
+        displayName.toUpperCase() === normalized ||
+        ROOMS_APP.slugify(displayName) === requestedSlug;
+    })[0] || null;
+  },
+
+  getRoomConfig_: function () {
+    return {
+      bookingEnabled: ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true),
+      allowRecurring: ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true),
+      showBookerName: ROOMS_APP.getBooleanConfig('SHOW_BOOKER_NAME', false)
     };
   },
 

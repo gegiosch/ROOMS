@@ -12,8 +12,12 @@
           <h1 id="room-title">Caricamento...</h1>
           <p class="subtitle" id="room-subtitle">Prenotazioni, disponibilità e ricorrenze.</p>
         </div>
-        <div class="status-pill" id="room-user-pill">Utente non rilevato</div>
+        <div class="stack">
+          <a class="status-pill" href="?page=board">← Torna alla board</a>
+          <div class="status-pill" id="room-user-pill">Utente non rilevato</div>
+        </div>
       </header>
+      <div id="room-error" class="notice error" style="display:none;">Dati aula non disponibili</div>
 
       <section class="grid grid-3">
         <article class="panel metric-card">
@@ -113,52 +117,112 @@
     <script>
       (function () {
         var bootstrap = window.ROOMS_INITIAL_MODEL || {};
-        var currentModel = null;
         var roomSelect = document.getElementById('room-select');
         var dateInput = document.getElementById('room-date-input');
         var notice = document.getElementById('room-notice');
+        var roomError = document.getElementById('room-error');
+
+        function fallbackModel(message) {
+          return {
+            ok: false,
+            errorMessage: message || 'Dati aula non disponibili',
+            date: bootstrap.date || '',
+            requestedResourceId: bootstrap.roomId || bootstrap.resourceId || '',
+            resource: null,
+            resources: [],
+            bookings: [],
+            ownBookings: [],
+            freeSlots: [],
+            slots: [],
+            status: 'UNKNOWN',
+            currentBooking: null,
+            user: { email: '' },
+            config: {}
+          };
+        }
+
+        function showError(message) {
+          if (!roomError) {
+            return;
+          }
+          roomError.textContent = message || 'Dati aula non disponibili';
+          roomError.style.display = 'block';
+        }
+
+        function hideError() {
+          if (!roomError) {
+            return;
+          }
+          roomError.style.display = 'none';
+        }
 
         function loadRoom() {
-          var resourceId = roomSelect.value || bootstrap.roomId;
-          var date = dateInput.value || bootstrap.date;
+          var resourceId = (roomSelect && roomSelect.value) || bootstrap.roomId || bootstrap.resourceId || '';
+          var date = (dateInput && dateInput.value) || bootstrap.date || '';
 
           ROOMS_UI.setNotice(notice, 'Caricamento dati stanza...', '');
           return ROOMS_UI.call('getRoomViewModel', resourceId, date)
             .then(function (model) {
-              currentModel = model;
-              bootstrap.roomId = model.resource ? model.resource.ResourceId : resourceId;
-              bootstrap.date = model.date;
-              render(model);
-              ROOMS_UI.setNotice(notice, 'Dati aggiornati.', 'success');
+              var safeModel = model && typeof model === 'object' ? model : fallbackModel('Dati aula non disponibili');
+              bootstrap.roomId = safeModel.resource ? safeModel.resource.ResourceId : resourceId;
+              bootstrap.resourceId = bootstrap.roomId;
+              bootstrap.date = safeModel.date || date;
+              render(safeModel);
+              ROOMS_UI.setNotice(notice, safeModel.ok === false ? (safeModel.errorMessage || 'Dati aula non disponibili') : 'Dati aggiornati.', safeModel.ok === false ? 'error' : 'success');
             })
             .catch(function (error) {
-              ROOMS_UI.setNotice(notice, error.message, 'error');
+              var model = fallbackModel('Errore caricamento pagina aula');
+              render(model);
+              ROOMS_UI.setNotice(notice, error && error.message ? error.message : 'Errore caricamento pagina aula', 'error');
             });
         }
 
         function render(model) {
-          document.getElementById('room-title').textContent = model.resource ? model.resource.DisplayName : 'Stanza non trovata';
-          document.getElementById('room-subtitle').textContent = model.resource
-            ? model.resource.AreaLabel + ' / ' + model.resource.FloorLabel + ' / ' + model.resource.SideLabel
-            : 'Controlla ResourceId e configurazione.';
-          document.getElementById('room-user-pill').textContent = model.user && model.user.email ? model.user.email : 'Utente non autenticato';
-          document.getElementById('room-status').textContent = model.status === 'OCCUPIED' ? 'Occupata' : 'Libera';
-          document.getElementById('room-current-booking').textContent = model.currentBooking
-            ? 'In uso da ' + (model.currentBooking.BookerSurname || model.currentBooking.Title) + ' fino alle ' + model.currentBooking.EndTime
-            : 'Nessuna prenotazione in corso.';
-          document.getElementById('room-date-label').textContent = model.date;
-          document.getElementById('room-free-count').textContent = String(model.freeSlots.length || 0);
+          var safeModel = model && typeof model === 'object' ? model : fallbackModel('Dati aula non disponibili');
+          var resources = Array.isArray(safeModel.resources) ? safeModel.resources : [];
+          var bookings = Array.isArray(safeModel.bookings) ? safeModel.bookings : [];
+          var freeSlots = Array.isArray(safeModel.freeSlots) ? safeModel.freeSlots : [];
+          var selectedResourceId = safeModel.resource ? safeModel.resource.ResourceId : (safeModel.requestedResourceId || bootstrap.roomId || '');
 
-          dateInput.value = model.date;
-          if (model.resources && model.resources.length) {
-            ROOMS_UI.fillSelect(roomSelect, model.resources, 'ResourceId', 'DisplayName', model.resource ? model.resource.ResourceId : bootstrap.roomId);
+          document.getElementById('room-title').textContent = safeModel.resource ? safeModel.resource.DisplayName : 'Aula non trovata';
+          document.getElementById('room-subtitle').textContent = safeModel.resource
+            ? safeModel.resource.AreaLabel + ' / ' + safeModel.resource.FloorLabel + ' / ' + safeModel.resource.SideLabel
+            : 'Controlla ResourceId e configurazione.';
+          document.getElementById('room-user-pill').textContent = safeModel.user && safeModel.user.email ? safeModel.user.email : 'Utente non autenticato';
+          document.getElementById('room-status').textContent = safeModel.status === 'OCCUPIED' ? 'Occupata' : (safeModel.status === 'FREE' ? 'Libera' : 'N/D');
+          document.getElementById('room-current-booking').textContent = safeModel.currentBooking
+            ? 'In uso da ' + (safeModel.currentBooking.BookerSurname || safeModel.currentBooking.Title) + ' fino alle ' + safeModel.currentBooking.EndTime
+            : 'Nessuna prenotazione in corso.';
+          document.getElementById('room-date-label').textContent = safeModel.date || '';
+          document.getElementById('room-free-count').textContent = String(freeSlots.length || 0);
+
+          if (safeModel.ok === false) {
+            showError(safeModel.errorMessage || 'Dati aula non disponibili');
+          } else {
+            hideError();
           }
 
-          renderSimpleTable('bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato'], (model.bookings || []).map(function (booking) {
+          if (dateInput) {
+            dateInput.value = safeModel.date || '';
+          }
+
+          if (roomSelect) {
+            if (resources.length) {
+              ROOMS_UI.fillSelect(roomSelect, resources, 'ResourceId', 'DisplayName', selectedResourceId);
+            } else {
+              ROOMS_UI.clearNode(roomSelect);
+              var option = document.createElement('option');
+              option.value = '';
+              option.textContent = 'Aule non disponibili';
+              roomSelect.appendChild(option);
+            }
+          }
+
+          renderSimpleTable('bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato'], bookings.map(function (booking) {
             return [booking.StartTime + ' - ' + booking.EndTime, booking.Title, booking.BookerSurname, booking.Status];
           }), 'Nessuna prenotazione per la data selezionata.');
 
-          renderSimpleTable('free-slots-table', ['Da', 'A'], (model.freeSlots || []).map(function (slot) {
+          renderSimpleTable('free-slots-table', ['Da', 'A'], freeSlots.map(function (slot) {
             return [slot.startTime, slot.endTime];
           }), 'Nessuno slot libero disponibile.');
         }
@@ -218,6 +282,11 @@
           return payload;
         }
 
+        if (!roomSelect || !dateInput || !notice) {
+          showError('Errore caricamento pagina aula');
+          return;
+        }
+
         document.getElementById('room-refresh-button').addEventListener('click', loadRoom);
 
         document.getElementById('booking-submit').addEventListener('click', function () {
@@ -261,9 +330,14 @@
             });
         });
 
+        bootstrap.roomId = bootstrap.roomId || bootstrap.resourceId || bootstrap.requestedResourceId || '';
+        bootstrap.resourceId = bootstrap.roomId;
         dateInput.value = bootstrap.date || '';
         document.getElementById('recurring-start-date').value = bootstrap.date || '';
         document.getElementById('recurring-end-date').value = bootstrap.date || '';
+        if (Object.prototype.hasOwnProperty.call(bootstrap, 'ok') || Object.prototype.hasOwnProperty.call(bootstrap, 'errorMessage')) {
+          render(bootstrap);
+        }
         loadRoom();
       }());
     </script>
