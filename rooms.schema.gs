@@ -1,6 +1,20 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Schema = {
+  PLAIN_TEXT_SHEETS_: (function () {
+    var sheets = {};
+    sheets[ROOMS_APP.SHEET_NAMES.CONFIG] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.RESOURCES] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.HOLIDAYS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.CLOSURES] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.WEEK_SCHEDULE] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.BOOKINGS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.AUDIT] = true;
+    return sheets;
+  }()),
+
   ensureAll: function () {
     this.ensureConfig();
     this.ensureResources();
@@ -10,6 +24,7 @@ ROOMS_APP.Schema = {
     this.ensureHolidays();
     this.ensureClosures();
     this.ensureSpecialOpenings();
+    this.ensurePolicyOverrides();
   },
 
   ensureConfig: function () {
@@ -85,6 +100,11 @@ ROOMS_APP.Schema = {
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS, headers);
   },
 
+  ensurePolicyOverrides: function () {
+    var headers = ['OverrideId', 'ResourceId', 'BookingDate', 'StartTime', 'EndTime', 'RuleKey', 'RuleValue', 'IsEnabled', 'Notes'];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES, headers);
+  },
+
   ensureBookings_: function () {
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.BOOKINGS, [
       'BookingId',
@@ -126,6 +146,7 @@ ROOMS_APP.Schema = {
       sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
     }
 
+    this.setPlainTextSheet_(sheet, sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1, 1, headers.length)
@@ -147,6 +168,14 @@ ROOMS_APP.Schema = {
     });
 
     ROOMS_APP.DB.appendRows(sheetName, missingRows);
+  },
+
+  setPlainTextSheet_: function (sheet, sheetName) {
+    if (!this.PLAIN_TEXT_SHEETS_[sheetName]) {
+      return;
+    }
+
+    sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setNumberFormat('@');
   },
 
   buildResourceRows_: function () {
@@ -278,4 +307,8 @@ function ensureClosures() {
 
 function ensureSpecialOpenings() {
   ROOMS_APP.Schema.ensureSpecialOpenings();
+}
+
+function ensurePolicyOverrides() {
+  ROOMS_APP.Schema.ensurePolicyOverrides();
 }
