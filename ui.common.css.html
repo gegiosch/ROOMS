@@ -320,24 +320,25 @@ body.board-monitor #board-root {
 }
 
 .board-canvas {
-  width: 1780px;
-  height: 700px;
+  width: 1800px;
+  height: 760px;
   transform-origin: top center;
-  display: block;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 10px;
 }
 
 .board-tree {
   display: grid;
-  grid-template-columns: 392px 76px minmax(0, 1fr) 392px;
-  gap: 12px;
+  grid-template-columns: 470px 84px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
 .tree-left-column,
-.tree-right-column,
-.tree-lab-column {
+.tree-right-column {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   align-content: start;
 }
 
@@ -425,7 +426,11 @@ body.board-monitor #board-root {
 .floor-group-branches {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
+}
+
+.tree-right-column .floor-group-branches {
+  grid-template-columns: repeat(2, minmax(230px, 1fr));
 }
 
 .branch-panel {
@@ -461,6 +466,14 @@ body.board-monitor #board-root {
   margin-top: 12px;
 }
 
+.branch-panel.branch-pt::before {
+  left: -18px;
+  top: 24px;
+  width: 18px;
+  border-top: 3px solid rgba(96, 165, 250, 0.78);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.45);
+}
+
 .branch-panel.lab::before {
   content: none;
 }
@@ -475,12 +488,12 @@ body.board-monitor #board-root {
 
 .branch-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 7px;
 }
 
 .branch-pa2 .branch-tiles {
-  grid-template-columns: repeat(2, minmax(168px, 1fr));
+  grid-template-columns: repeat(2, minmax(186px, 1fr));
 }
 
 .branch-empty {
@@ -491,13 +504,17 @@ body.board-monitor #board-root {
   font-size: 10px;
 }
 
-.tree-lab-column .branch-panel {
-  height: 100%;
+.lab-block {
+  margin-top: 2px;
 }
 
-.tree-lab-column .branch-tiles {
-  grid-template-columns: repeat(2, minmax(168px, 1fr));
-  gap: 6px;
+.lab-block .branch-panel {
+  padding: 8px;
+}
+
+.lab-block .branch-tiles {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
 }
 
 .room-tile {
@@ -612,7 +629,7 @@ body.board-monitor #board-root {
   }
 
   .floor-group-branches,
-  .tree-lab-column .branch-tiles {
+  .lab-block .branch-tiles {
     grid-template-columns: 1fr;
   }
 
