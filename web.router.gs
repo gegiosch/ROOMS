@@ -12,17 +12,7 @@ function doGet(e) {
     }
 
     if (page === 'room') {
-      var roomId = normalizeRoomIdParam_(params);
-      var roomDate = params.date || ROOMS_APP.toIsoDate(new Date());
-      return renderTemplate_('ui.room', {
-        pageTitle: 'Room',
-        initialModelJson: JSON.stringify({
-          page: 'room',
-          roomId: roomId,
-          resourceId: roomId,
-          date: roomDate
-        })
-      });
+      return renderRoomPage_(params);
     }
 
     if (page === 'admin') {
@@ -40,14 +30,12 @@ function doGet(e) {
     });
   } catch (error) {
     if (page === 'room') {
-      return renderTemplate_('ui.room', {
-        pageTitle: 'Room',
-        initialModelJson: JSON.stringify(ROOMS_APP.Booking.buildRoomFallbackModel_(
-          normalizeRoomIdParam_(params),
-          params.date || ROOMS_APP.toIsoDate(new Date()),
-          'Errore caricamento pagina aula'
-        ))
-      });
+      try {
+        return renderRoomPage_(params, error);
+      } catch (fatalRoomError) {
+        return HtmlService.createHtmlOutput(buildPlainRoomFallbackHtml_(params, fatalRoomError))
+          .setTitle('ROOMS | Room');
+      }
     }
 
     throw error;
@@ -190,4 +178,71 @@ function jsonResponse_(payload) {
 
 function normalizeRoomIdParam_(payload) {
   return ROOMS_APP.normalizeString((payload && (payload.resourceId || payload.room || payload.roomId)) || '');
+}
+
+function renderRoomPage_(params, upstreamError) {
+  var normalizedRoomId = normalizeRoomIdParam_(params);
+  var roomDate = params.date || ROOMS_APP.toIsoDate(new Date());
+  var model;
+
+  if (upstreamError) {
+    model = ROOMS_APP.Booking.buildRoomFallbackModel_(normalizedRoomId, roomDate, 'Errore caricamento pagina aula');
+    model.debugMessage = String(upstreamError && upstreamError.message ? upstreamError.message : upstreamError);
+  } else {
+    model = ROOMS_APP.Booking.getRoomViewModel(normalizedRoomId, roomDate);
+  }
+
+  var safeModel = model && typeof model === 'object'
+    ? model
+    : ROOMS_APP.Booking.buildRoomFallbackModel_(normalizedRoomId, roomDate, 'Errore caricamento pagina aula');
+
+  var roomFound = Boolean(safeModel.resource && safeModel.resource.ResourceId);
+  var roomMeta = safeModel.resource || {};
+  var bookings = Array.isArray(safeModel.bookings) ? safeModel.bookings : [];
+  var slots = Array.isArray(safeModel.slots) ? safeModel.slots : [];
+  var freeSlots = Array.isArray(safeModel.freeSlots) ? safeModel.freeSlots : [];
+  var errorMessage = ROOMS_APP.normalizeString(safeModel.errorMessage);
+
+  try {
+    return renderTemplate_('ui.room', {
+      pageTitle: 'Room',
+      initialModelJson: JSON.stringify(safeModel),
+      serverRequestedRoomId: normalizedRoomId || '-',
+      serverRoomFound: roomFound,
+      serverErrorMessage: errorMessage,
+      serverRoomName: roomFound ? roomMeta.DisplayName : 'Aula non trovata',
+      serverRoomMetaLabel: roomFound
+        ? [roomMeta.AreaLabel || '', roomMeta.FloorLabel || '', roomMeta.SideLabel || ''].filter(function (value) { return Boolean(value); }).join(' / ')
+        : 'Dati aula non disponibili',
+      serverStatus: safeModel.status || 'UNKNOWN',
+      serverBookingsCount: bookings.length,
+      serverSlotsCount: slots.length,
+      serverFreeSlotsCount: freeSlots.length,
+      serverDate: safeModel.date || roomDate,
+      serverUserEmail: (safeModel.user && safeModel.user.email) || '',
+      serverDebugMessage: ROOMS_APP.normalizeString(safeModel.debugMessage || '')
+    });
+  } catch (error) {
+    return HtmlService.createHtmlOutput(buildPlainRoomFallbackHtml_(params, error))
+      .setTitle('ROOMS | Room');
+  }
+}
+
+function buildPlainRoomFallbackHtml_(params, error) {
+  var requested = normalizeRoomIdParam_(params) || '-';
+  var message = String(error && error.message ? error.message : error);
+  return [
+    '<!doctype html>',
+    '<html><head><meta charset="utf-8"><title>ROOMS | Room</title>',
+    '<style>body{font-family:Arial,sans-serif;padding:16px;background:#020617;color:#e5e7eb}a{color:#60a5fa}</style>',
+    '</head><body>',
+    '<a href="?page=board">&larr; Torna alla board</a>',
+    '<h1>ROOM PAGE</h1>',
+    '<p><strong>Aula richiesta:</strong> ' + requested + '</p>',
+    '<p><strong>Errore caricamento pagina aula</strong></p>',
+    '<pre>' + message.replace(/[<>&]/g, function (char) {
+      return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[char];
+    }) + '</pre>',
+    '</body></html>'
+  ].join('');
 }

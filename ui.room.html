@@ -5,66 +5,95 @@
     <?!= include_('ui.common.css.html'); ?>
   </head>
   <body>
+    <? var requestedRoomId = (typeof serverRequestedRoomId !== 'undefined' && serverRequestedRoomId) ? serverRequestedRoomId : '-'; ?>
+    <? var roomFound = (typeof serverRoomFound !== 'undefined') ? serverRoomFound : false; ?>
+    <? var roomName = (typeof serverRoomName !== 'undefined' && serverRoomName) ? serverRoomName : 'Aula non trovata'; ?>
+    <? var roomMetaLabel = (typeof serverRoomMetaLabel !== 'undefined' && serverRoomMetaLabel) ? serverRoomMetaLabel : 'Dati aula non disponibili'; ?>
+    <? var roomStatus = (typeof serverStatus !== 'undefined' && serverStatus) ? serverStatus : 'UNKNOWN'; ?>
+    <? var roomDate = (typeof serverDate !== 'undefined' && serverDate) ? serverDate : ''; ?>
+    <? var bookingsCount = (typeof serverBookingsCount !== 'undefined' && serverBookingsCount !== null) ? serverBookingsCount : 0; ?>
+    <? var slotsCount = (typeof serverSlotsCount !== 'undefined' && serverSlotsCount !== null) ? serverSlotsCount : 0; ?>
+    <? var freeSlotsCount = (typeof serverFreeSlotsCount !== 'undefined' && serverFreeSlotsCount !== null) ? serverFreeSlotsCount : 0; ?>
+    <? var userEmail = (typeof serverUserEmail !== 'undefined' && serverUserEmail) ? serverUserEmail : ''; ?>
+    <? var serverError = (typeof serverErrorMessage !== 'undefined' && serverErrorMessage) ? serverErrorMessage : ''; ?>
+    <? var debugMessage = (typeof serverDebugMessage !== 'undefined' && serverDebugMessage) ? serverDebugMessage : ''; ?>
+
     <div class="page-shell">
       <header class="app-header">
         <div class="title-block">
-          <div class="eyebrow">Room Detail</div>
-          <h1 id="room-title">Caricamento...</h1>
-          <p class="subtitle" id="room-subtitle">Prenotazioni, disponibilità e ricorrenze.</p>
+          <div class="eyebrow">Room Page</div>
+          <h1 id="room-title"><?= roomName ?></h1>
+          <p class="subtitle" id="room-subtitle"><?= roomMetaLabel ?></p>
         </div>
         <div class="stack">
           <a class="status-pill" href="?page=board">← Torna alla board</a>
-          <div class="status-pill" id="room-user-pill">Utente non rilevato</div>
+          <div class="status-pill" id="room-user-pill"><?= userEmail ? userEmail : 'Utente non autenticato' ?></div>
         </div>
       </header>
-      <div id="room-error" class="notice error" style="display:none;">Dati aula non disponibili</div>
 
-      <section class="grid grid-3">
+      <section class="panel form-card">
+        <h3>ROOM PAGE</h3>
+        <p class="muted"><strong>Aula richiesta:</strong> <span id="requested-room-id"><?= requestedRoomId ?></span></p>
+        <? if (serverError) { ?>
+          <div id="room-error" class="notice error"><?= serverError ?></div>
+        <? } else if (!roomFound) { ?>
+          <div id="room-error" class="notice error">Aula non trovata</div>
+        <? } else { ?>
+          <div id="room-error" class="notice" style="display:none;"></div>
+        <? } ?>
+        <div id="room-notice" class="notice">Dati pagina aula caricati lato server.</div>
+      </section>
+
+      <section class="grid grid-3" style="margin-top: 12px;">
         <article class="panel metric-card">
           <h3>Stato attuale</h3>
-          <div class="metric-value" id="room-status">-</div>
-          <div class="muted" id="room-current-booking">Nessuna prenotazione in corso.</div>
+          <div class="metric-value" id="room-status"><?= roomStatus ?></div>
+          <div class="muted" id="room-current-booking">Verifica prenotazioni correnti.</div>
         </article>
         <article class="panel metric-card">
           <h3>Data</h3>
-          <div class="metric-value" id="room-date-label">-</div>
-          <div class="muted">Aggiorna la data per controllare il planning.</div>
+          <div class="metric-value" id="room-date-label"><?= roomDate ?></div>
+          <div class="muted">Planning giornaliero.</div>
         </article>
         <article class="panel metric-card">
           <h3>Slot liberi</h3>
-          <div class="metric-value" id="room-free-count">0</div>
-          <div class="muted">Intervalli disponibili nella giornata selezionata.</div>
+          <div class="metric-value" id="room-free-count"><?= freeSlotsCount ?></div>
+          <div class="muted">Totale slot liberi stimati.</div>
         </article>
       </section>
 
-      <section class="panel form-card" style="margin-top: 18px;">
+      <section class="panel form-card" style="margin-top: 12px;">
         <div class="toolbar">
           <select class="select" id="room-select" style="max-width: 320px;"></select>
-          <input class="input" type="date" id="room-date-input" style="max-width: 180px;">
+          <input class="input" type="date" id="room-date-input" style="max-width: 180px;" value="<?= roomDate ?>">
           <button class="button secondary" id="room-refresh-button">Aggiorna</button>
         </div>
-        <div id="room-notice" class="notice">Seleziona una stanza e carica i dati.</div>
       </section>
 
-      <section class="grid grid-2" style="margin-top: 18px;">
+      <section class="grid grid-2" style="margin-top: 12px;">
         <article class="panel table-card">
           <div class="section-title">
             <h3>Prenotazioni di oggi</h3>
           </div>
-          <div id="bookings-table"></div>
+          <div id="bookings-table">
+            <div class="notice">Prenotazioni trovate: <strong id="bookings-count"><?= bookingsCount ?></strong></div>
+          </div>
         </article>
 
         <article class="panel table-card">
           <div class="section-title">
             <h3>Slot disponibili</h3>
           </div>
-          <div id="free-slots-table"></div>
+          <div id="free-slots-table">
+            <div class="notice">Slot trovati: <strong id="slots-count"><?= slotsCount ?></strong></div>
+          </div>
         </article>
       </section>
 
-      <section class="grid grid-2" style="margin-top: 18px;">
+      <section class="grid grid-2" style="margin-top: 12px;">
         <article class="panel form-card">
-          <h3>Nuova prenotazione</h3>
+          <h3>Prenotazione</h3>
+          <p class="muted">Controlli prenotazione disponibili sotto (modalita' progressive enhancement).</p>
           <div class="grid">
             <input class="input" type="text" id="booking-title" placeholder="Titolo">
             <div class="grid grid-2">
@@ -81,7 +110,7 @@
         </article>
 
         <article class="panel form-card">
-          <h3>Ricorrenza settimanale</h3>
+          <h3>Ricorrenza settimanale (placeholder)</h3>
           <div class="grid">
             <select class="select" id="recurring-weekday">
               <option>Monday</option>
@@ -104,9 +133,31 @@
               <button class="button secondary" id="recurring-preview">Anteprima</button>
               <button class="button" id="recurring-commit">Conferma serie</button>
             </div>
-            <div id="recurring-result" class="notice">L'anteprima mostrerà validazioni, conflitti e date saltate.</div>
+            <div id="recurring-result" class="notice">Placeholder ricorrenza.</div>
           </div>
         </article>
+      </section>
+
+      <section class="panel table-card" style="margin-top: 12px;">
+        <h3>Debug</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Valore</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>NormalizedRoomId</td><td id="debug-room-id"><?= requestedRoomId ?></td></tr>
+              <tr><td>RoomFound</td><td id="debug-room-found"><?= roomFound ? 'TRUE' : 'FALSE' ?></td></tr>
+              <tr><td>BookingsTodayCount</td><td id="debug-bookings-count"><?= bookingsCount ?></td></tr>
+              <tr><td>SlotsTodayCount</td><td id="debug-slots-count"><?= slotsCount ?></td></tr>
+              <tr><td>ErrorMessage</td><td id="debug-error-message"><?= serverError ? serverError : '-' ?></td></tr>
+              <tr><td>DebugMessage</td><td id="debug-message"><?= debugMessage ? debugMessage : '-' ?></td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
 
@@ -116,36 +167,31 @@
     <?!= include_('ui.common.js.html'); ?>
     <script>
       (function () {
-        var bootstrap = window.ROOMS_INITIAL_MODEL || {};
+        var model = (window.ROOMS_INITIAL_MODEL && typeof window.ROOMS_INITIAL_MODEL === 'object')
+          ? window.ROOMS_INITIAL_MODEL
+          : {};
         var roomSelect = document.getElementById('room-select');
         var dateInput = document.getElementById('room-date-input');
         var notice = document.getElementById('room-notice');
         var roomError = document.getElementById('room-error');
 
-        function fallbackModel(message) {
-          return {
-            ok: false,
-            errorMessage: message || 'Dati aula non disponibili',
-            date: bootstrap.date || '',
-            requestedResourceId: bootstrap.roomId || bootstrap.resourceId || '',
-            resource: null,
-            resources: [],
-            bookings: [],
-            ownBookings: [],
-            freeSlots: [],
-            slots: [],
-            status: 'UNKNOWN',
-            currentBooking: null,
-            user: { email: '' },
-            config: {}
-          };
+        function safeArray(value) {
+          return Array.isArray(value) ? value : [];
+        }
+
+        function setText(id, value) {
+          var node = document.getElementById(id);
+          if (!node) {
+            return;
+          }
+          node.textContent = value == null ? '' : String(value);
         }
 
         function showError(message) {
           if (!roomError) {
             return;
           }
-          roomError.textContent = message || 'Dati aula non disponibili';
+          roomError.textContent = message || 'Errore caricamento dati';
           roomError.style.display = 'block';
         }
 
@@ -156,81 +202,53 @@
           roomError.style.display = 'none';
         }
 
-        function loadRoom() {
-          var resourceId = (roomSelect && roomSelect.value) || bootstrap.roomId || bootstrap.resourceId || '';
-          var date = (dateInput && dateInput.value) || bootstrap.date || '';
+        function renderSummary(currentModel) {
+          var resource = currentModel && currentModel.resource ? currentModel.resource : null;
+          var bookings = safeArray(currentModel && currentModel.bookings);
+          var slots = safeArray(currentModel && currentModel.slots);
+          var freeSlots = safeArray(currentModel && currentModel.freeSlots);
+          var roomFound = Boolean(resource && resource.ResourceId);
 
-          ROOMS_UI.setNotice(notice, 'Caricamento dati stanza...', '');
-          return ROOMS_UI.call('getRoomViewModel', resourceId, date)
-            .then(function (model) {
-              var safeModel = model && typeof model === 'object' ? model : fallbackModel('Dati aula non disponibili');
-              bootstrap.roomId = safeModel.resource ? safeModel.resource.ResourceId : resourceId;
-              bootstrap.resourceId = bootstrap.roomId;
-              bootstrap.date = safeModel.date || date;
-              render(safeModel);
-              ROOMS_UI.setNotice(notice, safeModel.ok === false ? (safeModel.errorMessage || 'Dati aula non disponibili') : 'Dati aggiornati.', safeModel.ok === false ? 'error' : 'success');
-            })
-            .catch(function (error) {
-              var model = fallbackModel('Errore caricamento pagina aula');
-              render(model);
-              ROOMS_UI.setNotice(notice, error && error.message ? error.message : 'Errore caricamento pagina aula', 'error');
-            });
-        }
+          setText('requested-room-id', (currentModel && (currentModel.requestedResourceId || (resource && resource.ResourceId))) || '-');
+          setText('room-title', roomFound ? resource.DisplayName : 'Aula non trovata');
+          setText('room-subtitle', roomFound
+            ? [resource.AreaLabel || '', resource.FloorLabel || '', resource.SideLabel || ''].filter(function (item) { return Boolean(item); }).join(' / ')
+            : 'Dati aula non disponibili');
+          setText('room-user-pill', currentModel && currentModel.user && currentModel.user.email ? currentModel.user.email : 'Utente non autenticato');
+          setText('room-status', currentModel && currentModel.status ? currentModel.status : 'UNKNOWN');
+          setText('room-date-label', currentModel && currentModel.date ? currentModel.date : '');
+          setText('room-free-count', freeSlots.length);
+          setText('bookings-count', bookings.length);
+          setText('slots-count', slots.length);
+          setText('debug-room-id', (currentModel && (currentModel.requestedResourceId || (resource && resource.ResourceId))) || '-');
+          setText('debug-room-found', roomFound ? 'TRUE' : 'FALSE');
+          setText('debug-bookings-count', bookings.length);
+          setText('debug-slots-count', slots.length);
+          setText('debug-error-message', currentModel && currentModel.errorMessage ? currentModel.errorMessage : '-');
+          setText('debug-message', currentModel && currentModel.debugMessage ? currentModel.debugMessage : '-');
 
-        function render(model) {
-          var safeModel = model && typeof model === 'object' ? model : fallbackModel('Dati aula non disponibili');
-          var resources = Array.isArray(safeModel.resources) ? safeModel.resources : [];
-          var bookings = Array.isArray(safeModel.bookings) ? safeModel.bookings : [];
-          var freeSlots = Array.isArray(safeModel.freeSlots) ? safeModel.freeSlots : [];
-          var selectedResourceId = safeModel.resource ? safeModel.resource.ResourceId : (safeModel.requestedResourceId || bootstrap.roomId || '');
+          if (currentModel && currentModel.currentBooking) {
+            setText('room-current-booking', 'In uso da ' + (currentModel.currentBooking.BookerSurname || currentModel.currentBooking.Title || 'N/D') + ' fino alle ' + currentModel.currentBooking.EndTime);
+          } else {
+            setText('room-current-booking', 'Nessuna prenotazione in corso.');
+          }
 
-          document.getElementById('room-title').textContent = safeModel.resource ? safeModel.resource.DisplayName : 'Aula non trovata';
-          document.getElementById('room-subtitle').textContent = safeModel.resource
-            ? safeModel.resource.AreaLabel + ' / ' + safeModel.resource.FloorLabel + ' / ' + safeModel.resource.SideLabel
-            : 'Controlla ResourceId e configurazione.';
-          document.getElementById('room-user-pill').textContent = safeModel.user && safeModel.user.email ? safeModel.user.email : 'Utente non autenticato';
-          document.getElementById('room-status').textContent = safeModel.status === 'OCCUPIED' ? 'Occupata' : (safeModel.status === 'FREE' ? 'Libera' : 'N/D');
-          document.getElementById('room-current-booking').textContent = safeModel.currentBooking
-            ? 'In uso da ' + (safeModel.currentBooking.BookerSurname || safeModel.currentBooking.Title) + ' fino alle ' + safeModel.currentBooking.EndTime
-            : 'Nessuna prenotazione in corso.';
-          document.getElementById('room-date-label').textContent = safeModel.date || '';
-          document.getElementById('room-free-count').textContent = String(freeSlots.length || 0);
-
-          if (safeModel.ok === false) {
-            showError(safeModel.errorMessage || 'Dati aula non disponibili');
+          if (currentModel && currentModel.errorMessage) {
+            showError(currentModel.errorMessage);
+          } else if (!roomFound) {
+            showError('Aula non trovata');
           } else {
             hideError();
           }
-
-          if (dateInput) {
-            dateInput.value = safeModel.date || '';
-          }
-
-          if (roomSelect) {
-            if (resources.length) {
-              ROOMS_UI.fillSelect(roomSelect, resources, 'ResourceId', 'DisplayName', selectedResourceId);
-            } else {
-              ROOMS_UI.clearNode(roomSelect);
-              var option = document.createElement('option');
-              option.value = '';
-              option.textContent = 'Aule non disponibili';
-              roomSelect.appendChild(option);
-            }
-          }
-
-          renderSimpleTable('bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato'], bookings.map(function (booking) {
-            return [booking.StartTime + ' - ' + booking.EndTime, booking.Title, booking.BookerSurname, booking.Status];
-          }), 'Nessuna prenotazione per la data selezionata.');
-
-          renderSimpleTable('free-slots-table', ['Da', 'A'], freeSlots.map(function (slot) {
-            return [slot.startTime, slot.endTime];
-          }), 'Nessuno slot libero disponibile.');
         }
 
         function renderSimpleTable(containerId, headers, rows, emptyText) {
           var mount = document.getElementById(containerId);
-          ROOMS_UI.clearNode(mount);
+          if (!mount) {
+            return;
+          }
 
+          ROOMS_UI.clearNode(mount);
           if (!rows.length) {
             mount.appendChild(ROOMS_UI.el('div', 'notice', emptyText));
             return;
@@ -259,10 +277,70 @@
           mount.appendChild(wrap);
         }
 
+        function renderTables(currentModel) {
+          var bookings = safeArray(currentModel && currentModel.bookings);
+          var freeSlots = safeArray(currentModel && currentModel.freeSlots);
+
+          renderSimpleTable('bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato'], bookings.map(function (booking) {
+            return [booking.StartTime + ' - ' + booking.EndTime, booking.Title || '', booking.BookerSurname || '', booking.Status || ''];
+          }), 'Nessuna prenotazione per la data selezionata.');
+
+          renderSimpleTable('free-slots-table', ['Da', 'A'], freeSlots.map(function (slot) {
+            return [slot.startTime || '', slot.endTime || ''];
+          }), 'Nessuno slot libero disponibile.');
+        }
+
+        function render(currentModel) {
+          renderSummary(currentModel || {});
+          renderTables(currentModel || {});
+
+          var resources = safeArray(currentModel && currentModel.resources);
+          var selected = currentModel && currentModel.resource ? currentModel.resource.ResourceId : (currentModel && currentModel.requestedResourceId ? currentModel.requestedResourceId : '');
+          if (roomSelect) {
+            if (resources.length) {
+              ROOMS_UI.fillSelect(roomSelect, resources, 'ResourceId', 'DisplayName', selected);
+            } else {
+              ROOMS_UI.clearNode(roomSelect);
+              var option = document.createElement('option');
+              option.value = '';
+              option.textContent = 'Aule non disponibili';
+              roomSelect.appendChild(option);
+            }
+          }
+          if (dateInput) {
+            dateInput.value = currentModel && currentModel.date ? currentModel.date : '';
+          }
+        }
+
+        function loadRoom() {
+          if (typeof ROOMS_UI === 'undefined' || typeof ROOMS_UI.call !== 'function') {
+            if (notice) {
+              notice.textContent = 'Dati client non disponibili, visualizzazione server-side attiva.';
+              notice.className = 'notice';
+            }
+            return;
+          }
+
+          var resourceId = roomSelect && roomSelect.value ? roomSelect.value : (model.requestedResourceId || '');
+          var dateValue = dateInput && dateInput.value ? dateInput.value : (model.date || '');
+
+          ROOMS_UI.setNotice(notice, 'Caricamento dati stanza...', '');
+          ROOMS_UI.call('getRoomViewModel', resourceId, dateValue)
+            .then(function (nextModel) {
+              model = nextModel && typeof nextModel === 'object' ? nextModel : model;
+              render(model);
+              ROOMS_UI.setNotice(notice, model && model.errorMessage ? model.errorMessage : 'Dati aggiornati.', model && model.errorMessage ? 'error' : 'success');
+            })
+            .catch(function (error) {
+              ROOMS_UI.setNotice(notice, error && error.message ? error.message : 'Errore caricamento dati aula', 'error');
+              showError('Errore caricamento dati');
+            });
+        }
+
         function bookingPayload() {
           return {
-            resourceId: roomSelect.value,
-            bookingDate: dateInput.value,
+            resourceId: roomSelect && roomSelect.value ? roomSelect.value : '',
+            bookingDate: dateInput && dateInput.value ? dateInput.value : '',
             startTime: document.getElementById('booking-start').value,
             endTime: document.getElementById('booking-end').value,
             title: document.getElementById('booking-title').value,
@@ -282,62 +360,66 @@
           return payload;
         }
 
-        if (!roomSelect || !dateInput || !notice) {
-          showError('Errore caricamento pagina aula');
-          return;
+        render(model);
+
+        var refreshButton = document.getElementById('room-refresh-button');
+        if (refreshButton) {
+          refreshButton.addEventListener('click', loadRoom);
         }
 
-        document.getElementById('room-refresh-button').addEventListener('click', loadRoom);
-
-        document.getElementById('booking-submit').addEventListener('click', function () {
-          ROOMS_UI.setNotice(notice, 'Creazione prenotazione...', '');
-          ROOMS_UI.call('createRoomBooking', bookingPayload())
-            .then(function (booking) {
-              ROOMS_UI.setNotice(notice, 'Prenotazione creata: ' + booking.BookingId, 'success');
-              loadRoom();
-            })
-            .catch(function (error) {
-              ROOMS_UI.setNotice(notice, error.message, 'error');
-            });
-        });
-
-        document.getElementById('recurring-preview').addEventListener('click', function () {
-          var target = document.getElementById('recurring-result');
-          ROOMS_UI.setNotice(target, 'Calcolo anteprima...', '');
-          ROOMS_UI.call('previewRecurringRoomBooking', recurringPayload())
-            .then(function (preview) {
-              var summary = 'Valide: ' + preview.validCount + ' / Saltate: ' + preview.skippedCount;
-              var details = preview.occurrences.slice(0, 10).map(function (item) {
-                return item.bookingDate + ' [' + item.status + ']' + (item.errors.length ? ' ' + item.errors.join(' | ') : '');
-              }).join('\n');
-              ROOMS_UI.setNotice(target, summary + (details ? '\n' + details : ''), 'success');
-            })
-            .catch(function (error) {
-              ROOMS_UI.setNotice(target, error.message, 'error');
-            });
-        });
-
-        document.getElementById('recurring-commit').addEventListener('click', function () {
-          var target = document.getElementById('recurring-result');
-          ROOMS_UI.setNotice(target, 'Creazione serie...', '');
-          ROOMS_UI.call('commitRecurringRoomBooking', recurringPayload())
-            .then(function (result) {
-              ROOMS_UI.setNotice(target, 'Serie creata: ' + result.seriesId + ' (' + result.createdCount + ' prenotazioni)', 'success');
-              loadRoom();
-            })
-            .catch(function (error) {
-              ROOMS_UI.setNotice(target, error.message, 'error');
-            });
-        });
-
-        bootstrap.roomId = bootstrap.roomId || bootstrap.resourceId || bootstrap.requestedResourceId || '';
-        bootstrap.resourceId = bootstrap.roomId;
-        dateInput.value = bootstrap.date || '';
-        document.getElementById('recurring-start-date').value = bootstrap.date || '';
-        document.getElementById('recurring-end-date').value = bootstrap.date || '';
-        if (Object.prototype.hasOwnProperty.call(bootstrap, 'ok') || Object.prototype.hasOwnProperty.call(bootstrap, 'errorMessage')) {
-          render(bootstrap);
+        var submitButton = document.getElementById('booking-submit');
+        if (submitButton) {
+          submitButton.addEventListener('click', function () {
+            if (typeof ROOMS_UI === 'undefined' || typeof ROOMS_UI.call !== 'function') {
+              return;
+            }
+            ROOMS_UI.call('createRoomBooking', bookingPayload())
+              .then(function () {
+                ROOMS_UI.setNotice(notice, 'Prenotazione creata.', 'success');
+                loadRoom();
+              })
+              .catch(function (error) {
+                ROOMS_UI.setNotice(notice, error && error.message ? error.message : 'Errore creazione prenotazione', 'error');
+              });
+          });
         }
+
+        var recurringPreviewButton = document.getElementById('recurring-preview');
+        if (recurringPreviewButton) {
+          recurringPreviewButton.addEventListener('click', function () {
+            if (typeof ROOMS_UI === 'undefined' || typeof ROOMS_UI.call !== 'function') {
+              return;
+            }
+            var resultNode = document.getElementById('recurring-result');
+            ROOMS_UI.call('previewRecurringRoomBooking', recurringPayload())
+              .then(function (preview) {
+                ROOMS_UI.setNotice(resultNode, 'Valide: ' + preview.validCount + ' / Saltate: ' + preview.skippedCount, 'success');
+              })
+              .catch(function (error) {
+                ROOMS_UI.setNotice(resultNode, error && error.message ? error.message : 'Errore anteprima ricorrenza', 'error');
+              });
+          });
+        }
+
+        var recurringCommitButton = document.getElementById('recurring-commit');
+        if (recurringCommitButton) {
+          recurringCommitButton.addEventListener('click', function () {
+            if (typeof ROOMS_UI === 'undefined' || typeof ROOMS_UI.call !== 'function') {
+              return;
+            }
+            var resultNode = document.getElementById('recurring-result');
+            ROOMS_UI.call('commitRecurringRoomBooking', recurringPayload())
+              .then(function (result) {
+                ROOMS_UI.setNotice(resultNode, 'Serie creata: ' + result.seriesId, 'success');
+                loadRoom();
+              })
+              .catch(function (error) {
+                ROOMS_UI.setNotice(resultNode, error && error.message ? error.message : 'Errore conferma ricorrenza', 'error');
+              });
+          });
+        }
+
+        // Progressive enhancement: refresh server snapshot with fresh backend data.
         loadRoom();
       }());
     </script>
