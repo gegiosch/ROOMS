@@ -136,6 +136,7 @@
           var leftColumn = ROOMS_UI.el('div', 'tree-left-column');
           var centerColumn = ROOMS_UI.el('div', 'tree-center-column');
           var rightColumn = ROOMS_UI.el('div', 'tree-right-column');
+          var labColumn = ROOMS_UI.el('div', 'tree-lab-column');
 
           leftColumn.appendChild(createBranchPanel(model, page, 'PA2', 'left', getBranchLabel(model, 'PA2')));
           leftColumn.appendChild(createBranchPanel(model, page, 'PA1', 'left', getBranchLabel(model, 'PA1')));
@@ -148,21 +149,20 @@
           rightColumn.appendChild(createFloorGroup(model, page, '2P', '2P_DX', '2P_SX'));
           rightColumn.appendChild(createFloorGroup(model, page, '1P', '1P_DX', '1P_SX'));
           rightColumn.appendChild(createBranchPanel(model, page, 'PT', 'right pt', getBranchLabel(model, 'PT')));
+          labColumn.appendChild(createBranchPanel(model, page, 'LAB', 'lab', getBranchLabel(model, 'LAB')));
 
           treeShell.appendChild(leftColumn);
           treeShell.appendChild(centerColumn);
           treeShell.appendChild(rightColumn);
-          var labBlock = ROOMS_UI.el('div', 'lab-block');
-          labBlock.appendChild(createBranchPanel(model, page, 'LAB', 'lab', getBranchLabel(model, 'LAB')));
+          treeShell.appendChild(labColumn);
 
           var fitShell = ROOMS_UI.el('div', 'board-fit-shell');
           fitShell.id = 'board-fit-shell';
           var canvas = ROOMS_UI.el('div', 'board-canvas');
           canvas.id = 'board-canvas';
-          canvas.dataset.baseWidth = '1600';
-          canvas.dataset.baseHeight = '840';
+          canvas.dataset.baseWidth = '1780';
+          canvas.dataset.baseHeight = '700';
           canvas.appendChild(treeShell);
-          canvas.appendChild(labBlock);
           fitShell.appendChild(canvas);
           root.appendChild(fitShell);
 

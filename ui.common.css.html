@@ -306,46 +306,45 @@ body.board-monitor #board-root {
 }
 
 .board-canvas {
-  width: 1600px;
-  height: 840px;
+  width: 1780px;
+  height: 700px;
   transform-origin: top center;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  gap: 8px;
+  display: block;
 }
 
 .board-tree {
   display: grid;
-  grid-template-columns: 342px 88px minmax(0, 1fr);
-  gap: 10px;
-  align-items: stretch;
+  grid-template-columns: 360px 76px minmax(0, 1fr) 350px;
+  gap: 12px;
+  align-items: start;
 }
 
 .tree-left-column,
-.tree-right-column {
+.tree-right-column,
+.tree-lab-column {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   align-content: start;
 }
 
 .tree-left-column {
-  padding-top: 12px;
+  padding-top: 8px;
 }
 
 .tree-left-column .branch-pa1 {
-  margin-top: 44px;
+  margin-top: 34px;
 }
 
 .tree-center-column {
   position: relative;
-  min-height: 560px;
+  height: 470px;
 }
 
 .tree-spine {
   position: absolute;
   left: 50%;
-  top: 6px;
-  bottom: 6px;
+  top: 86px;
+  height: 305px;
   width: 4px;
   transform: translateX(-50%);
   border-radius: 999px;
@@ -367,19 +366,19 @@ body.board-monitor #board-root {
 }
 
 .spine-node.node-2p {
-  top: 88px;
+  top: 62px;
 }
 
 .spine-node.node-1p {
-  top: 266px;
+  top: 214px;
 }
 
 .spine-node.node-pt {
-  top: 444px;
+  top: 366px;
 }
 
 .tree-right-column {
-  padding-top: 10px;
+  padding-top: 8px;
 }
 
 .floor-group {
@@ -389,7 +388,7 @@ body.board-monitor #board-root {
 }
 
 .floor-group.floor-group-1p {
-  margin-top: 26px;
+  margin-top: 16px;
 }
 
 .floor-group::before {
@@ -418,11 +417,11 @@ body.board-monitor #board-root {
 .branch-panel {
   position: relative;
   display: grid;
-  gap: 5px;
+  gap: 6px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
-  padding: 6px;
+  padding: 7px;
 }
 
 .branch-panel.left::before,
@@ -445,7 +444,7 @@ body.board-monitor #board-root {
 }
 
 .branch-panel.branch-pt {
-  margin-top: 22px;
+  margin-top: 12px;
 }
 
 .branch-panel.lab::before {
@@ -454,7 +453,7 @@ body.board-monitor #board-root {
 
 .branch-label {
   color: var(--accent-blue);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -462,8 +461,8 @@ body.board-monitor #board-root {
 
 .branch-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
 }
 
 .branch-empty {
@@ -474,17 +473,13 @@ body.board-monitor #board-root {
   font-size: 10px;
 }
 
-.lab-block {
-  margin-top: 2px;
+.tree-lab-column .branch-panel {
+  height: 100%;
 }
 
-.lab-block .branch-panel {
-  padding: 6px;
-}
-
-.lab-block .branch-tiles {
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 4px;
+.tree-lab-column .branch-tiles {
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 6px;
 }
 
 .room-tile {
@@ -492,9 +487,9 @@ body.board-monitor #board-root {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 44px;
-  padding: 4px 5px;
-  border-radius: 7px;
+  min-height: 64px;
+  padding: 7px 8px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(2, 6, 23, 0.9), rgba(15, 23, 42, 0.78));
   text-decoration: none;
@@ -517,11 +512,11 @@ body.board-monitor #board-root {
 }
 
 .room-title {
-  font-size: clamp(10px, 0.74vw, 12px);
+  font-size: clamp(12px, 0.9vw, 14px);
   font-weight: 700;
   letter-spacing: 0.01em;
   text-transform: uppercase;
-  line-height: 1;
+  line-height: 1.05;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -530,10 +525,10 @@ body.board-monitor #board-root {
 .room-lines {
   display: grid;
   gap: 1px;
-  font-size: clamp(8.5px, 0.62vw, 10px);
+  font-size: clamp(10px, 0.73vw, 11px);
   font-weight: 600;
   letter-spacing: 0.01em;
-  line-height: 1.05;
+  line-height: 1.08;
 }
 
 .room-lines div {
@@ -599,7 +594,7 @@ body.board-monitor #board-root {
   }
 
   .floor-group-branches,
-  .lab-block .branch-tiles {
+  .tree-lab-column .branch-tiles {
     grid-template-columns: 1fr;
   }
 
