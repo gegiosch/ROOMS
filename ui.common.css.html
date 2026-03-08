@@ -687,6 +687,11 @@ body.board-monitor #board-root {
   background: linear-gradient(180deg, rgba(2, 6, 23, 0.9), rgba(15, 23, 42, 0.78));
   text-decoration: none;
   box-shadow: 0 4px 10px rgba(2, 6, 23, 0.22);
+  color: #e5e7eb;
+}
+
+.room-tile * {
+  color: inherit;
 }
 
 .room-tile.free {
@@ -705,6 +710,7 @@ body.board-monitor #board-root {
 }
 
 .room-title {
+  color: #e5e7eb;
   font-size: clamp(12px, 0.9vw, 14px);
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -716,6 +722,7 @@ body.board-monitor #board-root {
 }
 
 .room-lines {
+  color: #cbd5f5;
   display: grid;
   gap: 1px;
   font-size: clamp(10px, 0.73vw, 11px);
@@ -728,6 +735,10 @@ body.board-monitor #board-root {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.room-lines div:last-child {
+  color: #94a3b8;
 }
 
 .stack {
