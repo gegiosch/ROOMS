@@ -290,7 +290,7 @@
         }
 
         function createBranchPanel(model, page, branchKey, sideClass, fallbackTitle) {
-          if (branchKey === 'PA1_AULA' && isFullscreenActive()) {
+          if (branchKey === 'PA1_AULA') {
             return createAulaMagnaSpecialPanel(model, sideClass, fallbackTitle);
           }
 
@@ -489,13 +489,6 @@
           root.appendChild(fitShell);
 
           applyFitScale();
-          if (compactSinglePageApplied && !options.skipCompactFallbackCheck && hasBoardCanvasOverflow_()) {
-            render(model, {
-              forceNormalPages: true,
-              skipCompactFallbackCheck: true
-            });
-            return;
-          }
           window.requestAnimationFrame(applyFitScale);
         }
 
@@ -1510,6 +1503,9 @@
         }
 
         function rotate() {
+          if (shouldUseFullscreenCompact(state)) {
+            return;
+          }
           if (isPanelOpen()) {
             return;
           }
