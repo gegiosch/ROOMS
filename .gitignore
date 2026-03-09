@@ -1,5 +1,7 @@
 .DS_Store
 *.gscript
 *.gsheet
+*.xlsx
+~$*.xlsx
 node_modules
 .clasp.json

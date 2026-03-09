@@ -92,6 +92,11 @@ function rebuildTimetableOccupancy() {
   return ROOMS_APP.Timetable.rebuildTimetableOccupancy();
 }
 
+function rebuildTimetableOccupancyFromSheets() {
+  ROOMS_APP.Auth.requireAdmin();
+  return ROOMS_APP.Timetable.rebuildTimetableOccupancyFromSheets();
+}
+
 function getAdminBootstrap() {
   var user = ROOMS_APP.Auth.requireAdmin();
   var tableNames = [
@@ -212,6 +217,10 @@ function routeApiRequest_(payload) {
   if (action === 'rebuildTimetableOccupancy') {
     ROOMS_APP.Auth.requireAdmin();
     return ROOMS_APP.Timetable.rebuildTimetableOccupancy();
+  }
+  if (action === 'rebuildTimetableOccupancyFromSheets') {
+    ROOMS_APP.Auth.requireAdmin();
+    return ROOMS_APP.Timetable.rebuildTimetableOccupancyFromSheets();
   }
 
   return {
