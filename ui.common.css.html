@@ -410,6 +410,100 @@ body.board-monitor #board-root {
   padding: 6px 7px;
 }
 
+.board-shell.fullscreen-active .board-canvas {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 18px;
+}
+
+.board-shell.fullscreen-active .board-tree {
+  height: 100%;
+  align-content: start;
+}
+
+.board-shell.fullscreen-active .lab-block {
+  align-self: end;
+  margin-top: 0;
+  padding-top: 30px;
+}
+
+.board-shell.fullscreen-active.fullscreen-compact .board-canvas {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.board-shell.fullscreen-active.fullscreen-compact .lab-block {
+  padding-top: 24px;
+}
+
+.board-shell.fullscreen-active .tree-left-column .branch-pa1-aula {
+  margin-top: 18px;
+}
+
+.board-shell.fullscreen-active .branch-panel.aula-magna-special {
+  min-height: 300px;
+  padding: 10px;
+  gap: 10px;
+  border-color: rgba(96, 165, 250, 0.48);
+  background: linear-gradient(180deg, rgba(10, 26, 56, 0.94), rgba(15, 23, 42, 0.9));
+  cursor: pointer;
+}
+
+.board-shell.fullscreen-active .aula-magna-content {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+  min-height: 240px;
+}
+
+.board-shell.fullscreen-active .aula-magna-section-label {
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.board-shell.fullscreen-active .aula-magna-current-title {
+  margin-top: 3px;
+  color: #e5e7eb;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.board-shell.fullscreen-active .aula-magna-current-time {
+  margin-top: 3px;
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.board-shell.fullscreen-active .aula-magna-upcoming {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+}
+
+.board-shell.fullscreen-active .aula-magna-event-list {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.board-shell.fullscreen-active .aula-magna-event-line {
+  color: #cbd5f5;
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.board-shell.fullscreen-active .aula-magna-empty {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .board-floating-controls {
   position: fixed;
   right: 12px;

@@ -228,7 +228,72 @@
           return tileNode;
         }
 
+        function formatEventDateShort(eventDate) {
+          if (!eventDate) {
+            return '--/--/--';
+          }
+          var date = new Date(String(eventDate) + 'T12:00:00');
+          if (isNaN(date.getTime())) {
+            return String(eventDate);
+          }
+          var day = ('0' + String(date.getDate())).slice(-2);
+          var month = ('0' + String(date.getMonth() + 1)).slice(-2);
+          var year = String(date.getFullYear()).slice(-2);
+          return day + '/' + month + '/' + year;
+        }
+
+        function formatEventTimeRange(eventItem) {
+          var start = eventItem && eventItem.StartTime ? eventItem.StartTime : '--:--';
+          var end = eventItem && eventItem.EndTime ? eventItem.EndTime : '--:--';
+          return 'dalle ' + start + ' alle ' + end;
+        }
+
+        function createAulaMagnaSpecialPanel(model, sideClass, fallbackTitle) {
+          var branchClass = 'branch-panel ' + sideClass + ' branch-pa1-aula aula-magna-special';
+          var branch = ROOMS_UI.el('section', branchClass);
+          var eventBlock = model && model.aulaMagna ? model.aulaMagna : {};
+          var resourceId = eventBlock.resourceId || 'AULA_MAGNA';
+          branch.dataset.resourceId = resourceId;
+          branch.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || 'AULA MAGNA'));
+
+          var content = ROOMS_UI.el('div', 'aula-magna-content');
+          var currentSection = ROOMS_UI.el('div', 'aula-magna-current');
+          currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'ORA'));
+
+          var currentEvent = eventBlock.currentEvent || null;
+          currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-current-title', currentEvent ? (currentEvent.EventName || 'NESSUN EVENTO') : 'NESSUN EVENTO'));
+          currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-current-time', currentEvent ? formatEventTimeRange(currentEvent) : ''));
+          content.appendChild(currentSection);
+
+          var upcomingSection = ROOMS_UI.el('div', 'aula-magna-upcoming');
+          upcomingSection.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'PROSSIMI EVENTI'));
+          var list = ROOMS_UI.el('div', 'aula-magna-event-list');
+          var nextEvents = Array.isArray(eventBlock.nextEvents) ? eventBlock.nextEvents.slice(0, 10) : [];
+          if (!nextEvents.length) {
+            list.appendChild(ROOMS_UI.el('div', 'aula-magna-empty', 'Nessun evento programmato.'));
+          } else {
+            nextEvents.forEach(function (eventItem) {
+              var line = formatEventDateShort(eventItem.EventDate) +
+                ' · ' + formatEventTimeRange(eventItem) +
+                ' · ' + (eventItem.EventName || '');
+              list.appendChild(ROOMS_UI.el('div', 'aula-magna-event-line', line));
+            });
+          }
+          upcomingSection.appendChild(list);
+          content.appendChild(upcomingSection);
+
+          branch.appendChild(content);
+          branch.addEventListener('click', function () {
+            openRoomPanel(resourceId);
+          });
+          return branch;
+        }
+
         function createBranchPanel(model, page, branchKey, sideClass, fallbackTitle) {
+          if (branchKey === 'PA1_AULA' && isFullscreenActive()) {
+            return createAulaMagnaSpecialPanel(model, sideClass, fallbackTitle);
+          }
+
           var branchClass = 'branch-panel ' + sideClass + ' branch-' + branchKey.toLowerCase().replace('_', '-');
           var branch = ROOMS_UI.el('section', branchClass);
           branch.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || getBranchLabel(model, branchKey)));
@@ -274,6 +339,7 @@
           if (!boardShell) {
             return;
           }
+          boardShell.classList.toggle('fullscreen-active', isFullscreenActive());
           boardShell.classList.toggle('fullscreen-compact', shouldUseFullscreenCompact(model));
         }
 

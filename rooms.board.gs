@@ -14,6 +14,7 @@ ROOMS_APP.Board = {
     LAB: 'LABORATORI'
   },
   BRANCH_PAGE_CAPACITY_: 12,
+  AULA_MAGNA_RESOURCE_ID_: 'AULA_MAGNA',
 
   getBoardViewModel: function () {
     var startedAt = Date.now();
@@ -42,6 +43,10 @@ ROOMS_APP.Board = {
     });
     timetableOccupancies = this.uniqueByKey_(timetableOccupancies, 'BookingId');
     var timetableMs = Date.now() - stepStartedAt;
+
+    stepStartedAt = Date.now();
+    var aulaMagna = this.buildAulaMagnaEventBlock_(resources, now);
+    var eventsMs = Date.now() - stepStartedAt;
 
     stepStartedAt = Date.now();
     var occupancies = ROOMS_APP.sortBy(
@@ -107,16 +112,18 @@ ROOMS_APP.Board = {
         email: user.email,
         isAdmin: user.isAdmin
       },
+      aulaMagna: aulaMagna,
       branchOrder: this.BRANCH_ORDER_.slice(),
       branchLabels: this.BRANCH_LABELS_,
       pages: pages
     };
     Logger.log(
-      '[PERF] Board.getBoardViewModel total=%sms resources=%sms bookings=%sms timetable=%sms compose=%sms resourcesCount=%s bookingsCount=%s timetableCount=%s pages=%s',
+      '[PERF] Board.getBoardViewModel total=%sms resources=%sms bookings=%sms timetable=%sms events=%sms compose=%sms resourcesCount=%s bookingsCount=%s timetableCount=%s pages=%s',
       Date.now() - startedAt,
       resourcesMs,
       bookingsMs,
       timetableMs,
+      eventsMs,
       composeMs,
       resources.length,
       bookings.length,
@@ -124,6 +131,110 @@ ROOMS_APP.Board = {
       pages.length
     );
     return model;
+  },
+
+  buildAulaMagnaEventBlock_: function (resources, now) {
+    var resource = this.findAulaMagnaResource_(resources);
+    var nowDate = ROOMS_APP.toIsoDate(now || new Date());
+    var currentTime = Utilities.formatDate(now || new Date(), ROOMS_APP.getTimezone(), 'HH:mm');
+    var horizonDays = Math.max(0, ROOMS_APP.getNumberConfig('AULA_MAGNA_EVENT_DAYS_AHEAD', 14));
+    var endDate = this.addDaysToIsoDate_(nowDate, horizonDays);
+    var self = this;
+
+    if (!resource) {
+      return {
+        resourceId: this.AULA_MAGNA_RESOURCE_ID_,
+        displayName: 'AULA MAGNA',
+        currentEvent: null,
+        nextEvents: []
+      };
+    }
+
+    var events = ROOMS_APP.sortBy(
+      ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS).filter(function (row) {
+        var eventDate = ROOMS_APP.toIsoDate(row.EventDate);
+        var isActive = ROOMS_APP.normalizeString(row.IsActive) === '' ? true : ROOMS_APP.asBoolean(row.IsActive);
+        if (!isActive || !eventDate) {
+          return false;
+        }
+        if (eventDate < nowDate || eventDate > endDate) {
+          return false;
+        }
+        return self.matchesAulaMagnaResource_(row.ResourceId, resource.ResourceId);
+      }).map(function (row) {
+        return {
+          EventId: ROOMS_APP.normalizeString(row.EventId),
+          EventDate: ROOMS_APP.toIsoDate(row.EventDate),
+          StartTime: ROOMS_APP.toTimeString(row.StartTime),
+          EndTime: ROOMS_APP.toTimeString(row.EndTime),
+          EventName: ROOMS_APP.normalizeString(row.EventName),
+          Notes: ROOMS_APP.normalizeString(row.Notes)
+        };
+      }),
+      ['EventDate', 'StartTime', 'EndTime', 'EventName']
+    );
+
+    var currentEvent = events.filter(function (eventItem) {
+      return eventItem.EventDate === nowDate &&
+        eventItem.StartTime <= currentTime &&
+        eventItem.EndTime > currentTime;
+    })[0] || null;
+
+    var nextEvents = events.filter(function (eventItem) {
+      if (!currentEvent) {
+        return eventItem.EventDate > nowDate ||
+          (eventItem.EventDate === nowDate && eventItem.EndTime > currentTime);
+      }
+      return !ROOMS_APP.Board.isSameEvent_(eventItem, currentEvent) &&
+        (eventItem.EventDate > nowDate ||
+          (eventItem.EventDate === nowDate && eventItem.EndTime > currentTime));
+    }).slice(0, 10);
+
+    return {
+      resourceId: resource.ResourceId,
+      displayName: resource.DisplayName || 'AULA MAGNA',
+      currentEvent: currentEvent,
+      nextEvents: nextEvents
+    };
+  },
+
+  findAulaMagnaResource_: function (resources) {
+    return (resources || []).filter(function (resource) {
+      var byId = ROOMS_APP.normalizeString(resource.ResourceId).toUpperCase();
+      var byName = ROOMS_APP.slugify(resource.DisplayName || '');
+      return byId === ROOMS_APP.Board.AULA_MAGNA_RESOURCE_ID_ || byName === ROOMS_APP.Board.AULA_MAGNA_RESOURCE_ID_;
+    })[0] || null;
+  },
+
+  matchesAulaMagnaResource_: function (leftResourceId, rightResourceId) {
+    var left = ROOMS_APP.normalizeString(leftResourceId);
+    var right = ROOMS_APP.normalizeString(rightResourceId);
+    if (!left || !right) {
+      return false;
+    }
+    if (left.toUpperCase() === right.toUpperCase()) {
+      return true;
+    }
+    return ROOMS_APP.slugify(left) === ROOMS_APP.slugify(right);
+  },
+
+  isSameEvent_: function (left, right) {
+    if (!left || !right) {
+      return false;
+    }
+    if (left.EventId && right.EventId) {
+      return left.EventId === right.EventId;
+    }
+    return left.EventDate === right.EventDate &&
+      left.StartTime === right.StartTime &&
+      left.EndTime === right.EndTime &&
+      left.EventName === right.EventName;
+  },
+
+  addDaysToIsoDate_: function (isoDate, daysToAdd) {
+    var base = ROOMS_APP.combineDateTime(isoDate, '00:00');
+    base.setDate(base.getDate() + Number(daysToAdd || 0));
+    return ROOMS_APP.toIsoDate(base);
   },
 
   createEmptyBranchBuckets_: function () {
