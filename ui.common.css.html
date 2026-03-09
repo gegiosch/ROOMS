@@ -793,6 +793,9 @@ body.board-monitor #board-root {
 .tree-center-column {
   position: relative;
   height: 470px;
+  --spine-node-2p-top: 62px;
+  --spine-node-1p-top: 214px;
+  --spine-node-pt-top: 366px;
 }
 
 .tree-spine {
@@ -820,16 +823,26 @@ body.board-monitor #board-root {
   letter-spacing: 0.1em;
 }
 
+.spine-mezz-connector {
+  position: absolute;
+  left: 50%;
+  top: calc((var(--spine-node-2p-top) + var(--spine-node-1p-top)) / 2);
+  width: 26px;
+  transform: translate(-50%, -50%);
+  border-top: 3px solid rgba(96, 165, 250, 0.78);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.35);
+}
+
 .spine-node.node-2p {
-  top: 62px;
+  top: var(--spine-node-2p-top);
 }
 
 .spine-node.node-1p {
-  top: 214px;
+  top: var(--spine-node-1p-top);
 }
 
 .spine-node.node-pt {
-  top: 366px;
+  top: var(--spine-node-pt-top);
 }
 
 .tree-right-column {
