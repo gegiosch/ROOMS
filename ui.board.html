@@ -5,7 +5,7 @@
     <?!= include_('ui.common.css.html'); ?>
   </head>
   <body class="board-monitor">
-    <div class="page-shell">
+    <div id="board-shell" class="page-shell board-shell">
       <header class="app-header">
         <div class="title-block">
           <div class="eyebrow">Monitor Dashboard</div>
@@ -152,6 +152,9 @@
         var pageIndex = 0;
         var rotationTimer;
         var refreshTimer;
+        var visiblePages = [];
+        var compactSinglePageApplied = false;
+        var boardShell = document.getElementById('board-shell');
         var fullscreenButton = document.getElementById('board-fullscreen-toggle');
         var adminButton = document.getElementById('board-admin-button');
         var panelOverlay = document.getElementById('room-panel-overlay');
@@ -222,11 +225,86 @@
           return group;
         }
 
-        function activePage(model) {
-          if (!model.pages || !model.pages.length) {
+        function getModelPages(model) {
+          return (model && model.pages && model.pages.length) ? model.pages : [];
+        }
+
+        function isCompactEnabledByConfig(model) {
+          return Boolean(model && model.fullscreenCompactEnabled);
+        }
+
+        function shouldUseFullscreenCompact(model) {
+          return isFullscreenActive() && isCompactEnabledByConfig(model);
+        }
+
+        function applyFullscreenCompactMode(model) {
+          if (!boardShell) {
+            return;
+          }
+          boardShell.classList.toggle('fullscreen-compact', shouldUseFullscreenCompact(model));
+        }
+
+        function buildCompactMergedPage_(model) {
+          var pages = getModelPages(model);
+          var branchOrder = (model && model.branchOrder) ? model.branchOrder : [];
+          var mergedBranches = {};
+          var seen = {};
+
+          branchOrder.forEach(function (branchKey) {
+            mergedBranches[branchKey] = [];
+            seen[branchKey] = {};
+          });
+
+          pages.forEach(function (page) {
+            branchOrder.forEach(function (branchKey) {
+              var rooms = (page && page.branches && page.branches[branchKey]) ? page.branches[branchKey] : [];
+              rooms.forEach(function (room) {
+                var roomId = room && room.resourceId ? room.resourceId : '';
+                if (roomId && seen[branchKey][roomId]) {
+                  return;
+                }
+                if (roomId) {
+                  seen[branchKey][roomId] = true;
+                }
+                mergedBranches[branchKey].push(room);
+              });
+            });
+          });
+
+          return [{
+            pageId: 'compact-1',
+            title: 'Pagina 1',
+            branches: mergedBranches
+          }];
+        }
+
+        function hasBoardCanvasOverflow_() {
+          var canvas = document.getElementById('board-canvas');
+          if (!canvas) {
+            return false;
+          }
+          return canvas.scrollHeight > canvas.clientHeight + 1 || canvas.scrollWidth > canvas.clientWidth + 1;
+        }
+
+        function resolveVisiblePages_(model, options) {
+          var pages = getModelPages(model);
+          compactSinglePageApplied = false;
+          if (options && options.forceNormalPages) {
+            return pages;
+          }
+          if (!shouldUseFullscreenCompact(model) || pages.length < 2) {
+            return pages;
+          }
+
+          compactSinglePageApplied = true;
+          return buildCompactMergedPage_(model);
+        }
+
+        function activePage() {
+          if (!visiblePages.length) {
             return null;
           }
-          return model.pages[pageIndex % model.pages.length];
+          return visiblePages[pageIndex % visiblePages.length];
         }
 
         function applyFitScale() {
@@ -250,13 +328,17 @@
           canvas.style.transform = 'scale(' + scale + ')';
         }
 
-        function render(model) {
+        function render(model, options) {
+          options = options || {};
           state = model;
+          applyFullscreenCompactMode(model);
+          visiblePages = resolveVisiblePages_(model, options);
           document.getElementById('board-app-name').textContent = model.appName || 'ROOMS';
           document.getElementById('board-school-name').textContent = model.schoolName || '';
           document.getElementById('board-updated-at').textContent = 'Aggiornato: ' + (model.generatedAtISO || '');
-          var visiblePageIndex = ((model.pages && model.pages.length) ? (pageIndex % model.pages.length) : 0) + 1;
-          document.getElementById('board-page-indicator').textContent = 'Pagina ' + visiblePageIndex + '/' + Math.max(model.pages ? model.pages.length : 0, 1);
+          var safePageCount = Math.max(visiblePages.length, 1);
+          var visiblePageIndex = (visiblePages.length ? (pageIndex % visiblePages.length) : 0) + 1;
+          document.getElementById('board-page-indicator').textContent = 'Pagina ' + visiblePageIndex + '/' + safePageCount;
           if (adminButton) {
             adminButton.style.display = (model.user && model.user.isAdmin) ? 'inline-flex' : 'none';
           }
@@ -264,12 +346,12 @@
           var root = document.getElementById('board-root');
           ROOMS_UI.clearNode(root);
 
-          if (!model.pages || !model.pages.length) {
+          if (!visiblePages.length) {
             root.appendChild(ROOMS_UI.el('div', 'notice', 'Nessuna pagina configurata.'));
             return;
           }
 
-          var page = activePage(model);
+          var page = activePage();
           var treeShell = ROOMS_UI.el('div', 'board-tree');
           var leftColumn = ROOMS_UI.el('div', 'tree-left-column');
           var centerColumn = ROOMS_UI.el('div', 'tree-center-column');
@@ -306,6 +388,13 @@
           root.appendChild(fitShell);
 
           applyFitScale();
+          if (compactSinglePageApplied && !options.skipCompactFallbackCheck && hasBoardCanvasOverflow_()) {
+            render(model, {
+              forceNormalPages: true,
+              skipCompactFallbackCheck: true
+            });
+            return;
+          }
           window.requestAnimationFrame(applyFitScale);
         }
 
@@ -816,17 +905,17 @@
           if (isPanelOpen()) {
             return;
           }
-          if (!state.pages || state.pages.length < 2) {
+          if (!visiblePages.length || visiblePages.length < 2) {
             return;
           }
-          pageIndex = (pageIndex + 1) % state.pages.length;
+          pageIndex = (pageIndex + 1) % visiblePages.length;
           render(state);
         }
 
         function refresh() {
           ROOMS_UI.call('getBoardViewModel')
             .then(function (model) {
-              pageIndex = pageIndex % Math.max(model.pages.length, 1);
+              pageIndex = pageIndex % Math.max(getModelPages(model).length, 1);
               render(model);
               if (isPanelOpen() && panelState.resourceId) {
                 loadRoomPanelData(panelState.resourceId, {
@@ -956,7 +1045,10 @@
             });
         });
 
-        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener('fullscreenchange', function () {
+          updateFullscreenButton();
+          render(state);
+        });
         updateFullscreenButton();
         rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
         refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);

@@ -73,6 +73,7 @@ ROOMS_APP.Board = {
       refreshSec: ROOMS_APP.getNumberConfig('BOARD_REFRESH_SEC', 60),
       rotationSec: ROOMS_APP.getNumberConfig('BOARD_ROTATION_SEC', 15),
       pageCount: pages.length,
+      fullscreenCompactEnabled: ROOMS_APP.getBooleanConfig('BOARD_FULLSCREEN_COMPACT', true),
       palette: ROOMS_APP.PALETTE,
       appName: ROOMS_APP.getConfigValue('APP_NAME', 'ROOMS'),
       schoolName: ROOMS_APP.getConfigValue('SCHOOL_NAME', 'IIS Alessandrini'),

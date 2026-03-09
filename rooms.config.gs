@@ -35,6 +35,7 @@ ROOMS_APP.DEFAULT_CONFIG_ROWS = [
   { Key: 'BOARD_REFRESH_SEC', Value: '60', Notes: 'Refresh interval for the public board.' },
   { Key: 'BOARD_ROTATION_SEC', Value: '15', Notes: 'Page rotation interval for the public board.' },
   { Key: 'BOARD_PAGE_COUNT', Value: '2', Notes: 'Maximum visible board pages.' },
+  { Key: 'BOARD_FULLSCREEN_COMPACT', Value: 'TRUE', Notes: 'Enable denser compact layout only when board is in fullscreen.' },
   { Key: 'SHOW_BOOKER_NAME', Value: 'FALSE', Notes: 'Room detail visibility toggle.' }
 ];
 
