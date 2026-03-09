@@ -83,11 +83,10 @@ ROOMS_APP.Timetable = {
     ROOMS_APP.Schema.ensureAll();
     var currentById = this.readCurrentRowsById_();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
-    var resourceIndex = this.buildResourceIndex_();
     var rows = [];
 
-    rows = rows.concat(this.parseDocentiSheet_(currentById, nowIso, resourceIndex));
-    rows = rows.concat(this.parseLaboratoriSheet_(currentById, nowIso, resourceIndex));
+    rows = rows.concat(this.parseDocentiSheet_(currentById, nowIso));
+    rows = rows.concat(this.parseLaboratoriSheet_(currentById, nowIso));
 
     return this.replaceTimetableRows_(this.mergeUniqueRows_(rows));
   },
@@ -96,8 +95,7 @@ ROOMS_APP.Timetable = {
     ROOMS_APP.Schema.ensureAll();
     var currentById = this.readCurrentRowsById_();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
-    var resourceIndex = this.buildResourceIndex_();
-    var parsed = this.parseDocentiSheet_(currentById, nowIso, resourceIndex);
+    var parsed = this.parseDocentiSheet_(currentById, nowIso);
     var keepSpaces = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY).filter(function (row) {
       return ROOMS_APP.normalizeString(row.SourceType) === 'TIMETABLE_SPACE';
     });
@@ -108,15 +106,14 @@ ROOMS_APP.Timetable = {
     ROOMS_APP.Schema.ensureAll();
     var currentById = this.readCurrentRowsById_();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
-    var resourceIndex = this.buildResourceIndex_();
-    var parsed = this.parseLaboratoriSheet_(currentById, nowIso, resourceIndex);
+    var parsed = this.parseLaboratoriSheet_(currentById, nowIso);
     var keepClassrooms = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY).filter(function (row) {
       return ROOMS_APP.normalizeString(row.SourceType) === 'TIMETABLE_CLASSROOM';
     });
     return this.replaceTimetableRows_(this.mergeUniqueRows_(keepClassrooms.concat(parsed)));
   },
 
-  parseDocentiSheet_: function (currentById, nowIso, resourceIndex) {
+  parseDocentiSheet_: function (currentById, nowIso) {
     var sheetName = this.getConfiguredSourceSheetName_(
       this.CONFIG_DOCENTI_SHEET_KEY_,
       this.DEFAULT_DOCENTI_SHEET_
@@ -127,12 +124,11 @@ ROOMS_APP.Timetable = {
       'classroom',
       currentById,
       nowIso,
-      resourceIndex,
       this.CONFIG_DOCENTI_SHEET_KEY_
     );
   },
 
-  parseLaboratoriSheet_: function (currentById, nowIso, resourceIndex) {
+  parseLaboratoriSheet_: function (currentById, nowIso) {
     var sheetName = this.getConfiguredSourceSheetName_(
       this.CONFIG_LABORATORI_SHEET_KEY_,
       this.DEFAULT_LABORATORI_SHEET_
@@ -143,12 +139,11 @@ ROOMS_APP.Timetable = {
       'space',
       currentById,
       nowIso,
-      resourceIndex,
       this.CONFIG_LABORATORI_SHEET_KEY_
     );
   },
 
-  parseMatrixSheet_: function (sheetName, sourceType, sourceKind, currentById, nowIso, resourceIndex, configKey) {
+  parseMatrixSheet_: function (sheetName, sourceType, sourceKind, currentById, nowIso, configKey) {
     var sheet = ROOMS_APP.DB.getSheet(sheetName);
     if (!sheet) {
       var keyInfo = configKey ? (' (CONFIG key: ' + configKey + ')') : '';
@@ -174,7 +169,6 @@ ROOMS_APP.Timetable = {
       }
 
       var teacherName = sourceKind === 'classroom' ? rowLabel : '';
-      var rowResource = this.resolveResource_(rowLabel, resourceIndex);
       var colIndex;
       for (colIndex = 0; colIndex < columnMeta.usableColumns.length; colIndex += 1) {
         var column = columnMeta.usableColumns[colIndex];
@@ -187,12 +181,11 @@ ROOMS_APP.Timetable = {
         var resourceId;
         var resourceLabel;
         if (sourceKind === 'classroom') {
-          var classResource = this.resolveResource_(classCode, resourceIndex);
-          resourceId = classResource.resourceId || classCode;
+          resourceId = classCode;
           resourceLabel = classCode;
         } else {
-          resourceId = rowResource.resourceId;
-          resourceLabel = rowResource.resourceLabel || rowLabel;
+          resourceId = rowLabel;
+          resourceLabel = rowLabel;
         }
         if (!resourceId) {
           continue;
@@ -307,22 +300,22 @@ ROOMS_APP.Timetable = {
     ROOMS_APP.Schema.ensureAll();
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var targetWeekday = ROOMS_APP.getWeekdayName(targetDate);
-    var targetResource = ROOMS_APP.normalizeString(resourceId).toUpperCase();
+    var targetResource = ROOMS_APP.normalizeString(resourceId);
+    var hasResourceFilter = Boolean(targetResource);
 
     return this.listActiveRows_()
       .filter(function (row) {
         var rowWeekday = ROOMS_APP.Timetable.normalizeWeekday_(row.Weekday);
-        var rowResource = ROOMS_APP.normalizeString(row.ResourceId).toUpperCase();
         if (rowWeekday !== targetWeekday) {
           return false;
         }
-        if (targetResource && rowResource !== targetResource) {
+        if (hasResourceFilter && !ROOMS_APP.Timetable.matchesResourceId_(row.ResourceId, targetResource)) {
           return false;
         }
         return Boolean(row.StartTime && row.EndTime);
       })
       .map(function (row) {
-        return ROOMS_APP.Timetable.buildOccurrenceView_(row, targetDate);
+        return ROOMS_APP.Timetable.buildOccurrenceView_(row, targetDate, hasResourceFilter ? targetResource : '');
       });
   },
 
@@ -383,7 +376,7 @@ ROOMS_APP.Timetable = {
       });
   },
 
-  buildOccurrenceView_: function (row, dateString) {
+  buildOccurrenceView_: function (row, dateString, normalizedResourceId) {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var startTime = ROOMS_APP.toTimeString(row.StartTime);
     var endTime = ROOMS_APP.toTimeString(row.EndTime);
@@ -397,7 +390,7 @@ ROOMS_APP.Timetable = {
       BookingId: bookingId,
       SeriesId: 'TT_' + ROOMS_APP.normalizeString(row.OccupancyId),
       OccupancyId: ROOMS_APP.normalizeString(row.OccupancyId),
-      ResourceId: ROOMS_APP.normalizeString(row.ResourceId),
+      ResourceId: ROOMS_APP.normalizeString(normalizedResourceId || row.ResourceId),
       BookingDate: targetDate,
       StartTime: startTime,
       EndTime: endTime,
@@ -500,54 +493,16 @@ ROOMS_APP.Timetable = {
     return max;
   },
 
-  buildResourceIndex_: function () {
-    var byId = {};
-    var byDisplay = {};
-    var resources = ROOMS_APP.Board.listResources_();
-
-    resources.forEach(function (resource) {
-      var id = ROOMS_APP.normalizeString(resource.ResourceId).toUpperCase();
-      var display = ROOMS_APP.normalizeString(resource.DisplayName).toUpperCase();
-      if (id) {
-        byId[id] = resource;
-      }
-      if (display) {
-        byDisplay[display] = resource;
-      }
-      var displaySlug = ROOMS_APP.slugify(resource.DisplayName);
-      if (displaySlug) {
-        byId[displaySlug] = resource;
-      }
-    });
-
-    return {
-      byId: byId,
-      byDisplay: byDisplay
-    };
-  },
-
-  resolveResource_: function (rawValue, resourceIndex) {
-    var label = ROOMS_APP.normalizeString(rawValue);
-    if (!label) {
-      return { resourceId: '', resourceLabel: '' };
+  matchesResourceId_: function (rowResourceId, expectedResourceId) {
+    var left = ROOMS_APP.normalizeString(rowResourceId);
+    var right = ROOMS_APP.normalizeString(expectedResourceId);
+    if (!left || !right) {
+      return false;
     }
-
-    var upper = label.toUpperCase();
-    var slug = ROOMS_APP.slugify(label);
-    var index = resourceIndex || this.buildResourceIndex_();
-    var match = index.byId[upper] || index.byId[slug] || index.byDisplay[upper] || null;
-
-    if (match) {
-      return {
-        resourceId: ROOMS_APP.normalizeString(match.ResourceId),
-        resourceLabel: ROOMS_APP.normalizeString(match.DisplayName || label)
-      };
+    if (left.toUpperCase() === right.toUpperCase()) {
+      return true;
     }
-
-    return {
-      resourceId: slug || upper,
-      resourceLabel: label
-    };
+    return ROOMS_APP.slugify(left) === ROOMS_APP.slugify(right);
   },
 
   mergeUniqueRows_: function (rows) {

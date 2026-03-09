@@ -25,7 +25,11 @@ ROOMS_APP.Board = {
     var bookings = ROOMS_APP.Booking.listBookingsForDate(today).map(function (booking) {
       return ROOMS_APP.Board.enrichUserBookingForBoard_(booking);
     });
-    var timetableOccupancies = ROOMS_APP.Timetable.listOccupanciesForDate('', today);
+    var timetableOccupancies = [];
+    resources.forEach(function (resource) {
+      timetableOccupancies = timetableOccupancies.concat(ROOMS_APP.Timetable.listOccupanciesForDate(resource.ResourceId, today));
+    });
+    timetableOccupancies = this.uniqueByKey_(timetableOccupancies, 'BookingId');
     var occupancies = ROOMS_APP.sortBy(
       bookings.concat(timetableOccupancies),
       ['ResourceId', 'StartTime', 'EndTime', 'SourceKind', 'BookingId']
@@ -169,6 +173,21 @@ ROOMS_APP.Board = {
       return ROOMS_APP.Timetable.getDisplayLabel(occupancy);
     }
     return this.getBookingSurname_(occupancy);
+  },
+
+  uniqueByKey_: function (rows, keyField) {
+    var seen = {};
+    return (rows || []).filter(function (row) {
+      var key = ROOMS_APP.normalizeString(row && row[keyField]);
+      if (!key) {
+        return false;
+      }
+      if (seen[key]) {
+        return false;
+      }
+      seen[key] = true;
+      return true;
+    });
   },
 
   mapResourceBranchKey_: function (resource) {
