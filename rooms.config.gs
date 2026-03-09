@@ -13,6 +13,7 @@ ROOMS_APP.SHEET_NAMES = {
   TIMETABLE_OCCUPANCY: 'ROOMS_TIMETABLE_OCCUPANCY',
   TIMETABLE_DOCENTI_RAW: 'TIMETABLE_DOCENTI_RAW',
   TIMETABLE_SPACES_RAW: 'TIMETABLE_SPACES_RAW',
+  AULA_MAGNA_EVENTS: 'ROOMS_AULA_MAGNA_EVENTS',
   HOLIDAYS: 'ROOMS_HOLIDAYS',
   CLOSURES: 'ROOMS_CLOSURES',
   WEEK_SCHEDULE: 'ROOMS_WEEK_SCHEDULE',
@@ -41,6 +42,7 @@ ROOMS_APP.DEFAULT_CONFIG_ROWS = [
   { Key: 'BOARD_FULLSCREEN_COMPACT', Value: 'TRUE', Notes: 'Enable denser compact layout only when board is in fullscreen.' },
   { Key: 'TIMETABLE_DOCENTI_SHEET', Value: 'ORARIO_DOCENTI', Notes: 'Source sheet name for teacher timetable matrix import.' },
   { Key: 'TIMETABLE_LABORATORI_SHEET', Value: 'ORARIO_LABORATORI', Notes: 'Source sheet name for labs/spaces timetable matrix import.' },
+  { Key: 'AULA_MAGNA_EVENT_DAYS_AHEAD', Value: '14', Notes: 'Future days horizon for Aula Magna upcoming events.' },
   { Key: 'SHOW_BOOKER_NAME', Value: 'FALSE', Notes: 'Room detail visibility toggle.' }
 ];
 

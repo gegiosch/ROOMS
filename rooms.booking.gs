@@ -2,6 +2,7 @@ var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Booking = {
   SLOT_TAKEN_MESSAGE_: 'Lo slot non è più disponibile. Aggiorna la disponibilità dell’aula.',
+  AULA_MAGNA_RESOURCE_ID_: 'AULA_MAGNA',
 
   listBookingsForDay: function (resourceId, dateString) {
     ROOMS_APP.Schema.ensureAll();
@@ -361,6 +362,8 @@ ROOMS_APP.Booking = {
       userUpcomingBookings: [],
       timetableUpcomingBookings: [],
       ownBookings: [],
+      upcomingEvents: [],
+      isAulaMagna: false,
       freeSlots: [],
       slots: [],
       isOpen: false,
@@ -417,6 +420,8 @@ ROOMS_APP.Booking = {
         slots: [],
         isOpen: false
       };
+      var upcomingEvents = resource ? this.listUpcomingEventsForResource_(resource, date) : [];
+      var isAulaMagna = this.isAulaMagnaResource_(resource);
       var now = new Date();
       var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
       var current = bookings.filter(function (booking) {
@@ -439,6 +444,8 @@ ROOMS_APP.Booking = {
         userUpcomingBookings: userUpcomingBookings,
         timetableUpcomingBookings: timetableUpcomingBookings,
         ownBookings: ownBookings,
+        upcomingEvents: upcomingEvents,
+        isAulaMagna: isAulaMagna,
         freeSlots: timeline.freeSlots || [],
         slots: timeline.slots || [],
         isOpen: timeline.isOpen,
@@ -471,6 +478,63 @@ ROOMS_APP.Booking = {
     })[0] || null;
   },
 
+  isAulaMagnaResource_: function (resource) {
+    if (!resource) {
+      return false;
+    }
+
+    var byId = ROOMS_APP.normalizeString(resource.ResourceId).toUpperCase();
+    if (byId === this.AULA_MAGNA_RESOURCE_ID_) {
+      return true;
+    }
+
+    return ROOMS_APP.slugify(resource.DisplayName || '') === this.AULA_MAGNA_RESOURCE_ID_;
+  },
+
+  listUpcomingEventsForResource_: function (resource, fromDate) {
+    if (!this.isAulaMagnaResource_(resource)) {
+      return [];
+    }
+
+    var fromIsoDate = ROOMS_APP.toIsoDate(fromDate || new Date());
+    var horizonDays = Math.max(0, ROOMS_APP.getNumberConfig('AULA_MAGNA_EVENT_DAYS_AHEAD', 14));
+    var endIsoDate = this.addDaysToIsoDate_(fromIsoDate, horizonDays);
+    var expectedResourceId = ROOMS_APP.normalizeString(resource.ResourceId);
+
+    return ROOMS_APP.sortBy(
+      ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS).filter(function (row) {
+        var eventResourceId = ROOMS_APP.normalizeString(row.ResourceId);
+        var eventDate = ROOMS_APP.toIsoDate(row.EventDate);
+        var isActive = ROOMS_APP.normalizeString(row.IsActive) === '' ? true : ROOMS_APP.asBoolean(row.IsActive);
+        if (!isActive) {
+          return false;
+        }
+        if (!eventDate || eventDate < fromIsoDate || eventDate > endIsoDate) {
+          return false;
+        }
+        return ROOMS_APP.Timetable.matchesResourceId_(eventResourceId, expectedResourceId);
+      }).map(function (row) {
+        return {
+          EventId: ROOMS_APP.normalizeString(row.EventId),
+          ResourceId: ROOMS_APP.normalizeString(row.ResourceId),
+          EventDate: ROOMS_APP.toIsoDate(row.EventDate),
+          StartTime: ROOMS_APP.toTimeString(row.StartTime),
+          EndTime: ROOMS_APP.toTimeString(row.EndTime),
+          EventName: ROOMS_APP.normalizeString(row.EventName),
+          IsActive: ROOMS_APP.normalizeString(row.IsActive) === '' ? 'TRUE' : String(row.IsActive),
+          Notes: ROOMS_APP.normalizeString(row.Notes)
+        };
+      }),
+      ['EventDate', 'StartTime', 'EndTime', 'EventName']
+    );
+  },
+
+  addDaysToIsoDate_: function (isoDate, daysToAdd) {
+    var base = ROOMS_APP.combineDateTime(isoDate, '00:00');
+    base.setDate(base.getDate() + Number(daysToAdd || 0));
+    return ROOMS_APP.toIsoDate(base);
+  },
+
   getRoomConfig_: function () {
     return {
       bookingEnabled: ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true),
@@ -478,7 +542,8 @@ ROOMS_APP.Booking = {
       showBookerName: ROOMS_APP.getBooleanConfig('SHOW_BOOKER_NAME', false),
       slotMinutes: ROOMS_APP.getNumberConfig('SLOT_MINUTES', 30),
       openTime: ROOMS_APP.getConfigValue('OPEN_TIME', '08:00'),
-      closeTime: ROOMS_APP.getConfigValue('CLOSE_TIME', '18:00')
+      closeTime: ROOMS_APP.getConfigValue('CLOSE_TIME', '18:00'),
+      eventDaysAhead: ROOMS_APP.getNumberConfig('AULA_MAGNA_EVENT_DAYS_AHEAD', 14)
     };
   },
 

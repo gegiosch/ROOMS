@@ -1,10 +1,11 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Board = {
-  BRANCH_ORDER_: ['PA2', 'PA1', '2P_DX', '2P_SX', '1P_DX', '1P_SX', 'PT', 'LAB'],
+  BRANCH_ORDER_: ['PA2', 'PA1', 'PA1_AULA', '2P_DX', '2P_SX', '1P_DX', '1P_SX', 'PT', 'LAB'],
   BRANCH_LABELS_: {
     PA2: 'PA2',
     PA1: 'PA1',
+    PA1_AULA: 'AULA MAGNA',
     '2P_DX': 'DX',
     '2P_SX': 'SX',
     '1P_DX': 'DX',
@@ -197,6 +198,11 @@ ROOMS_APP.Board = {
     var areaLabel = this.normalizeKey_(resource.AreaLabel);
     var floorLabel = this.normalizeKey_(resource.FloorLabel);
     var sideLabel = this.normalizeKey_(resource.SideLabel);
+    var resourceId = this.normalizeKey_(resource.ResourceId);
+
+    if (resourceId === 'AULA_MAGNA') {
+      return 'PA1_AULA';
+    }
 
     if (areaCode === 'LAB' || areaLabel.indexOf('LABORATORI') >= 0 || sideLabel.indexOf('LABORATORI') >= 0) {
       return 'LAB';

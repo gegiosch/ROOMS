@@ -106,7 +106,8 @@ function getAdminBootstrap() {
     ROOMS_APP.SHEET_NAMES.WEEK_SCHEDULE,
     ROOMS_APP.SHEET_NAMES.HOLIDAYS,
     ROOMS_APP.SHEET_NAMES.CLOSURES,
-    ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS
+    ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS,
+    ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS
   ];
   var tables = {};
 
@@ -138,6 +139,7 @@ function adminReplaceTable(tableName, rows) {
   allowed[ROOMS_APP.SHEET_NAMES.HOLIDAYS] = true;
   allowed[ROOMS_APP.SHEET_NAMES.CLOSURES] = true;
   allowed[ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS] = true;
+  allowed[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
 
   if (!allowed[tableName]) {
     throw new Error('Table is not editable: ' + tableName);

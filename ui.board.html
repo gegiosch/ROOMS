@@ -86,6 +86,11 @@
           <div id="panel-upcoming-table"></div>
         </section>
 
+        <section id="panel-events-section" class="panel table-card room-panel-section" style="display:none;">
+          <h3>Eventi prossimi (Aula Magna)</h3>
+          <div id="panel-events-table"></div>
+        </section>
+
         <section class="panel table-card room-panel-section">
           <h3>Le mie prenotazioni</h3>
           <div id="panel-own-table"></div>
@@ -387,6 +392,7 @@
 
           leftColumn.appendChild(createBranchPanel(model, page, 'PA2', 'left', getBranchLabel(model, 'PA2')));
           leftColumn.appendChild(createBranchPanel(model, page, 'PA1', 'left', getBranchLabel(model, 'PA1')));
+          leftColumn.appendChild(createBranchPanel(model, page, 'PA1_AULA', 'left', getBranchLabel(model, 'PA1_AULA')));
 
           centerColumn.appendChild(ROOMS_UI.el('div', 'tree-spine'));
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-2p', '2P'));
@@ -980,6 +986,71 @@
           return booking.BookerSurname || '';
         }
 
+        function formatIsoDateIt_(isoDate) {
+          if (!isoDate) {
+            return '';
+          }
+          var date = new Date(String(isoDate) + 'T12:00:00');
+          if (isNaN(date.getTime())) {
+            return String(isoDate);
+          }
+          return date.toLocaleDateString('it-IT', {
+            weekday: 'short',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          });
+        }
+
+        function formatEventTimeRange_(eventItem) {
+          var start = eventItem && eventItem.StartTime ? eventItem.StartTime : '';
+          var end = eventItem && eventItem.EndTime ? eventItem.EndTime : '';
+          if (!start && !end) {
+            return '-';
+          }
+          if (!start) {
+            return 'fino alle ' + end;
+          }
+          if (!end) {
+            return 'dalle ' + start;
+          }
+          return start + ' - ' + end;
+        }
+
+        function renderAulaMagnaEventsSection_(effectiveModel, roomFound) {
+          var sectionNode = document.getElementById('panel-events-section');
+          if (!sectionNode) {
+            return;
+          }
+
+          var isAulaMagna = Boolean(effectiveModel && effectiveModel.isAulaMagna);
+          if (!roomFound || !isAulaMagna) {
+            sectionNode.style.display = 'none';
+            ROOMS_UI.clearNode(document.getElementById('panel-events-table'));
+            return;
+          }
+
+          sectionNode.style.display = 'block';
+          var eventDaysAhead = Number(effectiveModel && effectiveModel.config && effectiveModel.config.eventDaysAhead || 14);
+          if (!isFinite(eventDaysAhead) || eventDaysAhead < 0) {
+            eventDaysAhead = 14;
+          }
+          var events = safeArray(effectiveModel && effectiveModel.upcomingEvents);
+          renderTable(
+            'panel-events-table',
+            ['Data', 'Orario', 'Evento', 'Note'],
+            events.map(function (eventItem) {
+              return [
+                formatIsoDateIt_(eventItem.EventDate),
+                formatEventTimeRange_(eventItem),
+                eventItem.EventName || '-',
+                eventItem.Notes || ''
+              ];
+            }),
+            'Nessun evento in programma nei prossimi ' + eventDaysAhead + ' giorni.'
+          );
+        }
+
         function bookingActionsNode(booking) {
           var wrap = ROOMS_UI.el('div', 'chip-row');
           if (!booking || booking.SourceKind === 'TIMETABLE') {
@@ -1104,6 +1175,7 @@
               bookingActionsNode(booking)
             ];
           }), 'Nessuna prenotazione futura.');
+          renderAulaMagnaEventsSection_(effectiveModel, roomFound);
 
           renderTable('panel-own-table', ['Data', 'Orario', 'Titolo', 'Stato', 'Azioni'], own.map(function (booking) {
             var ownStatus = booking.Status || '';

@@ -16,6 +16,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY] = true;
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_RAW] = true;
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_SPACES_RAW] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
     return sheets;
   }()),
 
@@ -28,6 +29,7 @@ ROOMS_APP.Schema = {
     this.ensureTimetableOccupancy();
     this.ensureTimetableDocentiRaw();
     this.ensureTimetableSpacesRaw();
+    this.ensureAulaMagnaEvents();
     this.ensureWeekSchedule();
     this.ensureHolidays();
     this.ensureClosures();
@@ -163,6 +165,22 @@ ROOMS_APP.Schema = {
       'UpdatedAtISO'
     ];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_SPACES_RAW, headers);
+  },
+
+  ensureAulaMagnaEvents: function () {
+    var headers = [
+      'EventId',
+      'ResourceId',
+      'EventDate',
+      'StartTime',
+      'EndTime',
+      'EventName',
+      'IsActive',
+      'Notes',
+      'CreatedAtISO',
+      'UpdatedAtISO'
+    ];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS, headers);
   },
 
   ensurePolicyOverrides: function () {
@@ -410,25 +428,22 @@ ROOMS_APP.Schema = {
       '5AM'
     ]);
     addGroup('F2L', 'Piano Secondo Lato Sinistro', 'F2', 'Piano Secondo', 'LEFT', 'Lato Sinistro', 1, 4, [
-      '1CL',
-      '2CL',
+      '1CLS',
+      '2CLS',
       '3AL',
       '3BL',
       '4AL',
-      '4BL'
+      '4BLS'
     ]);
     addGroup('F2R', 'Piano Secondo Lato Destro', 'F2', 'Piano Secondo', 'RIGHT', 'Lato Destro', 1, 5, [
-      '3CL',
-      '4CL',
-      '4DL',
+      '3CLS',
+      '4CLS',
+      '4DLS',
       '5AL',
-      '5BL',
-      '5CL'
+      '5BLS',
+      '5CLS'
     ]);
     addGroup('LAB', 'Corridoio Laboratori', 'F1', 'Piano Primo', 'LABS', 'Laboratori', 2, 2, [
-      '1AC',
-      '3AE',
-      'CIC',
       'AULA POLIFUNZIONALE',
       'LAB DISEGNO',
       'LAB Informatica 1',
@@ -444,6 +459,12 @@ ROOMS_APP.Schema = {
       'LAB Mis. Elettriche'
     ]);
     addGroup('F0', 'Piano Terra', 'F0', 'Piano Terra', 'CENTER', 'Centrale', 2, 3, [
+      '1AC',
+      '3AE',
+      'CIC',
+      'BIBLIOTECA'
+    ]);
+    addGroup('PA1A', 'Piano Primo - Area Magna', 'F1', 'Piano Primo', 'AULA_MAGNA', 'Aula Magna', 1, 7, [
       'AULA MAGNA'
     ]);
 
@@ -481,6 +502,10 @@ function ensureClosures() {
 
 function ensureSpecialOpenings() {
   ROOMS_APP.Schema.ensureSpecialOpenings();
+}
+
+function ensureAulaMagnaEvents() {
+  ROOMS_APP.Schema.ensureAulaMagnaEvents();
 }
 
 function ensurePolicyOverrides() {
