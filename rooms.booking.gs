@@ -5,7 +5,6 @@ ROOMS_APP.Booking = {
   AULA_MAGNA_RESOURCE_ID_: 'AULA_MAGNA',
 
   listBookingsForDay: function (resourceId, dateString) {
-    ROOMS_APP.Schema.ensureAll();
     var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
       return row.ResourceId === resourceId &&
         row.BookingDate === dateString &&
@@ -16,7 +15,6 @@ ROOMS_APP.Booking = {
   },
 
   listBookingsForDate: function (dateString) {
-    ROOMS_APP.Schema.ensureAll();
     return ROOMS_APP.sortBy(
       ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
         return row.BookingDate === dateString && row.Status !== 'CANCELLED';
@@ -27,7 +25,6 @@ ROOMS_APP.Booking = {
 
   listUpcomingBookingsForRoom: function (resourceId, fromDate) {
     var startDate = fromDate || ROOMS_APP.toIsoDate(new Date());
-    ROOMS_APP.Schema.ensureAll();
     return ROOMS_APP.sortBy(
       ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
         return row.ResourceId === resourceId &&

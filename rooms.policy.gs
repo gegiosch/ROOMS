@@ -2,7 +2,6 @@ var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Policy = {
   getResource: function (resourceId) {
-    ROOMS_APP.Schema.ensureAll();
     var resources = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.RESOURCES);
     return resources.filter(function (row) {
       return row.ResourceId === resourceId;

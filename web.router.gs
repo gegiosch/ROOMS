@@ -5,8 +5,6 @@ function doGet(e) {
   var page = params.page || 'board';
 
   try {
-    ROOMS_APP.Schema.ensureAll();
-
     if (page === 'api') {
       return jsonResponse_(routeApiRequest_(params));
     }
@@ -32,9 +30,20 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  ROOMS_APP.Schema.ensureAll();
   var body = ROOMS_APP.parseJson((e && e.postData && e.postData.contents) || '{}', {});
   return jsonResponse_(routeApiRequest_(body));
+}
+
+function runSetup() {
+  var actor = ROOMS_APP.Auth.requireAdmin();
+  ROOMS_APP.Schema.ensureAll();
+  ROOMS_APP.invalidateConfigCache();
+  return {
+    ok: true,
+    message: 'Setup completato.',
+    actorEmail: actor.email,
+    executedAtISO: ROOMS_APP.toIsoDateTime(new Date())
+  };
 }
 
 function getBoardViewModel() {
@@ -145,7 +154,6 @@ function adminReplaceTable(tableName, rows) {
     throw new Error('Table is not editable: ' + tableName);
   }
 
-  ROOMS_APP.Schema.ensureAll();
   ROOMS_APP.DB.replaceRows(tableName, ROOMS_APP.DB.getHeaders(tableName), rows || []);
   if (tableName === ROOMS_APP.SHEET_NAMES.CONFIG) {
     ROOMS_APP.invalidateConfigCache();
@@ -223,6 +231,9 @@ function routeApiRequest_(payload) {
   if (action === 'rebuildTimetableOccupancyFromSheets') {
     ROOMS_APP.Auth.requireAdmin();
     return ROOMS_APP.Timetable.rebuildTimetableOccupancyFromSheets();
+  }
+  if (action === 'runSetup') {
+    return runSetup();
   }
 
   return {

@@ -389,7 +389,6 @@ ROOMS_APP.Timetable = {
   },
 
   listOccupanciesForDate: function (resourceId, dateString) {
-    ROOMS_APP.Schema.ensureAll();
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var targetWeekday = ROOMS_APP.getWeekdayName(targetDate);
     var targetResource = ROOMS_APP.normalizeString(resourceId);
@@ -412,7 +411,6 @@ ROOMS_APP.Timetable = {
   },
 
   listUpcomingOccupanciesForRoom: function (resourceId, fromDate, maxDaysAhead) {
-    ROOMS_APP.Schema.ensureAll();
     var startDate = ROOMS_APP.toIsoDate(fromDate || new Date());
     var daysAhead = Math.max(0, Number(maxDaysAhead || ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)));
     var upcoming = [];

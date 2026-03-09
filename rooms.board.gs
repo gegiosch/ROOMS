@@ -16,7 +16,6 @@ ROOMS_APP.Board = {
   BRANCH_PAGE_CAPACITY_: 12,
 
   getBoardViewModel: function () {
-    ROOMS_APP.Schema.ensureAll();
     var user = ROOMS_APP.Auth.getUserContext();
     var now = new Date();
     var nowIso = ROOMS_APP.toIsoDateTime(now);

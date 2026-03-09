@@ -78,7 +78,6 @@ ROOMS_APP.getConfigMap = function (forceRefresh) {
     return ROOMS_APP.CONFIG_CACHE;
   }
 
-  ROOMS_APP.Schema.ensureAll();
   var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.CONFIG);
   var config = {};
 
