@@ -1,8 +1,10 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Timetable = {
-  SOURCE_DOCENTI_SHEET_: 'ORARIO DOCENTI',
-  SOURCE_LABORATORI_SHEET_: 'ORARIO LABORATORI',
+  CONFIG_DOCENTI_SHEET_KEY_: 'TIMETABLE_DOCENTI_SHEET',
+  CONFIG_LABORATORI_SHEET_KEY_: 'TIMETABLE_LABORATORI_SHEET',
+  DEFAULT_DOCENTI_SHEET_: 'ORARIO_DOCENTI',
+  DEFAULT_LABORATORI_SHEET_: 'ORARIO_LABORATORI',
   HEADER_SCAN_ROWS_: 12,
 
   PERIOD_TIME_MAP_: {
@@ -115,31 +117,42 @@ ROOMS_APP.Timetable = {
   },
 
   parseDocentiSheet_: function (currentById, nowIso, resourceIndex) {
+    var sheetName = this.getConfiguredSourceSheetName_(
+      this.CONFIG_DOCENTI_SHEET_KEY_,
+      this.DEFAULT_DOCENTI_SHEET_
+    );
     return this.parseMatrixSheet_(
-      this.SOURCE_DOCENTI_SHEET_,
+      sheetName,
       'TIMETABLE_CLASSROOM',
       'classroom',
       currentById,
       nowIso,
-      resourceIndex
+      resourceIndex,
+      this.CONFIG_DOCENTI_SHEET_KEY_
     );
   },
 
   parseLaboratoriSheet_: function (currentById, nowIso, resourceIndex) {
+    var sheetName = this.getConfiguredSourceSheetName_(
+      this.CONFIG_LABORATORI_SHEET_KEY_,
+      this.DEFAULT_LABORATORI_SHEET_
+    );
     return this.parseMatrixSheet_(
-      this.SOURCE_LABORATORI_SHEET_,
+      sheetName,
       'TIMETABLE_SPACE',
       'space',
       currentById,
       nowIso,
-      resourceIndex
+      resourceIndex,
+      this.CONFIG_LABORATORI_SHEET_KEY_
     );
   },
 
-  parseMatrixSheet_: function (sheetName, sourceType, sourceKind, currentById, nowIso, resourceIndex) {
+  parseMatrixSheet_: function (sheetName, sourceType, sourceKind, currentById, nowIso, resourceIndex, configKey) {
     var sheet = ROOMS_APP.DB.getSheet(sheetName);
     if (!sheet) {
-      return [];
+      var keyInfo = configKey ? (' (CONFIG key: ' + configKey + ')') : '';
+      throw new Error('Foglio sorgente orario non trovato: "' + sheetName + '"' + keyInfo + '.');
     }
 
     var values = this.readSheetDisplayValues_(sheet);
@@ -607,5 +620,10 @@ ROOMS_APP.Timetable = {
 
   getWeekdayOrder_: function (weekday) {
     return this.WEEKDAY_ORDER_[ROOMS_APP.normalizeString(weekday)] || 99;
+  },
+
+  getConfiguredSourceSheetName_: function (configKey, fallbackName) {
+    var configured = ROOMS_APP.normalizeString(ROOMS_APP.getConfigValue(configKey, fallbackName));
+    return configured || fallbackName;
   }
 };

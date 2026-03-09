@@ -39,6 +39,8 @@ ROOMS_APP.DEFAULT_CONFIG_ROWS = [
   { Key: 'BOARD_ROTATION_SEC', Value: '15', Notes: 'Page rotation interval for the public board.' },
   { Key: 'BOARD_PAGE_COUNT', Value: '2', Notes: 'Maximum visible board pages.' },
   { Key: 'BOARD_FULLSCREEN_COMPACT', Value: 'TRUE', Notes: 'Enable denser compact layout only when board is in fullscreen.' },
+  { Key: 'TIMETABLE_DOCENTI_SHEET', Value: 'ORARIO_DOCENTI', Notes: 'Source sheet name for teacher timetable matrix import.' },
+  { Key: 'TIMETABLE_LABORATORI_SHEET', Value: 'ORARIO_LABORATORI', Notes: 'Source sheet name for labs/spaces timetable matrix import.' },
   { Key: 'SHOW_BOOKER_NAME', Value: 'FALSE', Notes: 'Room detail visibility toggle.' }
 ];
 
