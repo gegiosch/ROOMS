@@ -389,41 +389,49 @@ ROOMS_APP.Timetable = {
   },
 
   listOccupanciesForDate: function (resourceId, dateString) {
+    var startedAt = Date.now();
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
-    var targetWeekday = ROOMS_APP.getWeekdayName(targetDate);
     var targetResource = ROOMS_APP.normalizeString(resourceId);
-    var hasResourceFilter = Boolean(targetResource);
-
-    return this.listActiveRows_()
-      .filter(function (row) {
-        var rowWeekday = ROOMS_APP.Timetable.normalizeWeekday_(row.Weekday);
-        if (rowWeekday !== targetWeekday) {
-          return false;
-        }
-        if (hasResourceFilter && !ROOMS_APP.Timetable.matchesResourceId_(row.ResourceId, targetResource)) {
-          return false;
-        }
-        return Boolean(row.StartTime && row.EndTime);
-      })
-      .map(function (row) {
-        return ROOMS_APP.Timetable.buildOccurrenceView_(row, targetDate, hasResourceFilter ? targetResource : '');
-      });
+    var activeRows = this.listActiveRows_();
+    var results = this.buildOccurrencesForDateFromRows_(activeRows, targetDate, targetResource);
+    Logger.log(
+      '[PERF] Timetable.listOccupanciesForDate total=%sms rows=%s resourceFilter=%s results=%s',
+      Date.now() - startedAt,
+      activeRows.length,
+      targetResource ? 'TRUE' : 'FALSE',
+      results.length
+    );
+    return results;
   },
 
   listUpcomingOccupanciesForRoom: function (resourceId, fromDate, maxDaysAhead) {
+    var startedAt = Date.now();
     var startDate = ROOMS_APP.toIsoDate(fromDate || new Date());
     var daysAhead = Math.max(0, Number(maxDaysAhead || ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)));
+    var targetResource = ROOMS_APP.normalizeString(resourceId);
+    var activeRows = this.listActiveRows_();
+    var byWeekday = this.indexRowsByWeekday_(activeRows);
     var upcoming = [];
+    var baseDate = ROOMS_APP.combineDateTime(startDate, '00:00');
     var offset;
 
     for (offset = 0; offset <= daysAhead; offset += 1) {
-      var cursor = ROOMS_APP.combineDateTime(startDate, '00:00');
+      var cursor = new Date(baseDate.getTime());
       cursor.setDate(cursor.getDate() + offset);
       var targetDate = ROOMS_APP.toIsoDate(cursor);
-      upcoming = upcoming.concat(this.listOccupanciesForDate(resourceId, targetDate));
+      var weekday = ROOMS_APP.getWeekdayName(targetDate);
+      var weekdayRows = byWeekday[weekday] || [];
+      upcoming = upcoming.concat(this.buildOccurrencesForDateFromRows_(weekdayRows, targetDate, targetResource));
     }
-
-    return ROOMS_APP.sortBy(upcoming, ['BookingDate', 'StartTime', 'EndTime', 'BookingId']);
+    upcoming = ROOMS_APP.sortBy(upcoming, ['BookingDate', 'StartTime', 'EndTime', 'BookingId']);
+    Logger.log(
+      '[PERF] Timetable.listUpcomingOccupanciesForRoom total=%sms rows=%s days=%s results=%s',
+      Date.now() - startedAt,
+      activeRows.length,
+      daysAhead + 1,
+      upcoming.length
+    );
+    return upcoming;
   },
 
   getDisplayLabel: function (occupancy) {
@@ -464,6 +472,40 @@ ROOMS_APP.Timetable = {
       .filter(function (row) {
         return ROOMS_APP.asBoolean(row.IsActive);
       });
+  },
+
+  buildOccurrencesForDateFromRows_: function (rows, targetDate, targetResource) {
+    var weekday = ROOMS_APP.getWeekdayName(targetDate);
+    var normalizedTargetResource = ROOMS_APP.normalizeString(targetResource);
+    var hasResourceFilter = Boolean(normalizedTargetResource);
+
+    return (rows || [])
+      .filter(function (row) {
+        var rowWeekday = ROOMS_APP.Timetable.normalizeWeekday_(row.Weekday);
+        if (rowWeekday !== weekday) {
+          return false;
+        }
+        if (hasResourceFilter && !ROOMS_APP.Timetable.matchesResourceId_(row.ResourceId, normalizedTargetResource)) {
+          return false;
+        }
+        return Boolean(row.StartTime && row.EndTime);
+      })
+      .map(function (row) {
+        return ROOMS_APP.Timetable.buildOccurrenceView_(row, targetDate, hasResourceFilter ? normalizedTargetResource : '');
+      });
+  },
+
+  indexRowsByWeekday_: function (rows) {
+    var byWeekday = {};
+    (rows || []).forEach(function (row) {
+      var weekday = ROOMS_APP.Timetable.normalizeWeekday_(row.Weekday);
+      if (!weekday) {
+        return;
+      }
+      byWeekday[weekday] = byWeekday[weekday] || [];
+      byWeekday[weekday].push(row);
+    });
+    return byWeekday;
   },
 
   buildOccurrenceView_: function (row, dateString, normalizedResourceId) {

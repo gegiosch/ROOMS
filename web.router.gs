@@ -1,37 +1,78 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 function doGet(e) {
+  var startedAt = Date.now();
   var params = (e && e.parameter) || {};
   var page = params.page || 'board';
 
   try {
+    var response;
     if (page === 'api') {
-      return jsonResponse_(routeApiRequest_(params));
+      response = jsonResponse_(routeApiRequest_(params));
+      logTiming_('doGet', startedAt, {
+        page: page,
+        mode: 'api'
+      });
+      return response;
     }
 
     if (page === 'room') {
-      return renderBoardPage_(params);
+      response = renderBoardPage_(params);
+      logTiming_('doGet', startedAt, {
+        page: page,
+        mode: 'render-board'
+      });
+      return response;
     }
 
     if (page === 'admin') {
       ROOMS_APP.Auth.requireAdmin();
-      return renderTemplate_('ui.admin', {
+      response = renderTemplate_('ui.admin', {
         pageTitle: 'Admin',
         initialModelJson: JSON.stringify({
           page: 'admin'
         })
       });
+      logTiming_('doGet', startedAt, {
+        page: page,
+        mode: 'render-admin'
+      });
+      return response;
     }
 
-    return renderBoardPage_(params);
+    response = renderBoardPage_(params);
+    logTiming_('doGet', startedAt, {
+      page: page,
+      mode: 'render-board'
+    });
+    return response;
   } catch (error) {
+    logTiming_('doGet', startedAt, {
+      page: page,
+      mode: 'error',
+      error: String(error && error.message ? error.message : error)
+    });
     throw error;
   }
 }
 
 function doPost(e) {
+  var startedAt = Date.now();
   var body = ROOMS_APP.parseJson((e && e.postData && e.postData.contents) || '{}', {});
-  return jsonResponse_(routeApiRequest_(body));
+  var action = body.action || body.pageAction || '';
+  try {
+    var response = jsonResponse_(routeApiRequest_(body));
+    logTiming_('doPost', startedAt, {
+      action: action
+    });
+    return response;
+  } catch (error) {
+    logTiming_('doPost', startedAt, {
+      action: action,
+      error: String(error && error.message ? error.message : error)
+    });
+    throw error;
+  }
 }
 
 function runSetup() {
@@ -47,7 +88,19 @@ function runSetup() {
 }
 
 function getBoardViewModel() {
-  return ROOMS_APP.Board.getBoardViewModel();
+  var startedAt = Date.now();
+  try {
+    var model = ROOMS_APP.Board.getBoardViewModel();
+    logTiming_('getBoardViewModel', startedAt, {
+      pageCount: model && model.pageCount || 0
+    });
+    return model;
+  } catch (error) {
+    logTiming_('getBoardViewModel', startedAt, {
+      error: String(error && error.message ? error.message : error)
+    });
+    throw error;
+  }
 }
 
 function getRoomViewModel(resourceId, dateString) {
@@ -55,7 +108,25 @@ function getRoomViewModel(resourceId, dateString) {
 }
 
 function getRoomPanelData(resourceId, dateString) {
-  return ROOMS_APP.Booking.getRoomViewModel(ROOMS_APP.normalizeString(resourceId), dateString || ROOMS_APP.toIsoDate(new Date()));
+  var startedAt = Date.now();
+  var normalizedResourceId = ROOMS_APP.normalizeString(resourceId);
+  var targetDate = dateString || ROOMS_APP.toIsoDate(new Date());
+  try {
+    var model = ROOMS_APP.Booking.getRoomViewModel(normalizedResourceId, targetDate);
+    logTiming_('getRoomPanelData', startedAt, {
+      resourceId: normalizedResourceId,
+      date: targetDate,
+      ok: model && model.ok ? 'TRUE' : 'FALSE'
+    });
+    return model;
+  } catch (error) {
+    logTiming_('getRoomPanelData', startedAt, {
+      resourceId: normalizedResourceId,
+      date: targetDate,
+      error: String(error && error.message ? error.message : error)
+    });
+    throw error;
+  }
 }
 
 function createRoomBooking(payload) {
@@ -253,9 +324,38 @@ function normalizeRoomIdParam_(payload) {
 }
 
 function renderBoardPage_(params) {
+  var bootstrapModel = {
+    generatedAtISO: '',
+    date: '',
+    refreshSec: 60,
+    rotationSec: 15,
+    pageCount: 1,
+    fullscreenCompactEnabled: true,
+    appName: 'ROOMS',
+    schoolName: '',
+    user: {
+      email: '',
+      isAdmin: false
+    },
+    branchOrder: [],
+    branchLabels: {},
+    pages: []
+  };
   return renderTemplate_('ui.board', {
     pageTitle: 'Board',
-    initialModelJson: JSON.stringify(ROOMS_APP.Board.getBoardViewModel()),
+    initialModelJson: JSON.stringify(bootstrapModel),
     initialRoomId: normalizeRoomIdParam_(params)
   });
+}
+
+function logTiming_(label, startedAt, payload) {
+  var elapsedMs = Date.now() - Number(startedAt || Date.now());
+  var details = payload || {};
+  var serialized;
+  try {
+    serialized = JSON.stringify(details);
+  } catch (error) {
+    serialized = '{}';
+  }
+  Logger.log('[PERF] %s %sms %s', label, elapsedMs, serialized);
 }

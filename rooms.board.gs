@@ -16,20 +16,34 @@ ROOMS_APP.Board = {
   BRANCH_PAGE_CAPACITY_: 12,
 
   getBoardViewModel: function () {
+    var startedAt = Date.now();
+    var stepStartedAt = startedAt;
     var user = ROOMS_APP.Auth.getUserContext();
     var now = new Date();
     var nowIso = ROOMS_APP.toIsoDateTime(now);
     var today = ROOMS_APP.toIsoDate(now);
     var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
     var resources = this.listResourcesForBoard_();
+    var activeResourceIds = {};
+    resources.forEach(function (resource) {
+      activeResourceIds[ROOMS_APP.normalizeString(resource.ResourceId)] = true;
+    });
+    var resourcesMs = Date.now() - stepStartedAt;
+
+    stepStartedAt = Date.now();
     var bookings = ROOMS_APP.Booking.listBookingsForDate(today).map(function (booking) {
       return ROOMS_APP.Board.enrichUserBookingForBoard_(booking);
     });
-    var timetableOccupancies = [];
-    resources.forEach(function (resource) {
-      timetableOccupancies = timetableOccupancies.concat(ROOMS_APP.Timetable.listOccupanciesForDate(resource.ResourceId, today));
+    var bookingsMs = Date.now() - stepStartedAt;
+
+    stepStartedAt = Date.now();
+    var timetableOccupancies = ROOMS_APP.Timetable.listOccupanciesForDate('', today).filter(function (occupancy) {
+      return activeResourceIds[ROOMS_APP.normalizeString(occupancy.ResourceId)] === true;
     });
     timetableOccupancies = this.uniqueByKey_(timetableOccupancies, 'BookingId');
+    var timetableMs = Date.now() - stepStartedAt;
+
+    stepStartedAt = Date.now();
     var occupancies = ROOMS_APP.sortBy(
       bookings.concat(timetableOccupancies),
       ['ResourceId', 'StartTime', 'EndTime', 'SourceKind', 'BookingId']
@@ -77,8 +91,9 @@ ROOMS_APP.Board = {
     var requiredPageCount = this.getRequiredPageCount_(branchBuckets);
     var pageCount = Math.max(1, Math.min(configuredPageCount, requiredPageCount));
     var pages = this.buildPages_(branchBuckets, pageCount);
+    var composeMs = Date.now() - stepStartedAt;
 
-    return {
+    var model = {
       generatedAtISO: nowIso,
       date: today,
       refreshSec: ROOMS_APP.getNumberConfig('BOARD_REFRESH_SEC', 60),
@@ -96,6 +111,19 @@ ROOMS_APP.Board = {
       branchLabels: this.BRANCH_LABELS_,
       pages: pages
     };
+    Logger.log(
+      '[PERF] Board.getBoardViewModel total=%sms resources=%sms bookings=%sms timetable=%sms compose=%sms resourcesCount=%s bookingsCount=%s timetableCount=%s pages=%s',
+      Date.now() - startedAt,
+      resourcesMs,
+      bookingsMs,
+      timetableMs,
+      composeMs,
+      resources.length,
+      bookings.length,
+      timetableOccupancies.length,
+      pages.length
+    );
+    return model;
   },
 
   createEmptyBranchBuckets_: function () {

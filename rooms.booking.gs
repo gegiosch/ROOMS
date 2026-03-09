@@ -374,15 +374,19 @@ ROOMS_APP.Booking = {
   },
 
   getRoomViewModel: function (resourceId, dateString) {
+    var startedAt = Date.now();
+    var stepStartedAt = startedAt;
     var date = dateString || ROOMS_APP.toIsoDate(new Date());
     var requestedResourceId = ROOMS_APP.normalizeString(resourceId || '');
     var user = ROOMS_APP.Auth.getUserContext();
 
     try {
       var allResources = ROOMS_APP.Board.listResources_();
+      var resourcesMs = Date.now() - stepStartedAt;
       if (!allResources.length) {
         var emptyModel = this.buildRoomFallbackModel_(requestedResourceId, date, 'Dati aula non disponibili');
         emptyModel.user = user;
+        Logger.log('[PERF] Booking.getRoomViewModel total=%sms resources=%sms result=empty', Date.now() - startedAt, resourcesMs);
         return emptyModel;
       }
 
@@ -393,23 +397,40 @@ ROOMS_APP.Booking = {
         var notFoundModel = this.buildRoomFallbackModel_(requestedResourceId, date, 'Aula non trovata');
         notFoundModel.user = user;
         notFoundModel.resources = allResources;
+        Logger.log('[PERF] Booking.getRoomViewModel total=%sms resources=%sms result=not_found', Date.now() - startedAt, resourcesMs);
         return notFoundModel;
       }
 
       var selectedResourceId = resource ? resource.ResourceId : '';
-      var userBookingsToday = resource ? this.enrichBookingsWithPermissions_(this.listBookingsForDay(selectedResourceId, date), user) : [];
-      var timetableBookingsToday = resource ? ROOMS_APP.Timetable.listOccupanciesForDate(selectedResourceId, date) : [];
-      var bookings = this.mergeRoomOccupancies_(userBookingsToday, timetableBookingsToday);
-
+      stepStartedAt = Date.now();
       var userUpcomingBookings = resource ? this.enrichBookingsWithPermissions_(this.listUpcomingBookingsForRoom(selectedResourceId, date), user) : [];
+      var userBookingsToday = userUpcomingBookings.filter(function (booking) {
+        return booking.BookingDate === date;
+      });
+      var bookingsMs = Date.now() - stepStartedAt;
+
+      stepStartedAt = Date.now();
       var timetableUpcomingBookings = resource ? ROOMS_APP.Timetable.listUpcomingOccupanciesForRoom(
         selectedResourceId,
         date,
         ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)
       ) : [];
+      var timetableBookingsToday = timetableUpcomingBookings.filter(function (booking) {
+        return booking.BookingDate === date;
+      });
+      var timetableMs = Date.now() - stepStartedAt;
+
+      var bookings = this.mergeRoomOccupancies_(userBookingsToday, timetableBookingsToday);
+
       var upcomingBookings = this.mergeRoomOccupancies_(userUpcomingBookings, timetableUpcomingBookings);
 
-      var timeline = resource ? ROOMS_APP.Slots.getDaySlots(selectedResourceId, date) : {
+      stepStartedAt = Date.now();
+      var timeline = resource ? ROOMS_APP.Slots.getDaySlotsFromOccupancies(
+        selectedResourceId,
+        date,
+        userBookingsToday,
+        timetableBookingsToday
+      ) : {
         bookings: [],
         timetableOccupancies: [],
         occupancies: [],
@@ -417,8 +438,14 @@ ROOMS_APP.Booking = {
         slots: [],
         isOpen: false
       };
+      var slotsMs = Date.now() - stepStartedAt;
+
+      stepStartedAt = Date.now();
       var upcomingEvents = resource ? this.listUpcomingEventsForResource_(resource, date) : [];
       var isAulaMagna = this.isAulaMagnaResource_(resource);
+      var eventsMs = Date.now() - stepStartedAt;
+
+      stepStartedAt = Date.now();
       var now = new Date();
       var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
       var current = bookings.filter(function (booking) {
@@ -427,8 +454,9 @@ ROOMS_APP.Booking = {
       var ownBookings = userUpcomingBookings.filter(function (booking) {
         return ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail(user.email);
       });
+      var composeMs = Date.now() - stepStartedAt;
 
-      return {
+      var model = {
         ok: true,
         errorMessage: '',
         date: date,
@@ -454,10 +482,29 @@ ROOMS_APP.Booking = {
         resources: allResources,
         config: this.getRoomConfig_()
       };
+      Logger.log(
+        '[PERF] Booking.getRoomViewModel total=%sms resources=%sms bookings=%sms timetable=%sms slots=%sms events=%sms compose=%sms bookingsToday=%s upcoming=%s freeSlots=%s',
+        Date.now() - startedAt,
+        resourcesMs,
+        bookingsMs,
+        timetableMs,
+        slotsMs,
+        eventsMs,
+        composeMs,
+        userBookingsToday.length + timetableBookingsToday.length,
+        upcomingBookings.length,
+        (timeline.freeSlots || []).length
+      );
+      return model;
     } catch (error) {
       var fallback = this.buildRoomFallbackModel_(requestedResourceId, date, 'Errore caricamento pagina aula');
       fallback.user = user;
       fallback.debugMessage = String(error && error.message ? error.message : error);
+      Logger.log(
+        '[PERF] Booking.getRoomViewModel total=%sms result=error error=%s',
+        Date.now() - startedAt,
+        fallback.debugMessage
+      );
       return fallback;
     }
   },

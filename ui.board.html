@@ -380,7 +380,8 @@
           ROOMS_UI.clearNode(root);
 
           if (!visiblePages.length) {
-            root.appendChild(ROOMS_UI.el('div', 'notice', 'Nessuna pagina configurata.'));
+            var waitingForBootstrap = !(model && model.generatedAtISO);
+            root.appendChild(ROOMS_UI.el('div', 'notice', waitingForBootstrap ? 'Caricamento monitor in corso...' : 'Nessuna pagina configurata.'));
             return;
           }
 
@@ -1475,6 +1476,7 @@
         }
 
         render(state);
+        refresh({ skipPanelRefresh: true });
         window.addEventListener('resize', applyFitScale);
         if (fullscreenButton) {
           fullscreenButton.addEventListener('click', toggleFullscreen);

@@ -5,8 +5,13 @@ ROOMS_APP.Slots = {
     var opening = ROOMS_APP.Policy.getDailyOpening(dateString);
     var bookings = ROOMS_APP.Booking.listBookingsForDay(resourceId, dateString);
     var timetableOccupancies = ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, dateString);
+    return this.getDaySlotsFromOccupancies(resourceId, dateString, bookings, timetableOccupancies, opening);
+  },
+
+  getDaySlotsFromOccupancies: function (resourceId, dateString, bookings, timetableOccupancies, opening) {
+    var openingWindow = opening || ROOMS_APP.Policy.getDailyOpening(dateString);
     var occupancies = this.sortOccupancies_(
-      bookings.map(function (booking) {
+      (bookings || []).map(function (booking) {
         var enriched = {};
         Object.keys(booking || {}).forEach(function (key) {
           enriched[key] = booking[key];
@@ -15,17 +20,17 @@ ROOMS_APP.Slots = {
         enriched.SourceType = 'USER_BOOKING';
         enriched.DisplayLabel = ROOMS_APP.normalizeString(booking.BookerSurname || booking.BookerName || booking.Title || 'N/D');
         return enriched;
-      }).concat(timetableOccupancies)
+      }).concat(timetableOccupancies || [])
     );
     var slotMinutes = ROOMS_APP.getNumberConfig('SLOT_MINUTES', 30);
 
-    if (!opening.isOpen) {
+    if (!openingWindow.isOpen) {
       return {
         isOpen: false,
         openTime: '',
         closeTime: '',
-        bookings: bookings,
-        timetableOccupancies: timetableOccupancies,
+        bookings: bookings || [],
+        timetableOccupancies: timetableOccupancies || [],
         occupancies: occupancies,
         slots: [],
         freeSlots: []
@@ -33,8 +38,8 @@ ROOMS_APP.Slots = {
     }
 
     var slots = [];
-    var cursor = ROOMS_APP.combineDateTime(dateString, opening.openTime);
-    var end = ROOMS_APP.combineDateTime(dateString, opening.closeTime);
+    var cursor = ROOMS_APP.combineDateTime(dateString, openingWindow.openTime);
+    var end = ROOMS_APP.combineDateTime(dateString, openingWindow.closeTime);
 
     while (cursor.getTime() < end.getTime()) {
       var slotStart = Utilities.formatDate(cursor, ROOMS_APP.getTimezone(), 'HH:mm');
@@ -60,13 +65,13 @@ ROOMS_APP.Slots = {
 
     return {
       isOpen: true,
-      openTime: opening.openTime,
-      closeTime: opening.closeTime,
-      bookings: bookings,
-      timetableOccupancies: timetableOccupancies,
+      openTime: openingWindow.openTime,
+      closeTime: openingWindow.closeTime,
+      bookings: bookings || [],
+      timetableOccupancies: timetableOccupancies || [],
       occupancies: occupancies,
       slots: slots,
-      freeSlots: this.buildFreeSlots_(opening, occupancies, slots)
+      freeSlots: this.buildFreeSlots_(openingWindow, occupancies, slots)
     };
   },
 
