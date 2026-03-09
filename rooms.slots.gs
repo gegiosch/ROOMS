@@ -4,6 +4,19 @@ ROOMS_APP.Slots = {
   getDaySlots: function (resourceId, dateString) {
     var opening = ROOMS_APP.Policy.getDailyOpening(dateString);
     var bookings = ROOMS_APP.Booking.listBookingsForDay(resourceId, dateString);
+    var timetableOccupancies = ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, dateString);
+    var occupancies = this.sortOccupancies_(
+      bookings.map(function (booking) {
+        var enriched = {};
+        Object.keys(booking || {}).forEach(function (key) {
+          enriched[key] = booking[key];
+        });
+        enriched.SourceKind = 'USER_BOOKING';
+        enriched.SourceType = 'USER_BOOKING';
+        enriched.DisplayLabel = ROOMS_APP.normalizeString(booking.BookerSurname || booking.BookerName || booking.Title || 'N/D');
+        return enriched;
+      }).concat(timetableOccupancies)
+    );
     var slotMinutes = ROOMS_APP.getNumberConfig('SLOT_MINUTES', 30);
 
     if (!opening.isOpen) {
@@ -12,6 +25,8 @@ ROOMS_APP.Slots = {
         openTime: '',
         closeTime: '',
         bookings: bookings,
+        timetableOccupancies: timetableOccupancies,
+        occupancies: occupancies,
         slots: [],
         freeSlots: []
       };
@@ -25,17 +40,19 @@ ROOMS_APP.Slots = {
       var slotStart = Utilities.formatDate(cursor, ROOMS_APP.getTimezone(), 'HH:mm');
       var next = new Date(Math.min(cursor.getTime() + slotMinutes * 60000, end.getTime()));
       var slotEnd = Utilities.formatDate(next, ROOMS_APP.getTimezone(), 'HH:mm');
-      var booking = bookings.filter(function (entry) {
+      var occupancy = occupancies.filter(function (entry) {
         return !(slotEnd <= entry.StartTime || slotStart >= entry.EndTime);
       })[0] || null;
 
       slots.push({
         startTime: slotStart,
         endTime: slotEnd,
-        isOccupied: Boolean(booking),
-        bookingId: booking ? booking.BookingId : '',
-        surname: booking ? booking.BookerSurname : '',
-        title: booking ? booking.Title : ''
+        isOccupied: Boolean(occupancy),
+        bookingId: occupancy ? occupancy.BookingId : '',
+        sourceKind: occupancy ? (occupancy.SourceKind || 'USER_BOOKING') : '',
+        sourceType: occupancy ? (occupancy.SourceType || '') : '',
+        surname: occupancy ? this.getOccupancyDisplayLabel_(occupancy) : '',
+        title: occupancy ? occupancy.Title : ''
       });
 
       cursor = next;
@@ -46,17 +63,19 @@ ROOMS_APP.Slots = {
       openTime: opening.openTime,
       closeTime: opening.closeTime,
       bookings: bookings,
+      timetableOccupancies: timetableOccupancies,
+      occupancies: occupancies,
       slots: slots,
-      freeSlots: this.buildFreeSlots_(opening, bookings, slots)
+      freeSlots: this.buildFreeSlots_(opening, occupancies, slots)
     };
   },
 
-  buildFreeSlots_: function (opening, bookings, slots) {
+  buildFreeSlots_: function (opening, occupancies, slots) {
     if (!opening || !opening.isOpen) {
       return [];
     }
 
-    if (!bookings || !bookings.length) {
+    if (!occupancies || !occupancies.length) {
       return [{
         startTime: opening.openTime,
         endTime: opening.closeTime
@@ -64,6 +83,20 @@ ROOMS_APP.Slots = {
     }
 
     return this.mergeFreeSlots_(slots || []);
+  },
+
+  sortOccupancies_: function (rows) {
+    return ROOMS_APP.sortBy(rows || [], ['StartTime', 'EndTime', 'SourceKind', 'BookingId']);
+  },
+
+  getOccupancyDisplayLabel_: function (occupancy) {
+    if (!occupancy) {
+      return '';
+    }
+    if (ROOMS_APP.normalizeString(occupancy.SourceKind) === 'TIMETABLE') {
+      return ROOMS_APP.Timetable.getDisplayLabel(occupancy);
+    }
+    return ROOMS_APP.normalizeString(occupancy.BookerSurname || occupancy.BookerName || occupancy.Title || 'N/D');
   },
 
   mergeFreeSlots_: function (slots) {

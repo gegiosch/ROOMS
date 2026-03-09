@@ -22,13 +22,20 @@ ROOMS_APP.Board = {
     var today = ROOMS_APP.toIsoDate(now);
     var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
     var resources = this.listResourcesForBoard_();
-    var bookings = ROOMS_APP.Booking.listBookingsForDate(today);
+    var bookings = ROOMS_APP.Booking.listBookingsForDate(today).map(function (booking) {
+      return ROOMS_APP.Board.enrichUserBookingForBoard_(booking);
+    });
+    var timetableOccupancies = ROOMS_APP.Timetable.listOccupanciesForDate('', today);
+    var occupancies = ROOMS_APP.sortBy(
+      bookings.concat(timetableOccupancies),
+      ['ResourceId', 'StartTime', 'EndTime', 'SourceKind', 'BookingId']
+    );
     var byResource = {};
     var branchBuckets = this.createEmptyBranchBuckets_();
 
-    bookings.forEach(function (booking) {
-      byResource[booking.ResourceId] = byResource[booking.ResourceId] || [];
-      byResource[booking.ResourceId].push(booking);
+    occupancies.forEach(function (occupancy) {
+      byResource[occupancy.ResourceId] = byResource[occupancy.ResourceId] || [];
+      byResource[occupancy.ResourceId].push(occupancy);
     });
 
     Object.keys(byResource).forEach(function (resourceId) {
@@ -53,8 +60,8 @@ ROOMS_APP.Board = {
         layoutRow: Number(resource.LayoutRow || 0),
         layoutCol: Number(resource.LayoutCol || 0),
         state: state,
-        currentLabel: current ? ROOMS_APP.Board.getBookingSurname_(current) : 'LIBERA',
-        nextLabel: next ? ROOMS_APP.Board.getBookingSurname_(next) : 'LIBERA'
+        currentLabel: current ? ROOMS_APP.Board.getOccupancyLabel_(current) : 'LIBERA',
+        nextLabel: next ? ROOMS_APP.Board.getOccupancyLabel_(next) : 'LIBERA'
       });
     });
 
@@ -142,6 +149,26 @@ ROOMS_APP.Board = {
     }
 
     return 'N/D';
+  },
+
+  enrichUserBookingForBoard_: function (booking) {
+    var enriched = {};
+    Object.keys(booking || {}).forEach(function (key) {
+      enriched[key] = booking[key];
+    });
+    enriched.SourceKind = 'USER_BOOKING';
+    enriched.SourceType = 'USER_BOOKING';
+    return enriched;
+  },
+
+  getOccupancyLabel_: function (occupancy) {
+    if (!occupancy) {
+      return 'N/D';
+    }
+    if (ROOMS_APP.normalizeString(occupancy.SourceKind) === 'TIMETABLE') {
+      return ROOMS_APP.Timetable.getDisplayLabel(occupancy);
+    }
+    return this.getBookingSurname_(occupancy);
   },
 
   mapResourceBranchKey_: function (resource) {

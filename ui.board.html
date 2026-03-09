@@ -963,9 +963,30 @@
           });
         }
 
+        function occupancySourceLabel_(booking) {
+          if (!booking) {
+            return '';
+          }
+          return booking.SourceKind === 'TIMETABLE' ? 'ORARIO' : 'PRENOTAZIONE';
+        }
+
+        function occupancyDisplayActor_(booking) {
+          if (!booking) {
+            return '';
+          }
+          if (booking.SourceKind === 'TIMETABLE') {
+            return booking.DisplayLabel || booking.ClassCode || booking.BookerSurname || 'N/D';
+          }
+          return booking.BookerSurname || '';
+        }
+
         function bookingActionsNode(booking) {
           var wrap = ROOMS_UI.el('div', 'chip-row');
-          if (!booking || !booking.CanManage) {
+          if (!booking || booking.SourceKind === 'TIMETABLE') {
+            wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Da orario (sola lettura)'));
+            return wrap;
+          }
+          if (!booking.CanManage) {
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Solo lettura'));
             return wrap;
           }
@@ -1041,7 +1062,7 @@
           }
 
           if (effectiveModel && effectiveModel.currentBooking) {
-            setText('panel-current-booking', 'In uso da ' + (effectiveModel.currentBooking.BookerSurname || effectiveModel.currentBooking.Title || 'N/D') + ' fino alle ' + effectiveModel.currentBooking.EndTime + '.');
+            setText('panel-current-booking', 'In uso da ' + occupancyDisplayActor_(effectiveModel.currentBooking) + ' fino alle ' + effectiveModel.currentBooking.EndTime + '.');
           } else {
             setText('panel-current-booking', 'Nessuna prenotazione in corso.');
           }
@@ -1054,27 +1075,32 @@
             hidePanelError();
           }
 
-          renderTable('panel-bookings-table', ['Orario', 'Titolo', 'Cognome', 'Stato', 'Azioni'], bookings.map(function (booking) {
+          renderTable('panel-bookings-table', ['Orario', 'Titolo', 'Mostra', 'Fonte', 'Stato', 'Azioni'], bookings.map(function (booking) {
             var bookingStatus = booking.Status || '';
+            if (booking.SourceKind === 'TIMETABLE') {
+              bookingStatus = 'ORARIO';
+            }
             if (booking._draftAction) {
               bookingStatus = bookingStatus + ' (bozza)';
             }
             return [
               '🕒 ' + ((booking.StartTime || '') + ' - ' + (booking.EndTime || '')),
               booking.Title || '',
-              booking.BookerSurname || '',
+              occupancyDisplayActor_(booking),
+              occupancySourceLabel_(booking),
               bookingStatus,
               bookingActionsNode(booking)
             ];
           }), 'Nessuna prenotazione per la giornata.');
 
-          renderTable('panel-upcoming-table', ['Data', 'Orario', 'Titolo', 'Cognome', 'Azioni'], upcoming.map(function (booking) {
+          renderTable('panel-upcoming-table', ['Data', 'Orario', 'Titolo', 'Mostra', 'Fonte', 'Azioni'], upcoming.map(function (booking) {
             var upcomingStatus = booking._draftAction ? (' (' + booking._draftAction.toLowerCase() + ')') : '';
             return [
               booking.BookingDate || '',
               '🕒 ' + ((booking.StartTime || '') + ' - ' + (booking.EndTime || '')),
               (booking.Title || '') + upcomingStatus,
-              booking.BookerSurname || '',
+              occupancyDisplayActor_(booking),
+              occupancySourceLabel_(booking),
               bookingActionsNode(booking)
             ];
           }), 'Nessuna prenotazione futura.');

@@ -77,6 +77,21 @@ function commitRecurringRoomBooking(payload) {
   return ROOMS_APP.Recurring.commitWeekly(payload);
 }
 
+function importTimetableClassrooms() {
+  ROOMS_APP.Auth.requireAdmin();
+  return ROOMS_APP.Timetable.importTimetableClassrooms();
+}
+
+function importTimetableSpaces() {
+  ROOMS_APP.Auth.requireAdmin();
+  return ROOMS_APP.Timetable.importTimetableSpaces();
+}
+
+function rebuildTimetableOccupancy() {
+  ROOMS_APP.Auth.requireAdmin();
+  return ROOMS_APP.Timetable.rebuildTimetableOccupancy();
+}
+
 function getAdminBootstrap() {
   var user = ROOMS_APP.Auth.requireAdmin();
   var tableNames = [
@@ -185,6 +200,18 @@ function routeApiRequest_(payload) {
   }
   if (action === 'commitRecurring') {
     return ROOMS_APP.Recurring.commitWeekly(payload);
+  }
+  if (action === 'importTimetableClassrooms') {
+    ROOMS_APP.Auth.requireAdmin();
+    return ROOMS_APP.Timetable.importTimetableClassrooms();
+  }
+  if (action === 'importTimetableSpaces') {
+    ROOMS_APP.Auth.requireAdmin();
+    return ROOMS_APP.Timetable.importTimetableSpaces();
+  }
+  if (action === 'rebuildTimetableOccupancy') {
+    ROOMS_APP.Auth.requireAdmin();
+    return ROOMS_APP.Timetable.rebuildTimetableOccupancy();
   }
 
   return {

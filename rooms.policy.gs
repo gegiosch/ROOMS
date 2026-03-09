@@ -84,11 +84,18 @@ ROOMS_APP.Policy = {
   },
 
   hasConflict: function (resourceId, dateString, startTime, endTime, ignoreBookingId) {
-    return ROOMS_APP.Booking.listBookingsForDay(resourceId, dateString).some(function (booking) {
+    var bookingConflict = ROOMS_APP.Booking.listBookingsForDay(resourceId, dateString).some(function (booking) {
       if (ignoreBookingId && booking.BookingId === ignoreBookingId) {
         return false;
       }
       return !(endTime <= booking.StartTime || startTime >= booking.EndTime);
+    });
+    if (bookingConflict) {
+      return true;
+    }
+
+    return ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, dateString).some(function (occupancy) {
+      return !(endTime <= occupancy.StartTime || startTime >= occupancy.EndTime);
     });
   },
 

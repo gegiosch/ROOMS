@@ -13,6 +13,9 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.BOOKINGS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.AUDIT] = true;
     sheets[ROOMS_APP.SHEET_NAMES.ADMINS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_RAW] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_SPACES_RAW] = true;
     return sheets;
   }()),
 
@@ -22,6 +25,9 @@ ROOMS_APP.Schema = {
     this.ensureResources();
     this.ensureBookings_();
     this.ensureAudit_();
+    this.ensureTimetableOccupancy();
+    this.ensureTimetableDocentiRaw();
+    this.ensureTimetableSpacesRaw();
     this.ensureWeekSchedule();
     this.ensureHolidays();
     this.ensureClosures();
@@ -106,6 +112,57 @@ ROOMS_APP.Schema = {
   ensureSpecialOpenings: function () {
     var headers = ['OpeningId', 'Date', 'OpenTime', 'CloseTime', 'Label', 'IsEnabled', 'Notes'];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS, headers);
+  },
+
+  ensureTimetableOccupancy: function () {
+    var headers = [
+      'OccupancyId',
+      'SourceType',
+      'ResourceId',
+      'ResourceLabel',
+      'Weekday',
+      'Period',
+      'StartTime',
+      'EndTime',
+      'ClassCode',
+      'TeacherName',
+      'DisplayLabel',
+      'IsActive',
+      'Notes',
+      'CreatedAtISO',
+      'UpdatedAtISO'
+    ];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY, headers);
+  },
+
+  ensureTimetableDocentiRaw: function () {
+    var headers = [
+      'RawId',
+      'TeacherName',
+      'Weekday',
+      'Period',
+      'ClassCode',
+      'IsActive',
+      'Notes',
+      'UpdatedAtISO'
+    ];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_RAW, headers);
+  },
+
+  ensureTimetableSpacesRaw: function () {
+    var headers = [
+      'RawId',
+      'ResourceId',
+      'ResourceLabel',
+      'Weekday',
+      'Period',
+      'ClassCode',
+      'TeacherName',
+      'IsActive',
+      'Notes',
+      'UpdatedAtISO'
+    ];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_SPACES_RAW, headers);
   },
 
   ensurePolicyOverrides: function () {

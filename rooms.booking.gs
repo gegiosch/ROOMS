@@ -206,6 +206,9 @@ ROOMS_APP.Booking = {
 
         normalizedChanges.deletes.forEach(function (entry) {
           var bookingId = ROOMS_APP.normalizeString(entry.bookingId);
+          if (bookingId.indexOf('TT_') === 0) {
+            throw new Error('Le occupazioni da orario sono in sola lettura.');
+          }
           var existingIndex = self.findBookingIndexById_(workingRows, bookingId);
           if (existingIndex < 0) {
             throw new Error('Booking not found.');
@@ -233,6 +236,9 @@ ROOMS_APP.Booking = {
 
         normalizedChanges.updates.forEach(function (entry) {
           var bookingId = ROOMS_APP.normalizeString(entry.bookingId);
+          if (bookingId.indexOf('TT_') === 0) {
+            throw new Error('Le occupazioni da orario sono in sola lettura.');
+          }
           var existingIndex = self.findBookingIndexById_(workingRows, bookingId);
           if (existingIndex < 0) {
             throw new Error('Booking not found.');
@@ -349,7 +355,11 @@ ROOMS_APP.Booking = {
       resource: null,
       resources: [],
       bookings: [],
+      userBookingsToday: [],
+      timetableBookingsToday: [],
       upcomingBookings: [],
+      userUpcomingBookings: [],
+      timetableUpcomingBookings: [],
       ownBookings: [],
       freeSlots: [],
       slots: [],
@@ -387,15 +397,32 @@ ROOMS_APP.Booking = {
       }
 
       var selectedResourceId = resource ? resource.ResourceId : '';
-      var bookings = resource ? this.enrichBookingsWithPermissions_(this.listBookingsForDay(selectedResourceId, date), user) : [];
-      var upcomingBookings = resource ? this.enrichBookingsWithPermissions_(this.listUpcomingBookingsForRoom(selectedResourceId, date), user) : [];
-      var timeline = resource ? ROOMS_APP.Slots.getDaySlots(selectedResourceId, date) : { bookings: [], freeSlots: [], slots: [], isOpen: false };
+      var userBookingsToday = resource ? this.enrichBookingsWithPermissions_(this.listBookingsForDay(selectedResourceId, date), user) : [];
+      var timetableBookingsToday = resource ? ROOMS_APP.Timetable.listOccupanciesForDate(selectedResourceId, date) : [];
+      var bookings = this.mergeRoomOccupancies_(userBookingsToday, timetableBookingsToday);
+
+      var userUpcomingBookings = resource ? this.enrichBookingsWithPermissions_(this.listUpcomingBookingsForRoom(selectedResourceId, date), user) : [];
+      var timetableUpcomingBookings = resource ? ROOMS_APP.Timetable.listUpcomingOccupanciesForRoom(
+        selectedResourceId,
+        date,
+        ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)
+      ) : [];
+      var upcomingBookings = this.mergeRoomOccupancies_(userUpcomingBookings, timetableUpcomingBookings);
+
+      var timeline = resource ? ROOMS_APP.Slots.getDaySlots(selectedResourceId, date) : {
+        bookings: [],
+        timetableOccupancies: [],
+        occupancies: [],
+        freeSlots: [],
+        slots: [],
+        isOpen: false
+      };
       var now = new Date();
       var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
       var current = bookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
       })[0] || null;
-      var ownBookings = upcomingBookings.filter(function (booking) {
+      var ownBookings = userUpcomingBookings.filter(function (booking) {
         return ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail(user.email);
       });
 
@@ -406,7 +433,11 @@ ROOMS_APP.Booking = {
         requestedResourceId: requestedResourceId,
         resource: resource,
         bookings: bookings,
+        userBookingsToday: userBookingsToday,
+        timetableBookingsToday: timetableBookingsToday,
         upcomingBookings: upcomingBookings,
+        userUpcomingBookings: userUpcomingBookings,
+        timetableUpcomingBookings: timetableUpcomingBookings,
         ownBookings: ownBookings,
         freeSlots: timeline.freeSlots || [],
         slots: timeline.slots || [],
@@ -489,7 +520,22 @@ ROOMS_APP.Booking = {
     }
 
     var normalized = validation.normalized || {};
-    if (this.hasConflictInRows_(workingRows, normalized.resourceId, normalized.bookingDate, normalized.startTime, normalized.endTime, ignoreBookingId)) {
+    var hasWorkingRowConflict = this.hasConflictInRows_(
+      workingRows,
+      normalized.resourceId,
+      normalized.bookingDate,
+      normalized.startTime,
+      normalized.endTime,
+      ignoreBookingId
+    );
+    var hasTimetableConflict = this.hasTimetableConflict_(
+      normalized.resourceId,
+      normalized.bookingDate,
+      normalized.startTime,
+      normalized.endTime
+    );
+
+    if (hasWorkingRowConflict || hasTimetableConflict) {
       throw new Error(this.SLOT_TAKEN_MESSAGE_);
     }
 
@@ -514,6 +560,12 @@ ROOMS_APP.Booking = {
         return false;
       }
       return !(endTime <= row.StartTime || startTime >= row.EndTime);
+    });
+  },
+
+  hasTimetableConflict_: function (resourceId, bookingDate, startTime, endTime) {
+    return ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, bookingDate).some(function (occupancy) {
+      return !(endTime <= occupancy.StartTime || startTime >= occupancy.EndTime);
     });
   },
 
@@ -596,8 +648,22 @@ ROOMS_APP.Booking = {
         enriched[key] = booking[key];
       });
       enriched.CanManage = ROOMS_APP.Auth.canManageBooking(booking, user);
+      enriched.SourceKind = 'USER_BOOKING';
+      enriched.SourceType = 'USER_BOOKING';
+      enriched.IsReadOnly = false;
+      enriched.DisplayLabel = ROOMS_APP.normalizeString(booking.BookerSurname || booking.BookerName || booking.Title || 'N/D');
       return enriched;
     });
+  },
+
+  mergeRoomOccupancies_: function (userBookings, timetableBookings) {
+    return ROOMS_APP.sortBy((userBookings || []).concat(timetableBookings || []), [
+      'BookingDate',
+      'StartTime',
+      'EndTime',
+      'SourceKind',
+      'BookingId'
+    ]);
   },
 
   writeAudit_: function (action, bookingId, seriesId, resourceId, actorEmail, result, payload) {
