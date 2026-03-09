@@ -83,23 +83,36 @@ ROOMS_APP.Timetable = {
     ROOMS_APP.Schema.ensureAll();
     var currentById = this.readCurrentRowsById_();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var classroomCodeSet = this.getClassroomResourceCodeSet_();
     var rows = [];
+    var docentiRows = this.parseDocentiSheet_(currentById, nowIso, classroomCodeSet);
+    var laboratoriRows = this.parseLaboratoriSheet_(currentById, nowIso);
 
-    rows = rows.concat(this.parseDocentiSheet_(currentById, nowIso));
-    rows = rows.concat(this.parseLaboratoriSheet_(currentById, nowIso));
+    rows = rows.concat(docentiRows);
+    rows = rows.concat(laboratoriRows);
 
-    return this.replaceTimetableRows_(this.mergeUniqueRows_(rows));
+    var result = this.replaceTimetableRows_(this.mergeUniqueRows_(rows));
+    result.docentiCount = docentiRows.length;
+    result.laboratoriCount = laboratoriRows.length;
+    result.sample = rows.slice(0, 5);
+    Logger.log('Timetable rebuild completed. Docenti: %s, Laboratori: %s, Total: %s', result.docentiCount, result.laboratoriCount, result.rowCount);
+
+    return result;
   },
 
   importTimetableClassrooms: function () {
     ROOMS_APP.Schema.ensureAll();
     var currentById = this.readCurrentRowsById_();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
-    var parsed = this.parseDocentiSheet_(currentById, nowIso);
+    var classroomCodeSet = this.getClassroomResourceCodeSet_();
+    var parsed = this.parseDocentiSheet_(currentById, nowIso, classroomCodeSet);
     var keepSpaces = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY).filter(function (row) {
       return ROOMS_APP.normalizeString(row.SourceType) === 'TIMETABLE_SPACE';
     });
-    return this.replaceTimetableRows_(this.mergeUniqueRows_(keepSpaces.concat(parsed)));
+    var result = this.replaceTimetableRows_(this.mergeUniqueRows_(keepSpaces.concat(parsed)));
+    result.docentiCount = parsed.length;
+    result.laboratoriCount = keepSpaces.length;
+    return result;
   },
 
   importTimetableSpaces: function () {
@@ -110,10 +123,13 @@ ROOMS_APP.Timetable = {
     var keepClassrooms = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY).filter(function (row) {
       return ROOMS_APP.normalizeString(row.SourceType) === 'TIMETABLE_CLASSROOM';
     });
-    return this.replaceTimetableRows_(this.mergeUniqueRows_(keepClassrooms.concat(parsed)));
+    var result = this.replaceTimetableRows_(this.mergeUniqueRows_(keepClassrooms.concat(parsed)));
+    result.docentiCount = keepClassrooms.length;
+    result.laboratoriCount = parsed.length;
+    return result;
   },
 
-  parseDocentiSheet_: function (currentById, nowIso) {
+  parseDocentiSheet_: function (currentById, nowIso, classroomCodeSet) {
     var sheetName = this.getConfiguredSourceSheetName_(
       this.CONFIG_DOCENTI_SHEET_KEY_,
       this.DEFAULT_DOCENTI_SHEET_
@@ -124,7 +140,11 @@ ROOMS_APP.Timetable = {
       'classroom',
       currentById,
       nowIso,
-      this.CONFIG_DOCENTI_SHEET_KEY_
+      this.CONFIG_DOCENTI_SHEET_KEY_,
+      {
+        requireClassroomResource: true,
+        classroomCodeSet: classroomCodeSet || {}
+      }
     );
   },
 
@@ -139,11 +159,12 @@ ROOMS_APP.Timetable = {
       'space',
       currentById,
       nowIso,
-      this.CONFIG_LABORATORI_SHEET_KEY_
+      this.CONFIG_LABORATORI_SHEET_KEY_,
+      {}
     );
   },
 
-  parseMatrixSheet_: function (sheetName, sourceType, sourceKind, currentById, nowIso, configKey) {
+  parseMatrixSheet_: function (sheetName, sourceType, sourceKind, currentById, nowIso, configKey, parseOptions) {
     var sheet = ROOMS_APP.DB.getSheet(sheetName);
     if (!sheet) {
       var keyInfo = configKey ? (' (CONFIG key: ' + configKey + ')') : '';
@@ -175,6 +196,9 @@ ROOMS_APP.Timetable = {
         var meta = columnMeta.columns[column] || {};
         var classCode = this.extractClassCode_(values[rowIndex][column]);
         if (!classCode) {
+          continue;
+        }
+        if (sourceKind === 'classroom' && parseOptions && parseOptions.requireClassroomResource && !parseOptions.classroomCodeSet[classCode]) {
           continue;
         }
 
@@ -219,64 +243,22 @@ ROOMS_APP.Timetable = {
   detectColumnMeta_: function (values) {
     var rowCount = values.length;
     var columnCount = this.getMaxColumnCount_(values);
-    var scanRows = Math.min(this.HEADER_SCAN_ROWS_, rowCount);
-    var dayHints = [];
-    var periodHints = [];
-    var headerBottomRow = -1;
-    var rowIndex;
-    var colIndex;
-
-    for (rowIndex = 0; rowIndex < scanRows; rowIndex += 1) {
-      var dayCount = 0;
-      var periodCount = 0;
-      for (colIndex = 1; colIndex < columnCount; colIndex += 1) {
-        var token = ROOMS_APP.normalizeString(values[rowIndex][colIndex]);
-        if (!token) {
-          continue;
-        }
-        var weekday = this.normalizeWeekday_(token);
-        if (weekday) {
-          dayHints[colIndex] = weekday;
-          dayCount += 1;
-        }
-        var period = this.extractPeriodFromHeaderCell_(token);
-        if (period) {
-          periodHints[colIndex] = period;
-          periodCount += 1;
-        }
-      }
-      if (dayCount > 0 || periodCount >= 3) {
-        headerBottomRow = rowIndex;
-      }
+    var layout = this.detectMatrixLayout_(values, Math.min(this.HEADER_SCAN_ROWS_, rowCount), columnCount);
+    if (!layout || layout.periodRow < 0) {
+      return {
+        columns: [],
+        usableColumns: [],
+        dataStartRow: rowCount
+      };
     }
 
-    var dayByColumn = [];
-    var periodByColumn = [];
-    var activeWeekday = '';
-    var activePeriod = 1;
-    for (colIndex = 1; colIndex < columnCount; colIndex += 1) {
-      if (dayHints[colIndex]) {
-        activeWeekday = dayHints[colIndex];
-        activePeriod = 1;
-      }
-      dayByColumn[colIndex] = activeWeekday;
-
-      if (periodHints[colIndex]) {
-        periodByColumn[colIndex] = periodHints[colIndex];
-        activePeriod = Number(periodHints[colIndex]) + 1;
-      } else if (activeWeekday && activePeriod >= 1 && activePeriod <= 8) {
-        periodByColumn[colIndex] = String(activePeriod);
-        activePeriod += 1;
-      } else {
-        periodByColumn[colIndex] = '';
-      }
-    }
-
+    var dataStartRow = layout.periodRow + 1;
     var columns = [];
     var usableColumns = [];
+    var colIndex;
     for (colIndex = 1; colIndex < columnCount; colIndex += 1) {
-      var weekdayValue = dayByColumn[colIndex];
-      var periodValue = periodByColumn[colIndex];
+      var periodValue = layout.periodByColumn[colIndex] || '';
+      var weekdayValue = layout.weekdayByColumn[colIndex] || '';
       var range = this.getPeriodRange(periodValue);
       columns[colIndex] = {
         weekday: weekdayValue,
@@ -292,8 +274,118 @@ ROOMS_APP.Timetable = {
     return {
       columns: columns,
       usableColumns: usableColumns,
-      dataStartRow: Math.max(1, headerBottomRow + 1)
+      dataStartRow: dataStartRow,
+      periodRow: layout.periodRow,
+      weekdayRow: layout.weekdayRow
     };
+  },
+
+  detectMatrixLayout_: function (values, scanRows, columnCount) {
+    var periodRow = this.detectPeriodHeaderRow_(values, scanRows, columnCount);
+    if (periodRow < 0) {
+      return null;
+    }
+
+    var weekdayMeta = this.detectWeekdayAnchors_(values, periodRow, columnCount);
+    var weekdayAnchors = weekdayMeta.anchors || [];
+    var weekdayByColumn = [];
+    var periodByColumn = [];
+    var colIndex;
+
+    for (colIndex = 1; colIndex < columnCount; colIndex += 1) {
+      var period = this.extractPeriodFromHeaderCell_(values[periodRow][colIndex]);
+      periodByColumn[colIndex] = period;
+      weekdayByColumn[colIndex] = period ? this.resolveWeekdayFromAnchors_(colIndex, weekdayAnchors) : '';
+    }
+
+    return {
+      periodRow: periodRow,
+      weekdayRow: weekdayMeta.row,
+      periodByColumn: periodByColumn,
+      weekdayByColumn: weekdayByColumn
+    };
+  },
+
+  detectPeriodHeaderRow_: function (values, scanRows, columnCount) {
+    var bestRow = -1;
+    var bestCount = 0;
+    var bestDistinct = 0;
+    var rowIndex;
+    var colIndex;
+
+    for (rowIndex = 0; rowIndex < scanRows; rowIndex += 1) {
+      var count = 0;
+      var distinct = {};
+      for (colIndex = 1; colIndex < columnCount; colIndex += 1) {
+        var period = this.extractPeriodFromHeaderCell_(values[rowIndex][colIndex]);
+        if (!period) {
+          continue;
+        }
+        count += 1;
+        distinct[period] = true;
+      }
+
+      var distinctCount = Object.keys(distinct).length;
+      if (count < 4 || distinctCount < 4) {
+        continue;
+      }
+
+      if (
+        count > bestCount ||
+        (count === bestCount && distinctCount > bestDistinct) ||
+        (count === bestCount && distinctCount === bestDistinct && rowIndex > bestRow)
+      ) {
+        bestRow = rowIndex;
+        bestCount = count;
+        bestDistinct = distinctCount;
+      }
+    }
+
+    return bestRow;
+  },
+
+  detectWeekdayAnchors_: function (values, periodRow, columnCount) {
+    var best = {
+      row: -1,
+      anchors: []
+    };
+    var rowIndex;
+    var colIndex;
+
+    for (rowIndex = 0; rowIndex < periodRow; rowIndex += 1) {
+      var anchors = [];
+      for (colIndex = 1; colIndex < columnCount; colIndex += 1) {
+        var weekday = this.normalizeWeekday_(values[rowIndex][colIndex]);
+        if (!weekday) {
+          continue;
+        }
+        anchors.push({
+          col: colIndex,
+          weekday: weekday
+        });
+      }
+
+      if (anchors.length > best.anchors.length || (anchors.length === best.anchors.length && rowIndex > best.row)) {
+        best = {
+          row: rowIndex,
+          anchors: anchors
+        };
+      }
+    }
+
+    return best;
+  },
+
+  resolveWeekdayFromAnchors_: function (columnIndex, anchors) {
+    var active = '';
+    var index;
+    for (index = 0; index < (anchors || []).length; index += 1) {
+      if (anchors[index].col > columnIndex) {
+        break;
+      }
+      active = anchors[index].weekday;
+    }
+    return active;
   },
 
   listOccupanciesForDate: function (resourceId, dateString) {
@@ -352,7 +444,7 @@ ROOMS_APP.Timetable = {
       return false;
     }
     var code = raw.replace(/[\s._-]+/g, '');
-    if (!code || code === 'P' || code === 'D') {
+    if (!code || code === 'P' || code === 'D' || code === 'AI' || code === 'DI') {
       return false;
     }
     return /^[1-6][A-Z]{1,4}$/.test(code);
@@ -454,6 +546,9 @@ ROOMS_APP.Timetable = {
     if (!token || this.isValidClassCode_(token)) {
       return '';
     }
+    if (/[A-Z]/.test(token)) {
+      return '';
+    }
     if (/^[1-8]$/.test(token)) {
       return token;
     }
@@ -491,6 +586,22 @@ ROOMS_APP.Timetable = {
       max = Math.max(max, (row || []).length);
     });
     return max;
+  },
+
+  getClassroomResourceCodeSet_: function () {
+    var set = {};
+    ROOMS_APP.Board.listResources_().forEach(function (resource) {
+      var byId = ROOMS_APP.normalizeString(resource.ResourceId).toUpperCase();
+      var byDisplay = ROOMS_APP.normalizeString(resource.DisplayName).toUpperCase();
+
+      if (ROOMS_APP.Timetable.isValidClassCode_(byId)) {
+        set[byId.replace(/[\s._-]+/g, '')] = true;
+      }
+      if (ROOMS_APP.Timetable.isValidClassCode_(byDisplay)) {
+        set[byDisplay.replace(/[\s._-]+/g, '')] = true;
+      }
+    });
+    return set;
   },
 
   matchesResourceId_: function (rowResourceId, expectedResourceId) {
