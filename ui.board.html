@@ -33,6 +33,11 @@
     </div>
     <div id="room-panel-overlay" class="room-panel-overlay" style="display:none;">
       <aside class="room-panel" role="dialog" aria-modal="true" aria-label="Dettaglio aula">
+        <div id="room-panel-loading" class="room-panel-loading" style="display:none;" aria-live="polite" aria-busy="true">
+          <div class="room-panel-spinner"></div>
+          <div class="room-panel-loading-text">Caricamento dati aula...</div>
+        </div>
+
         <div class="room-panel-header">
           <div>
             <div class="eyebrow">Dettaglio Aula</div>
@@ -153,6 +158,7 @@
         var panelCloseButton = document.getElementById('room-panel-close');
         var panelNotice = document.getElementById('panel-notice');
         var panelError = document.getElementById('panel-error');
+        var panelLoading = document.getElementById('room-panel-loading');
         var panelDateInput = document.getElementById('panel-date-input');
         var panelDateRefresh = document.getElementById('panel-date-refresh');
         var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
@@ -434,6 +440,24 @@
           panelError.textContent = '';
         }
 
+        function showRoomPanelLoading(message) {
+          if (!panelLoading) {
+            return;
+          }
+          var textNode = panelLoading.querySelector('.room-panel-loading-text');
+          if (textNode) {
+            textNode.textContent = message || 'Caricamento dati aula...';
+          }
+          panelLoading.style.display = 'flex';
+        }
+
+        function hideRoomPanelLoading() {
+          if (!panelLoading) {
+            return;
+          }
+          panelLoading.style.display = 'none';
+        }
+
         function isPanelOpen() {
           return panelState.isOpen;
         }
@@ -452,6 +476,7 @@
           panelState.model = null;
           panelState.editingBookingId = '';
           panelState.editingBookingDate = '';
+          hideRoomPanelLoading();
           if (!panelOverlay) {
             return;
           }
@@ -670,7 +695,12 @@
 
         function loadRoomPanelData(resourceId, options) {
           var requestDate = (options && options.date) || (panelDateInput && panelDateInput.value) || ((panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_());
-          ROOMS_UI.call('getRoomPanelData', resourceId, requestDate)
+          var showSpinner = !(options && options.showSpinner === false);
+          if (showSpinner) {
+            showRoomPanelLoading((options && options.loadingMessage) || 'Caricamento dati aula...');
+          }
+
+          return ROOMS_UI.call('getRoomPanelData', resourceId, requestDate)
             .then(function (model) {
               panelState.model = model && typeof model === 'object' ? model : {};
               renderRoomPanel(panelState.model);
@@ -681,6 +711,11 @@
             .catch(function (error) {
               showPanelError(error && error.message ? error.message : 'Errore caricamento aula');
               ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore caricamento aula', 'error');
+            })
+            .then(function () {
+              if (showSpinner) {
+                hideRoomPanelLoading();
+              }
             });
         }
 
@@ -713,7 +748,11 @@
           setText('panel-room-title', resourceId);
           setText('panel-room-meta', 'Caricamento dati aula...');
           ROOMS_UI.setNotice(panelNotice, 'Caricamento aula ' + resourceId + '...', '');
-          loadRoomPanelData(resourceId, { date: (panelDateInput && panelDateInput.value) || ROOMS_APP_DATE_FALLBACK_(), silentNotice: false });
+          loadRoomPanelData(resourceId, {
+            date: (panelDateInput && panelDateInput.value) || ROOMS_APP_DATE_FALLBACK_(),
+            silentNotice: false,
+            loadingMessage: 'Caricamento aula ' + resourceId + '...'
+          });
         }
 
         function panelBookingPayload() {
@@ -790,7 +829,11 @@
               pageIndex = pageIndex % Math.max(model.pages.length, 1);
               render(model);
               if (isPanelOpen() && panelState.resourceId) {
-                loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(), silentNotice: true });
+                loadRoomPanelData(panelState.resourceId, {
+                  date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(),
+                  silentNotice: true,
+                  showSpinner: false
+                });
               }
             })
             .catch(function (error) {

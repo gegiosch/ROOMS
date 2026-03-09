@@ -388,6 +388,7 @@ body.board-monitor #board-root {
 }
 
 .room-panel {
+  position: relative;
   width: min(760px, 96vw);
   height: calc(100vh - 16px);
   overflow: auto;
@@ -399,6 +400,45 @@ body.board-monitor #board-root {
   display: grid;
   gap: 10px;
   color: #e5e7eb;
+}
+
+.room-panel-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.room-panel-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 3px solid rgba(148, 163, 184, 0.3);
+  border-top-color: var(--accent-blue);
+  animation: rooms-panel-spin 0.75s linear infinite;
+}
+
+.room-panel-loading-text {
+  color: #cbd5f5;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@keyframes rooms-panel-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .room-panel .subtitle,
