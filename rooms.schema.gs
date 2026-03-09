@@ -298,64 +298,44 @@ ROOMS_APP.Schema = {
 
   syncResourcesFromCanonical_: function (headers, canonicalRows) {
     var sheetName = ROOMS_APP.SHEET_NAMES.RESOURCES;
-    var existingRows = ROOMS_APP.DB.readRows(sheetName);
-    var existingBySortKey = {};
-    var existingByResourceId = {};
-    var existingByLayoutKey = {};
-    var self = this;
-
-    existingRows.forEach(function (row) {
-      var sortKey = ROOMS_APP.normalizeString(row.SortKey);
-      var resourceId = ROOMS_APP.normalizeString(row.ResourceId);
-      var layoutKey = self.buildResourceLayoutKey_(row);
-
-      if (sortKey && !existingBySortKey[sortKey]) {
-        existingBySortKey[sortKey] = row;
-      }
-      if (resourceId && !existingByResourceId[resourceId]) {
-        existingByResourceId[resourceId] = row;
-      }
-      if (layoutKey && !existingByLayoutKey[layoutKey]) {
-        existingByLayoutKey[layoutKey] = row;
-      }
-    });
-
-    var repairedRows = canonicalRows.map(function (canonicalRow) {
-      var existingRow =
-        existingBySortKey[canonicalRow.SortKey] ||
-        existingByResourceId[canonicalRow.ResourceId] ||
-        existingByLayoutKey[self.buildResourceLayoutKey_(canonicalRow)] ||
-        null;
-
-      return self.mergeResourceWithCanonical_(headers, canonicalRow, existingRow);
-    });
-
+    var canonicalOnlyRows = this.normalizeCanonicalResourceRows_(headers, canonicalRows);
     // Canonical inventory is the single source of truth for ROOMS_RESOURCES.
-    ROOMS_APP.DB.replaceRows(sheetName, headers, repairedRows);
+    // Existing rows are not merged: every ensure run fully rewrites data rows.
+    ROOMS_APP.DB.replaceRows(sheetName, headers, canonicalOnlyRows);
   },
 
-  buildResourceLayoutKey_: function (row) {
-    return [
-      ROOMS_APP.normalizeString(row.AreaCode).toUpperCase(),
-      ROOMS_APP.normalizeString(row.FloorCode).toUpperCase(),
-      ROOMS_APP.normalizeString(row.SideCode).toUpperCase(),
-      String(row.LayoutPage || ''),
-      String(row.LayoutRow || ''),
-      String(row.LayoutCol || '')
-    ].join('|');
-  },
+  normalizeCanonicalResourceRows_: function (headers, canonicalRows) {
+    var seenResourceIds = {};
+    var seenSortKeys = {};
+    var normalizedRows = [];
 
-  mergeResourceWithCanonical_: function (headers, canonicalRow, existingRow) {
-    var row = {};
-    headers.forEach(function (header) {
-      row[header] = Object.prototype.hasOwnProperty.call(canonicalRow, header) ? canonicalRow[header] : '';
+    (canonicalRows || []).forEach(function (canonicalRow) {
+      var row = {};
+      headers.forEach(function (header) {
+        row[header] = Object.prototype.hasOwnProperty.call(canonicalRow, header) ? canonicalRow[header] : '';
+      });
+
+      var resourceId = ROOMS_APP.normalizeString(row.ResourceId);
+      var sortKey = ROOMS_APP.normalizeString(row.SortKey);
+      if (!resourceId) {
+        throw new Error('Canonical resource row without ResourceId: ' + JSON.stringify(row));
+      }
+      if (!sortKey) {
+        throw new Error('Canonical resource row without SortKey: ' + resourceId);
+      }
+      if (seenResourceIds[resourceId]) {
+        throw new Error('Duplicate canonical ResourceId: ' + resourceId);
+      }
+      if (seenSortKeys[sortKey]) {
+        throw new Error('Duplicate canonical SortKey: ' + sortKey);
+      }
+
+      seenResourceIds[resourceId] = true;
+      seenSortKeys[sortKey] = true;
+      normalizedRows.push(row);
     });
 
-    if (existingRow && !ROOMS_APP.normalizeString(row.Notes) && ROOMS_APP.normalizeString(existingRow.Notes)) {
-      row.Notes = existingRow.Notes;
-    }
-
-    return row;
+    return normalizedRows;
   },
 
   setPlainTextSheet_: function (sheet, sheetName) {
