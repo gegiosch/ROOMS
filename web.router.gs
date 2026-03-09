@@ -61,6 +61,14 @@ function updateRoomBooking(bookingId, payload) {
   return ROOMS_APP.Booking.updateBooking(bookingId, payload || {});
 }
 
+function applyRoomPanelChanges(resourceId, dateString, changes) {
+  return ROOMS_APP.Booking.applyRoomChanges(
+    ROOMS_APP.normalizeString(resourceId),
+    dateString || ROOMS_APP.toIsoDate(new Date()),
+    changes || {}
+  );
+}
+
 function previewRecurringRoomBooking(payload) {
   return ROOMS_APP.Recurring.previewWeekly(payload);
 }
@@ -164,6 +172,13 @@ function routeApiRequest_(payload) {
   }
   if (action === 'cancelBooking') {
     return ROOMS_APP.Booking.cancelBooking(payload.bookingId, payload.notes);
+  }
+  if (action === 'applyRoomPanelChanges') {
+    return ROOMS_APP.Booking.applyRoomChanges(
+      normalizeRoomIdParam_(payload),
+      payload.date,
+      payload.changes || payload
+    );
   }
   if (action === 'previewRecurring') {
     return ROOMS_APP.Recurring.previewWeekly(payload);

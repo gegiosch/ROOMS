@@ -543,6 +543,18 @@ body.board-monitor #board-root {
   gap: 12px;
 }
 
+.room-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-dirty-flag {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fcd34d;
+  background: rgba(51, 36, 15, 0.7);
+}
+
 .room-panel-close {
   min-height: 34px;
 }
@@ -599,6 +611,40 @@ body.board-monitor #board-root {
 .room-panel-section h3 {
   margin: 0 0 10px;
   color: #e5e7eb;
+}
+
+.room-panel-unsaved-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.58);
+}
+
+.room-panel-unsaved-dialog {
+  width: min(420px, calc(100vw - 56px));
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.55);
+  color: #e5e7eb;
+}
+
+.room-panel-unsaved-dialog h3 {
+  margin: 0 0 8px;
+}
+
+.room-panel-unsaved-dialog p {
+  margin: 0 0 12px;
+  color: #cbd5f5;
+}
+
+.room-panel-unsaved-dialog .toolbar {
+  justify-content: flex-end;
+  margin: 0;
 }
 
 .room-tile {
