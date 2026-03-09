@@ -411,28 +411,26 @@ body.board-monitor #board-root {
 }
 
 .board-shell.fullscreen-active .board-canvas {
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 18px;
-}
-
-.board-shell.fullscreen-active .board-tree {
-  height: 100%;
-  align-content: start;
-}
-
-.board-shell.fullscreen-active .lab-block {
-  align-self: end;
-  margin-top: 0;
-  padding-top: 44px;
-}
-
-.board-shell.fullscreen-active.fullscreen-compact .board-canvas {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   gap: 12px;
 }
 
+.board-shell.fullscreen-active .board-tree {
+  align-content: initial;
+}
+
+.board-shell.fullscreen-active .lab-block {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.board-shell.fullscreen-active.fullscreen-compact .board-canvas {
+  grid-template-rows: auto auto;
+  gap: 10px;
+}
+
 .board-shell.fullscreen-active.fullscreen-compact .lab-block {
-  padding-top: 36px;
+  padding-top: 0;
 }
 
 .tree-left-column .branch-pa1-aula {
@@ -766,6 +764,7 @@ body.board-monitor #board-root {
 }
 
 .board-tree {
+  grid-row: 1;
   display: grid;
   grid-template-columns: 470px 84px minmax(0, 1fr);
   gap: 14px;
@@ -950,6 +949,7 @@ body.board-monitor #board-root {
 }
 
 .lab-block {
+  grid-row: 2;
   margin-top: 2px;
 }
 
