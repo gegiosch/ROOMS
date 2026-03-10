@@ -142,6 +142,36 @@
         </div>
       </div>
 
+      <div id="panel-occupant-editor-modal" class="room-panel-unsaved-confirm" style="display:none;">
+        <div class="room-panel-unsaved-dialog occupant-editor-dialog">
+          <h3>Modifica occupante</h3>
+          <div class="occupant-editor-readonly">
+            <div class="occupant-editor-readonly-row">
+              <span class="muted">Orario</span>
+              <strong id="panel-occupant-editor-slot">-</strong>
+            </div>
+            <div class="occupant-editor-readonly-row">
+              <span class="muted">Voce</span>
+              <strong id="panel-occupant-editor-title">-</strong>
+            </div>
+          </div>
+          <div class="grid grid-2">
+            <div>
+              <label for="panel-occupant-editor-surname">Cognome</label>
+              <input class="input" type="text" id="panel-occupant-editor-surname" placeholder="Cognome">
+            </div>
+            <div>
+              <label for="panel-occupant-editor-name">Nome</label>
+              <input class="input" type="text" id="panel-occupant-editor-name" placeholder="Nome">
+            </div>
+          </div>
+          <div class="toolbar">
+            <button id="panel-occupant-editor-save" class="button" type="button">Salva</button>
+            <button id="panel-occupant-editor-cancel" class="button secondary" type="button">Annulla</button>
+          </div>
+        </div>
+      </div>
+
       <div id="aula-magna-editor-modal" class="room-panel-unsaved-confirm" style="display:none;">
         <div class="room-panel-unsaved-dialog aula-magna-editor-dialog">
           <h3>Editor Eventi Aula Magna</h3>
@@ -204,6 +234,13 @@
         var unsavedConfirmOverlay = document.getElementById('room-panel-unsaved-confirm');
         var unsavedConfirmYes = document.getElementById('room-panel-unsaved-yes');
         var unsavedConfirmNo = document.getElementById('room-panel-unsaved-no');
+        var occupantEditorModal = document.getElementById('panel-occupant-editor-modal');
+        var occupantEditorSlot = document.getElementById('panel-occupant-editor-slot');
+        var occupantEditorTitle = document.getElementById('panel-occupant-editor-title');
+        var occupantEditorSurname = document.getElementById('panel-occupant-editor-surname');
+        var occupantEditorName = document.getElementById('panel-occupant-editor-name');
+        var occupantEditorSave = document.getElementById('panel-occupant-editor-save');
+        var occupantEditorCancel = document.getElementById('panel-occupant-editor-cancel');
         var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
 
         var aulaEditorModal = document.getElementById('aula-magna-editor-modal');
@@ -227,6 +264,14 @@
             timetableDeletes: {},
             timetableUpdates: {}
           },
+          occupantEditor: {
+            mode: '',
+            bookingId: '',
+            slotKey: '',
+            title: '',
+            slotLabel: '',
+            existingPayload: null
+          },
           aulaEditor: {
             originalRows: [],
             rows: []
@@ -241,6 +286,62 @@
 
         function normalizeEmail_(value) {
           return String(value || '').trim().toLowerCase();
+        }
+
+        function normalizeNameToken_(value) {
+          return String(value || '').trim().replace(/\s+/g, ' ');
+        }
+
+        function toUpperSafe_(value) {
+          return normalizeNameToken_(value).toUpperCase();
+        }
+
+        function toNameCaseLocal_(value) {
+          var token = normalizeNameToken_(value).toLowerCase();
+          if (!token) {
+            return '';
+          }
+          return token.charAt(0).toUpperCase() + token.slice(1);
+        }
+
+        function deriveIdentityFromEmailLocal_(email) {
+          var localPart = normalizeEmail_(email).split('@')[0] || '';
+          var parts = localPart.split(/[._-]+/).filter(function (part) {
+            return Boolean(part);
+          });
+          return {
+            firstName: parts.length ? toNameCaseLocal_(parts[0]) : '',
+            surname: parts.length > 1 ? toNameCaseLocal_(parts[parts.length - 1]) : ''
+          };
+        }
+
+        function parseFullNameLocal_(value) {
+          var normalized = normalizeNameToken_(value);
+          if (!normalized) {
+            return { firstName: '', surname: '' };
+          }
+          var tokens = normalized.split(/\s+/);
+          if (tokens.length === 1) {
+            return { firstName: '', surname: toNameCaseLocal_(tokens[0]) };
+          }
+          return {
+            surname: toNameCaseLocal_(tokens[0]),
+            firstName: tokens.slice(1).map(function (token) {
+              return toNameCaseLocal_(token);
+            }).join(' ')
+          };
+        }
+
+        function formatOccupantLabel_(surname, name, fallback) {
+          var upperSurname = toUpperSafe_(surname);
+          var upperName = toUpperSafe_(name);
+          var joined = [upperSurname, upperName].filter(function (token) {
+            return Boolean(token);
+          }).join(' ');
+          if (joined) {
+            return joined;
+          }
+          return toUpperSafe_(fallback) || 'N/D';
         }
 
         function setText(id, value) {
@@ -698,6 +799,10 @@
           if (aulaEditorModal) {
             aulaEditorModal.style.display = 'none';
           }
+          if (occupantEditorModal) {
+            occupantEditorModal.style.display = 'none';
+          }
+          resetOccupantEditorState_();
           document.body.classList.remove('room-panel-open');
         }
 
@@ -726,9 +831,19 @@
             return '';
           }
           if (booking.SourceKind === 'TIMETABLE') {
-            return booking.TeacherName || booking.BookerName || booking.DisplayLabel || booking.ClassCode || booking.BookerSurname || 'N/D';
+            var timetablePair = parseFullNameLocal_(booking.TeacherName || booking.BookerName || '');
+            return formatOccupantLabel_(
+              timetablePair.surname || '',
+              timetablePair.firstName || '',
+              booking.TeacherName || booking.DisplayLabel || booking.ClassCode || booking.BookerSurname || 'N/D'
+            );
           }
-          return booking.BookerSurname || booking.BookerName || 'N/D';
+          var fromEmail = deriveIdentityFromEmailLocal_(booking.BookerEmail || '');
+          return formatOccupantLabel_(
+            booking.BookerSurname || fromEmail.surname || '',
+            booking.BookerName || fromEmail.firstName || '',
+            booking.DisplayLabel || booking.Title || booking.BookerEmail || 'N/D'
+          );
         }
 
         function bookingSourceNode_(booking) {
@@ -811,6 +926,7 @@
               Title: draft.title || '',
               BookerName: draft.bookerName || '',
               BookerSurname: draft.bookerSurname || '',
+              BookerEmail: draft.bookerEmail || '',
               SourceKind: 'USER_BOOKING',
               SourceType: 'USER_BOOKING',
               CanManage: true,
@@ -899,36 +1015,119 @@
           mount.appendChild(wrap);
         }
 
-        function promptBookingDraftValues_(initialValues, canEditIdentity) {
-          var initial = initialValues || {};
-          var title = window.prompt('Titolo prenotazione', initial.title || '');
-          if (title === null) {
-            return null;
+        function resetOccupantEditorState_() {
+          panelState.occupantEditor = {
+            mode: '',
+            bookingId: '',
+            slotKey: '',
+            title: '',
+            slotLabel: '',
+            existingPayload: null
+          };
+          if (occupantEditorSurname) {
+            occupantEditorSurname.value = '';
           }
-          var notes = window.prompt('Note (opzionale)', initial.notes || '');
-          if (notes === null) {
-            return null;
+          if (occupantEditorName) {
+            occupantEditorName.value = '';
           }
-          var bookerName = initial.bookerName || '';
-          var bookerSurname = initial.bookerSurname || '';
-          if (canEditIdentity) {
-            var nextName = window.prompt('Nome occupante', bookerName);
-            if (nextName === null) {
-              return null;
-            }
-            var nextSurname = window.prompt('Cognome occupante', bookerSurname);
-            if (nextSurname === null) {
-              return null;
-            }
-            bookerName = nextName;
-            bookerSurname = nextSurname;
+          if (occupantEditorSlot) {
+            occupantEditorSlot.textContent = '-';
+          }
+          if (occupantEditorTitle) {
+            occupantEditorTitle.textContent = '-';
+          }
+        }
+
+        function getEditableOccupantPair_(booking) {
+          if (!booking) {
+            return { surname: '', firstName: '' };
+          }
+          if (booking.SourceKind === 'TIMETABLE' && !booking._draftAction) {
+            return parseFullNameLocal_(booking.TeacherName || booking.BookerName || booking.DisplayLabel || '');
           }
           return {
-            title: title,
-            notes: notes,
-            bookerName: bookerName,
-            bookerSurname: bookerSurname
+            surname: normalizeNameToken_(booking.BookerSurname || ''),
+            firstName: normalizeNameToken_(booking.BookerName || '')
           };
+        }
+
+        function openOccupantEditor_(booking, mode, meta) {
+          if (!isAdminUser_(panelState.model) || !occupantEditorModal) {
+            return;
+          }
+          var occupant = getEditableOccupantPair_(booking);
+          panelState.occupantEditor = {
+            mode: mode || '',
+            bookingId: meta && meta.bookingId ? meta.bookingId : '',
+            slotKey: meta && meta.slotKey ? meta.slotKey : '',
+            title: booking && booking.Title ? booking.Title : '',
+            slotLabel: [booking && booking.StartTime ? booking.StartTime : '', booking && booking.EndTime ? booking.EndTime : ''].filter(function (token) {
+              return Boolean(token);
+            }).join(' - '),
+            existingPayload: meta && meta.payload ? meta.payload : {}
+          };
+          if (occupantEditorSurname) {
+            occupantEditorSurname.value = occupant.surname || '';
+          }
+          if (occupantEditorName) {
+            occupantEditorName.value = occupant.firstName || '';
+          }
+          if (occupantEditorSlot) {
+            occupantEditorSlot.textContent = panelState.occupantEditor.slotLabel || '-';
+          }
+          if (occupantEditorTitle) {
+            occupantEditorTitle.textContent = panelState.occupantEditor.title || '-';
+          }
+          occupantEditorModal.style.display = 'flex';
+        }
+
+        function closeOccupantEditor_() {
+          if (occupantEditorModal) {
+            occupantEditorModal.style.display = 'none';
+          }
+          resetOccupantEditorState_();
+        }
+
+        function saveOccupantEditor_() {
+          var editor = panelState.occupantEditor || {};
+          var surname = normalizeNameToken_(occupantEditorSurname && occupantEditorSurname.value);
+          var firstName = normalizeNameToken_(occupantEditorName && occupantEditorName.value);
+          if (!surname || !firstName) {
+            ROOMS_UI.setNotice(panelNotice, 'Inserire cognome e nome validi.', 'error');
+            return;
+          }
+
+          if (editor.mode === 'draft-create' && editor.slotKey) {
+            var currentDraft = panelState.draft.creates[editor.slotKey] || {};
+            panelState.draft.creates[editor.slotKey] = {
+              startTime: currentDraft.startTime,
+              endTime: currentDraft.endTime,
+              title: currentDraft.title,
+              notes: currentDraft.notes,
+              bookerEmail: currentDraft.bookerEmail || '',
+              bookerSurname: surname,
+              bookerName: firstName
+            };
+          } else if (editor.mode === 'booking-update' && editor.bookingId) {
+            panelState.draft.updates[editor.bookingId] = Object.assign({}, editor.existingPayload || {}, {
+              bookerSurname: surname,
+              bookerName: firstName
+            });
+            delete panelState.draft.deletes[editor.bookingId];
+          } else if (editor.mode === 'timetable-update' && editor.bookingId) {
+            panelState.draft.timetableUpdates[editor.bookingId] = Object.assign({}, editor.existingPayload || {}, {
+              bookerSurname: surname,
+              bookerName: firstName
+            });
+            delete panelState.draft.timetableDeletes[editor.bookingId];
+          } else {
+            return;
+          }
+
+          closeOccupantEditor_();
+          updateDraftUiState_();
+          renderRoomPanel(panelState.model);
+          ROOMS_UI.setNotice(panelNotice, 'Occupante aggiornato in bozza. Clicca Salva.', 'success');
         }
 
         function removeDraftCreate_(slotKey) {
@@ -955,27 +1154,9 @@
               var editDraftButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
               editDraftButton.type = 'button';
               editDraftButton.addEventListener('click', function () {
-                var draft = panelState.draft.creates[slotKey] || {};
-                var payload = promptBookingDraftValues_({
-                  title: draft.title || booking.Title || '',
-                  notes: draft.notes || booking.Notes || '',
-                  bookerName: draft.bookerName || booking.BookerName || '',
-                  bookerSurname: draft.bookerSurname || booking.BookerSurname || ''
-                }, true);
-                if (!payload) {
-                  return;
-                }
-                panelState.draft.creates[slotKey] = {
-                  startTime: booking.StartTime,
-                  endTime: booking.EndTime,
-                  title: payload.title,
-                  notes: payload.notes,
-                  bookerName: payload.bookerName,
-                  bookerSurname: payload.bookerSurname
-                };
-                updateDraftUiState_();
-                renderRoomPanel(panelState.model);
-                ROOMS_UI.setNotice(panelNotice, 'Bozza aggiornata.', 'success');
+                openOccupantEditor_(booking, 'draft-create', {
+                  slotKey: slotKey
+                });
               });
               wrap.appendChild(editDraftButton);
             }
@@ -999,33 +1180,17 @@
             return wrap;
           }
 
-          var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
-          editButton.type = 'button';
-          editButton.addEventListener('click', function () {
-            var initial = {
-              title: booking.Title || '',
-              notes: booking.Notes || '',
-              bookerName: booking.BookerName || '',
-              bookerSurname: booking.BookerSurname || ''
-            };
-            var payload = promptBookingDraftValues_(initial, Boolean(isAdmin));
-            if (!payload) {
-              return;
-            }
-
-            if (isTimetableRow) {
-              panelState.draft.timetableUpdates[booking.BookingId] = payload;
-              delete panelState.draft.timetableDeletes[booking.BookingId];
-              ROOMS_UI.setNotice(panelNotice, 'Modifica orario registrata in bozza. Clicca Salva.', 'success');
-            } else {
-              panelState.draft.updates[booking.BookingId] = payload;
-              delete panelState.draft.deletes[booking.BookingId];
-              ROOMS_UI.setNotice(panelNotice, 'Modifica registrata in bozza. Clicca Salva.', 'success');
-            }
-            updateDraftUiState_();
-            renderRoomPanel(panelState.model);
-          });
-          wrap.appendChild(editButton);
+          if (isAdmin) {
+            var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
+            editButton.type = 'button';
+            editButton.addEventListener('click', function () {
+              openOccupantEditor_(booking, isTimetableRow ? 'timetable-update' : 'booking-update', {
+                bookingId: booking.BookingId,
+                payload: isTimetableRow ? panelState.draft.timetableUpdates[booking.BookingId] : panelState.draft.updates[booking.BookingId]
+              });
+            });
+            wrap.appendChild(editButton);
+          }
 
           var deleteButton = ROOMS_UI.el('button', 'button warn', 'X');
           deleteButton.type = 'button';
@@ -1095,7 +1260,8 @@
               title: (panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || '',
               notes: '',
               bookerName: identity.firstName || '',
-              bookerSurname: identity.surname || ''
+              bookerSurname: identity.surname || '',
+              bookerEmail: identity.email || ''
             };
             delete panelState.selectedFreeSlotKeys[slotKey];
           });
@@ -1149,10 +1315,16 @@
 
         function getUserIdentity_(model) {
           var user = (model && model.user) || {};
+          var derived = deriveIdentityFromEmailLocal_(user.email || '');
+          var displayPair = parseFullNameLocal_(user.displayName || '');
+          var firstName = normalizeNameToken_(user.firstName) || displayPair.firstName || derived.firstName;
+          var surname = normalizeNameToken_(user.surname) || displayPair.surname || derived.surname;
           return {
-            firstName: user.firstName || '',
-            surname: user.surname || '',
-            fullName: ((user.firstName || '') + ' ' + (user.surname || '')).trim(),
+            firstName: firstName,
+            surname: surname,
+            fullName: [firstName, surname].filter(function (token) {
+              return Boolean(token);
+            }).join(' '),
             email: user.email || ''
           };
         }
@@ -1713,6 +1885,19 @@
         if (panelDraftApplyButton) {
           panelDraftApplyButton.addEventListener('click', moveSelectedSlotsToDraft_);
         }
+        if (occupantEditorSave) {
+          occupantEditorSave.addEventListener('click', saveOccupantEditor_);
+        }
+        if (occupantEditorCancel) {
+          occupantEditorCancel.addEventListener('click', closeOccupantEditor_);
+        }
+        if (occupantEditorModal) {
+          occupantEditorModal.addEventListener('click', function (event) {
+            if (event.target === occupantEditorModal) {
+              closeOccupantEditor_();
+            }
+          });
+        }
 
         if (panelEventsManage) {
           panelEventsManage.addEventListener('click', openAulaEditorModal_);
@@ -1793,6 +1978,10 @@
         window.addEventListener('keydown', function (event) {
           if (event.key === 'Escape' && simulationModal && simulationModal.style.display === 'flex') {
             closeSimulationModal_();
+            return;
+          }
+          if (event.key === 'Escape' && occupantEditorModal && occupantEditorModal.style.display === 'flex') {
+            closeOccupantEditor_();
             return;
           }
           if (event.key === 'Escape' && aulaEditorModal && aulaEditorModal.style.display === 'flex') {
