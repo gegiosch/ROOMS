@@ -301,6 +301,7 @@ ROOMS_APP.Schema = {
   syncResourcesFromCanonical_: function (headers, canonicalRows) {
     var sheetName = ROOMS_APP.SHEET_NAMES.RESOURCES;
     var canonicalOnlyRows = this.normalizeCanonicalResourceRows_(headers, canonicalRows);
+    var self = this;
     var existingById = {};
     ROOMS_APP.DB.readRows(sheetName).forEach(function (row) {
       var resourceId = ROOMS_APP.normalizeString(row.ResourceId);
@@ -312,14 +313,18 @@ ROOMS_APP.Schema = {
     canonicalOnlyRows.forEach(function (row) {
       var existing = existingById[ROOMS_APP.normalizeString(row.ResourceId)] || null;
       if (!existing) {
+        row.OpenTime = self.normalizeOptionalTimeValue_(row.OpenTime);
+        row.CloseTime = self.normalizeOptionalTimeValue_(row.CloseTime);
         return;
       }
-      if (!ROOMS_APP.normalizeString(row.OpenTime)) {
-        row.OpenTime = ROOMS_APP.normalizeString(existing.OpenTime);
+      if (!self.normalizeOptionalTimeValue_(row.OpenTime)) {
+        row.OpenTime = self.normalizeOptionalTimeValue_(existing.OpenTime);
       }
-      if (!ROOMS_APP.normalizeString(row.CloseTime)) {
-        row.CloseTime = ROOMS_APP.normalizeString(existing.CloseTime);
+      if (!self.normalizeOptionalTimeValue_(row.CloseTime)) {
+        row.CloseTime = self.normalizeOptionalTimeValue_(existing.CloseTime);
       }
+      row.OpenTime = self.normalizeOptionalTimeValue_(row.OpenTime);
+      row.CloseTime = self.normalizeOptionalTimeValue_(row.CloseTime);
     });
     // Canonical inventory is the single source of truth for ROOMS_RESOURCES.
     // Existing rows are fully rewritten, preserving only per-resource open/close overrides.
@@ -327,6 +332,7 @@ ROOMS_APP.Schema = {
   },
 
   normalizeCanonicalResourceRows_: function (headers, canonicalRows) {
+    var self = this;
     var seenResourceIds = {};
     var seenSortKeys = {};
     var normalizedRows = [];
@@ -336,6 +342,8 @@ ROOMS_APP.Schema = {
       headers.forEach(function (header) {
         row[header] = Object.prototype.hasOwnProperty.call(canonicalRow, header) ? canonicalRow[header] : '';
       });
+      row.OpenTime = self.normalizeOptionalTimeValue_(row.OpenTime);
+      row.CloseTime = self.normalizeOptionalTimeValue_(row.CloseTime);
 
       var resourceId = ROOMS_APP.normalizeString(row.ResourceId);
       var sortKey = ROOMS_APP.normalizeString(row.SortKey);
@@ -358,6 +366,30 @@ ROOMS_APP.Schema = {
     });
 
     return normalizedRows;
+  },
+
+  normalizeOptionalTimeValue_: function (value) {
+    if (value == null || value === '') {
+      return '';
+    }
+    if (typeof value === 'boolean') {
+      return '';
+    }
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return Utilities.formatDate(value, ROOMS_APP.getTimezone(), 'HH:mm');
+    }
+
+    var normalized = ROOMS_APP.normalizeString(value);
+    if (!normalized) {
+      return '';
+    }
+
+    var upper = normalized.toUpperCase();
+    if (upper === 'TRUE' || upper === 'FALSE') {
+      return '';
+    }
+
+    return /^\d{2}:\d{2}$/.test(normalized) ? normalized : '';
   },
 
   setPlainTextSheet_: function (sheet, sheetName) {
