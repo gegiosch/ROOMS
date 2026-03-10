@@ -189,7 +189,13 @@ ROOMS_APP.Booking = {
     }
 
     var normalizedChanges = this.normalizeBatchChanges_(changes);
-    if (!normalizedChanges.creates.length && !normalizedChanges.updates.length && !normalizedChanges.deletes.length) {
+    if (
+      !normalizedChanges.creates.length &&
+      !normalizedChanges.updates.length &&
+      !normalizedChanges.deletes.length &&
+      !normalizedChanges.timetableDeletes.length &&
+      !normalizedChanges.timetableUpdates.length
+    ) {
       return this.getRoomViewModel(targetResourceId, targetDate);
     }
     var self = this;
@@ -197,10 +203,65 @@ ROOMS_APP.Booking = {
     try {
       result = this.withBookingLock_(function () {
         var workingRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS);
+        var overrideRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES);
         var nowIso = ROOMS_APP.toIsoDateTime(new Date());
         var createdIds = [];
         var updatedIds = [];
         var deletedIds = [];
+        var overridesDirty = false;
+        var ignoredTimetableBookingIds = {};
+
+        function disableTimetableBooking_(bookingId, notes) {
+          if (!actor.isAdmin) {
+            throw new Error('Le occupazioni da orario sono gestibili solo da admin.');
+          }
+          var occurrence = self.resolveTimetableOccurrenceByBookingId_(targetResourceId, targetDate, bookingId);
+          if (!occurrence) {
+            throw new Error('Occupazione da orario non trovata.');
+          }
+          var overrideRow = self.buildTimetableDisableOverrideRow_(occurrence, targetResourceId, targetDate, notes, nowIso);
+          overrideRows = self.upsertOverrideRow_(overrideRows, overrideRow);
+          overridesDirty = true;
+          ignoredTimetableBookingIds[ROOMS_APP.normalizeString(bookingId)] = true;
+          return occurrence;
+        }
+
+        normalizedChanges.timetableDeletes.forEach(function (entry) {
+          var bookingId = ROOMS_APP.normalizeString(entry.bookingId);
+          if (!bookingId) {
+            return;
+          }
+          disableTimetableBooking_(bookingId, entry.notes);
+          deletedIds.push(bookingId);
+        });
+
+        normalizedChanges.timetableUpdates.forEach(function (entry) {
+          var bookingId = ROOMS_APP.normalizeString(entry.bookingId);
+          if (!bookingId) {
+            return;
+          }
+          var occurrence = disableTimetableBooking_(bookingId, '');
+          var payload = entry.payload || {};
+          var request = {
+            bookingId: '',
+            seriesId: '',
+            resourceId: targetResourceId,
+            bookingDate: targetDate,
+            startTime: occurrence.StartTime,
+            endTime: occurrence.EndTime,
+            title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : occurrence.Title,
+            notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : occurrence.Notes,
+            bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : occurrence.BookerName,
+            bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : occurrence.BookerSurname
+          };
+          var validation = self.validateAgainstWorkingRows_(request, actor, workingRows, '', ignoredTimetableBookingIds);
+          var newBookingId = validation.normalized.bookingId || Utilities.getUuid();
+          var seriesId = validation.normalized.seriesId || '';
+          var booking = self.buildBookingFromValidation_(newBookingId, seriesId, validation, actor, nowIso, null);
+          workingRows.push(booking);
+          createdIds.push(newBookingId);
+          updatedIds.push(bookingId);
+        });
 
         normalizedChanges.deletes.forEach(function (entry) {
           var bookingId = ROOMS_APP.normalizeString(entry.bookingId);
@@ -270,7 +331,7 @@ ROOMS_APP.Booking = {
             throw new Error('Cannot move booking to a different room from this panel.');
           }
 
-          var validation = self.validateAgainstWorkingRows_(request, actor, workingRows, existing.BookingId);
+          var validation = self.validateAgainstWorkingRows_(request, actor, workingRows, existing.BookingId, ignoredTimetableBookingIds);
           var next = self.buildBookingFromValidation_(
             existing.BookingId,
             validation.normalized.seriesId || existing.SeriesId || '',
@@ -303,7 +364,7 @@ ROOMS_APP.Booking = {
             bookerName: payload.bookerName,
             bookerSurname: payload.bookerSurname
           };
-          var validation = self.validateAgainstWorkingRows_(request, actor, workingRows, '');
+          var validation = self.validateAgainstWorkingRows_(request, actor, workingRows, '', ignoredTimetableBookingIds);
           var bookingId = validation.normalized.bookingId || Utilities.getUuid();
           var seriesId = validation.normalized.seriesId || '';
           var booking = self.buildBookingFromValidation_(bookingId, seriesId, validation, actor, nowIso, null);
@@ -311,12 +372,23 @@ ROOMS_APP.Booking = {
           createdIds.push(bookingId);
         });
 
-        var headers = ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.BOOKINGS);
-        ROOMS_APP.DB.replaceRows(ROOMS_APP.SHEET_NAMES.BOOKINGS, headers, workingRows);
+        ROOMS_APP.DB.replaceRows(
+          ROOMS_APP.SHEET_NAMES.BOOKINGS,
+          ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.BOOKINGS),
+          workingRows
+        );
+        if (overridesDirty) {
+          ROOMS_APP.DB.replaceRows(
+            ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES,
+            ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES),
+            overrideRows
+          );
+        }
         return {
           createdIds: createdIds,
           updatedIds: updatedIds,
-          deletedIds: deletedIds
+          deletedIds: deletedIds,
+          overridesUpdated: overridesDirty
         };
       });
     } catch (error) {
@@ -335,6 +407,7 @@ ROOMS_APP.Booking = {
       createdCount: result.createdIds.length,
       updatedCount: result.updatedIds.length,
       deletedCount: result.deletedIds.length,
+      overridesUpdated: Boolean(result.overridesUpdated),
       createdIds: result.createdIds,
       updatedIds: result.updatedIds,
       deletedIds: result.deletedIds
@@ -841,7 +914,7 @@ ROOMS_APP.Booking = {
     return String(errorMessage || '').indexOf('conflicts with an existing booking') >= 0;
   },
 
-  validateAgainstWorkingRows_: function (request, actor, workingRows, ignoreBookingId) {
+  validateAgainstWorkingRows_: function (request, actor, workingRows, ignoreBookingId, ignoredTimetableBookingIds) {
     var validation = ROOMS_APP.Policy.validateBookingRequest(request, actor);
     var nonConflictErrors = (validation.errors || []).filter(function (errorMessage) {
       return !ROOMS_APP.Booking.isConflictError_(errorMessage);
@@ -863,7 +936,8 @@ ROOMS_APP.Booking = {
       normalized.resourceId,
       normalized.bookingDate,
       normalized.startTime,
-      normalized.endTime
+      normalized.endTime,
+      ignoredTimetableBookingIds
     );
 
     if (hasWorkingRowConflict || hasTimetableConflict) {
@@ -894,10 +968,69 @@ ROOMS_APP.Booking = {
     });
   },
 
-  hasTimetableConflict_: function (resourceId, bookingDate, startTime, endTime) {
+  hasTimetableConflict_: function (resourceId, bookingDate, startTime, endTime, ignoredTimetableBookingIds) {
+    var ignored = ignoredTimetableBookingIds || {};
     return ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, bookingDate).some(function (occupancy) {
+      var bookingId = ROOMS_APP.normalizeString(occupancy.BookingId);
+      if (bookingId && ignored[bookingId]) {
+        return false;
+      }
       return !(endTime <= occupancy.StartTime || startTime >= occupancy.EndTime);
     });
+  },
+
+  resolveTimetableOccurrenceByBookingId_: function (resourceId, bookingDate, bookingId) {
+    var normalizedBookingId = ROOMS_APP.normalizeString(bookingId);
+    if (!normalizedBookingId) {
+      return null;
+    }
+    return ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, bookingDate).filter(function (row) {
+      return ROOMS_APP.normalizeString(row.BookingId) === normalizedBookingId;
+    })[0] || null;
+  },
+
+  buildTimetableDisableRuleValue_: function (occurrence) {
+    return [
+      ROOMS_APP.normalizeString(occurrence && occurrence.OccupancyId),
+      ROOMS_APP.normalizeString(occurrence && occurrence.StartTime),
+      ROOMS_APP.normalizeString(occurrence && occurrence.EndTime)
+    ].join('|');
+  },
+
+  buildTimetableDisableOverrideRow_: function (occurrence, resourceId, bookingDate, notes, nowIso) {
+    var normalizedResource = ROOMS_APP.normalizeString(resourceId);
+    var normalizedDate = ROOMS_APP.toIsoDate(bookingDate || new Date());
+    var ruleValue = this.buildTimetableDisableRuleValue_(occurrence);
+    var overrideId = 'OVR_TT_' + ROOMS_APP.slugify([
+      normalizedResource,
+      normalizedDate,
+      ruleValue
+    ].join('|'));
+    return {
+      OverrideId: overrideId,
+      ResourceId: normalizedResource,
+      BookingDate: normalizedDate,
+      StartTime: ROOMS_APP.normalizeString(occurrence && occurrence.StartTime),
+      EndTime: ROOMS_APP.normalizeString(occurrence && occurrence.EndTime),
+      RuleKey: 'TIMETABLE_DISABLED',
+      RuleValue: ruleValue,
+      IsEnabled: 'TRUE',
+      Notes: ROOMS_APP.normalizeString(notes || ('Auto ' + nowIso))
+    };
+  },
+
+  upsertOverrideRow_: function (rows, nextRow) {
+    var output = (rows || []).slice();
+    var targetId = ROOMS_APP.normalizeString(nextRow && nextRow.OverrideId);
+    var index;
+    for (index = 0; index < output.length; index += 1) {
+      if (ROOMS_APP.normalizeString(output[index] && output[index].OverrideId) === targetId) {
+        output[index] = nextRow;
+        return output;
+      }
+    }
+    output.push(nextRow);
+    return output;
   },
 
   findBookingIndexById_: function (rows, bookingId) {
@@ -919,7 +1052,9 @@ ROOMS_APP.Booking = {
     var normalized = {
       creates: [],
       updates: [],
-      deletes: []
+      deletes: [],
+      timetableDeletes: [],
+      timetableUpdates: []
     };
 
     (Array.isArray(source.creates) ? source.creates : []).forEach(function (entry) {
@@ -937,6 +1072,18 @@ ROOMS_APP.Booking = {
       normalized.deletes.push({
         bookingId: ROOMS_APP.normalizeString(entry && entry.bookingId),
         notes: entry && Object.prototype.hasOwnProperty.call(entry, 'notes') ? entry.notes : ''
+      });
+    });
+    (Array.isArray(source.timetableDeletes) ? source.timetableDeletes : []).forEach(function (entry) {
+      normalized.timetableDeletes.push({
+        bookingId: ROOMS_APP.normalizeString(entry && entry.bookingId),
+        notes: entry && Object.prototype.hasOwnProperty.call(entry, 'notes') ? entry.notes : ''
+      });
+    });
+    (Array.isArray(source.timetableUpdates) ? source.timetableUpdates : []).forEach(function (entry) {
+      normalized.timetableUpdates.push({
+        bookingId: ROOMS_APP.normalizeString(entry && entry.bookingId),
+        payload: entry && entry.payload && typeof entry.payload === 'object' ? entry.payload : {}
       });
     });
 

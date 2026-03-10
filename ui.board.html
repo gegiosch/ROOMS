@@ -109,7 +109,10 @@
         </section>
 
         <section id="panel-daily-slots-section" class="panel table-card room-panel-section">
-          <h3>Slot del giorno</h3>
+          <div class="room-panel-events-header">
+            <h3>Slot del giorno ancora disponibili</h3>
+            <button class="button secondary" id="panel-draft-apply" type="button">Aggiorna prenotazione selezionata</button>
+          </div>
           <div id="panel-daily-slots-table"></div>
         </section>
 
@@ -126,18 +129,6 @@
           <div id="panel-events-table"></div>
         </section>
 
-        <section id="panel-booking-form-section" class="panel form-card room-panel-section">
-          <h3>Dati prenotazione</h3>
-          <div class="grid">
-            <input class="input" type="text" id="panel-booking-title" placeholder="Titolo prenotazione">
-            <div class="grid grid-2">
-              <input class="input" type="text" id="panel-booking-name" placeholder="Nome">
-              <input class="input" type="text" id="panel-booking-surname" placeholder="Cognome">
-            </div>
-            <textarea class="textarea" id="panel-booking-notes" placeholder="Note"></textarea>
-            <button class="button secondary" id="panel-booking-submit" type="button" disabled>Aggiorna prenotazione selezionata</button>
-          </div>
-        </section>
       </aside>
 
       <div id="room-panel-unsaved-confirm" class="room-panel-unsaved-confirm" style="display:none;">
@@ -209,11 +200,10 @@
         var panelSaveAllButton = document.getElementById('panel-save-all');
         var panelDirtyFlag = document.getElementById('panel-dirty-flag');
         var panelEventsManage = document.getElementById('panel-events-manage');
-        var panelBookingFormSection = document.getElementById('panel-booking-form-section');
+        var panelDraftApplyButton = document.getElementById('panel-draft-apply');
         var unsavedConfirmOverlay = document.getElementById('room-panel-unsaved-confirm');
         var unsavedConfirmYes = document.getElementById('room-panel-unsaved-yes');
         var unsavedConfirmNo = document.getElementById('room-panel-unsaved-no');
-        var bookingSubmitButton = document.getElementById('panel-booking-submit');
         var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
 
         var aulaEditorModal = document.getElementById('aula-magna-editor-modal');
@@ -229,11 +219,13 @@
           isOpen: false,
           resourceId: '',
           model: null,
-          editingBookingId: '',
           selectedFreeSlotKeys: {},
           draft: {
+            creates: {},
             updates: {},
-            deletes: {}
+            deletes: {},
+            timetableDeletes: {},
+            timetableUpdates: {}
           },
           aulaEditor: {
             originalRows: [],
@@ -642,23 +634,23 @@
         }
 
         function clearDraftState_() {
-          panelState.draft = { updates: {}, deletes: {} };
+          panelState.draft = { creates: {}, updates: {}, deletes: {}, timetableDeletes: {}, timetableUpdates: {} };
           panelState.selectedFreeSlotKeys = {};
-          panelState.editingBookingId = '';
           pendingDiscardAction = null;
           pendingDiscardRollbackDate = '';
           if (unsavedConfirmOverlay) {
             unsavedConfirmOverlay.style.display = 'none';
           }
-          setBookingSubmitLabel_();
           updateDraftUiState_();
         }
 
         function hasPendingDraftChanges_() {
           return Boolean(
+            Object.keys(panelState.draft.creates || {}).length ||
             Object.keys(panelState.draft.updates || {}).length ||
             Object.keys(panelState.draft.deletes || {}).length ||
-            Object.keys(panelState.selectedFreeSlotKeys || {}).length
+            Object.keys(panelState.draft.timetableDeletes || {}).length ||
+            Object.keys(panelState.draft.timetableUpdates || {}).length
           );
         }
 
@@ -670,6 +662,16 @@
           if (panelSaveAllButton) {
             panelSaveAllButton.disabled = !dirty;
           }
+          updateDraftApplyButtonState_();
+        }
+
+        function updateDraftApplyButtonState_() {
+          if (!panelDraftApplyButton) {
+            return;
+          }
+          var canApply = !Boolean(panelState.model && panelState.model.isAulaMagna) &&
+            Boolean(Object.keys(panelState.selectedFreeSlotKeys || {}).length);
+          panelDraftApplyButton.disabled = !canApply;
         }
 
         function ensureCanDiscardDraft_(onDiscard) {
@@ -713,6 +715,9 @@
           if (!booking) {
             return '';
           }
+          if (booking._draftAction) {
+            return 'BOZZA';
+          }
           return booking.SourceKind === 'TIMETABLE' ? 'ORARIO' : 'PRENOTAZIONE';
         }
 
@@ -726,6 +731,14 @@
           return booking.BookerSurname || booking.BookerName || 'N/D';
         }
 
+        function bookingSourceNode_(booking) {
+          var label = occupancySourceLabel_(booking);
+          if (booking && booking._draftAction) {
+            return ROOMS_UI.el('span', 'status-pill', label);
+          }
+          return label;
+        }
+
         function mergeDraftOnBookings_(bookings) {
           var byId = {};
           safeArray(bookings).forEach(function (booking) {
@@ -735,6 +748,9 @@
           });
 
           Object.keys(panelState.draft.deletes || {}).forEach(function (bookingId) {
+            delete byId[bookingId];
+          });
+          Object.keys(panelState.draft.timetableDeletes || {}).forEach(function (bookingId) {
             delete byId[bookingId];
           });
           Object.keys(panelState.draft.updates || {}).forEach(function (bookingId) {
@@ -751,6 +767,57 @@
             next._draftAction = 'UPDATE';
             byId[bookingId] = next;
           });
+          Object.keys(panelState.draft.timetableUpdates || {}).forEach(function (bookingId) {
+            if (!byId[bookingId]) {
+              return;
+            }
+            var payload = panelState.draft.timetableUpdates[bookingId] || {};
+            var next = {};
+            Object.keys(byId[bookingId]).forEach(function (key) {
+              next[key] = byId[bookingId][key];
+            });
+            if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
+              next.Title = payload.title;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'notes')) {
+              next.Notes = payload.notes;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'bookerName')) {
+              next.BookerName = payload.bookerName;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'bookerSurname')) {
+              next.BookerSurname = payload.bookerSurname;
+            }
+            next.SourceKind = 'USER_BOOKING';
+            next.SourceType = 'USER_BOOKING';
+            next.IsReadOnly = false;
+            next.CanManage = true;
+            next._draftAction = 'TIMETABLE_UPDATE';
+            byId[bookingId] = next;
+          });
+
+          Object.keys(panelState.draft.creates || {}).forEach(function (slotKey) {
+            var draft = panelState.draft.creates[slotKey];
+            if (!draft) {
+              return;
+            }
+            byId['DRAFT_CREATE_' + slotKey] = {
+              BookingId: 'DRAFT_CREATE_' + slotKey,
+              SeriesId: '',
+              ResourceId: panelState.resourceId || '',
+              BookingDate: (panelState.model && panelState.model.date) || '',
+              StartTime: draft.startTime,
+              EndTime: draft.endTime,
+              Title: draft.title || '',
+              BookerName: draft.bookerName || '',
+              BookerSurname: draft.bookerSurname || '',
+              SourceKind: 'USER_BOOKING',
+              SourceType: 'USER_BOOKING',
+              CanManage: true,
+              IsReadOnly: false,
+              _draftAction: 'CREATE'
+            };
+          });
 
           return Object.keys(byId).map(function (bookingId) {
             return byId[bookingId];
@@ -762,6 +829,34 @@
               return 1;
             }
             return String(left.BookingId || '').localeCompare(String(right.BookingId || ''));
+          });
+        }
+
+        function getAvailableFreeSlots_(model, mergedBookings) {
+          var candidateSlots = safeArray(model && (model.slots || model.dailySlots || model.freeSlots));
+          if (!candidateSlots.length) {
+            candidateSlots = safeArray(model && model.freeSlots);
+          }
+          var occupiedSlotKeys = {};
+          safeArray(mergedBookings).forEach(function (booking) {
+            var startTime = booking && booking.StartTime;
+            var endTime = booking && booking.EndTime;
+            if (startTime && endTime) {
+              occupiedSlotKeys[normalizeSlotKey_(startTime, endTime)] = true;
+            }
+          });
+          var draftCreates = panelState.draft.creates || {};
+          return candidateSlots.filter(function (slot) {
+            var key = normalizeSlotKey_(slot.startTime, slot.endTime);
+            if (!key || !slot.startTime || !slot.endTime) {
+              return false;
+            }
+            return !occupiedSlotKeys[key] && !draftCreates[key];
+          }).map(function (slot) {
+            return {
+              startTime: slot.startTime,
+              endTime: slot.endTime
+            };
           });
         }
 
@@ -804,21 +899,102 @@
           mount.appendChild(wrap);
         }
 
-        function setBookingSubmitLabel_() {
-          if (!bookingSubmitButton) {
-            return;
+        function promptBookingDraftValues_(initialValues, canEditIdentity) {
+          var initial = initialValues || {};
+          var title = window.prompt('Titolo prenotazione', initial.title || '');
+          if (title === null) {
+            return null;
           }
-          bookingSubmitButton.disabled = !panelState.editingBookingId;
-          bookingSubmitButton.textContent = panelState.editingBookingId ? 'Aggiorna prenotazione selezionata' : 'Aggiorna prenotazione selezionata';
+          var notes = window.prompt('Note (opzionale)', initial.notes || '');
+          if (notes === null) {
+            return null;
+          }
+          var bookerName = initial.bookerName || '';
+          var bookerSurname = initial.bookerSurname || '';
+          if (canEditIdentity) {
+            var nextName = window.prompt('Nome occupante', bookerName);
+            if (nextName === null) {
+              return null;
+            }
+            var nextSurname = window.prompt('Cognome occupante', bookerSurname);
+            if (nextSurname === null) {
+              return null;
+            }
+            bookerName = nextName;
+            bookerSurname = nextSurname;
+          }
+          return {
+            title: title,
+            notes: notes,
+            bookerName: bookerName,
+            bookerSurname: bookerSurname
+          };
+        }
+
+        function removeDraftCreate_(slotKey) {
+          delete panelState.draft.creates[slotKey];
+          updateDraftUiState_();
+          renderRoomPanel(panelState.model);
+          ROOMS_UI.setNotice(panelNotice, 'Prenotazione in bozza rimossa.', 'success');
         }
 
         function bookingActionsNode(booking) {
           var wrap = ROOMS_UI.el('div', 'chip-row');
-          if (!booking || booking.SourceKind === 'TIMETABLE') {
+          if (!booking) {
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Sola lettura'));
             return wrap;
           }
-          if (!booking.CanManage) {
+
+          var isAdmin = isAdminUser_(panelState.model);
+          var isTimetableRow = booking.SourceKind === 'TIMETABLE' || booking._draftAction === 'TIMETABLE_UPDATE';
+          var isDraftCreate = booking._draftAction === 'CREATE' && String(booking.BookingId || '').indexOf('DRAFT_CREATE_') === 0;
+          var slotKey = isDraftCreate ? String(booking.BookingId || '').replace('DRAFT_CREATE_', '') : '';
+
+          if (isDraftCreate) {
+            if (isAdmin) {
+              var editDraftButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
+              editDraftButton.type = 'button';
+              editDraftButton.addEventListener('click', function () {
+                var draft = panelState.draft.creates[slotKey] || {};
+                var payload = promptBookingDraftValues_({
+                  title: draft.title || booking.Title || '',
+                  notes: draft.notes || booking.Notes || '',
+                  bookerName: draft.bookerName || booking.BookerName || '',
+                  bookerSurname: draft.bookerSurname || booking.BookerSurname || ''
+                }, true);
+                if (!payload) {
+                  return;
+                }
+                panelState.draft.creates[slotKey] = {
+                  startTime: booking.StartTime,
+                  endTime: booking.EndTime,
+                  title: payload.title,
+                  notes: payload.notes,
+                  bookerName: payload.bookerName,
+                  bookerSurname: payload.bookerSurname
+                };
+                updateDraftUiState_();
+                renderRoomPanel(panelState.model);
+                ROOMS_UI.setNotice(panelNotice, 'Bozza aggiornata.', 'success');
+              });
+              wrap.appendChild(editDraftButton);
+            }
+
+            var removeDraftButton = ROOMS_UI.el('button', 'button warn', 'X');
+            removeDraftButton.type = 'button';
+            removeDraftButton.addEventListener('click', function () {
+              removeDraftCreate_(slotKey);
+            });
+            wrap.appendChild(removeDraftButton);
+            return wrap;
+          }
+
+          if (isTimetableRow && !isAdmin) {
+            wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Sola lettura'));
+            return wrap;
+          }
+
+          if (!booking.CanManage && !isAdmin) {
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Solo proprietario/Admin'));
             return wrap;
           }
@@ -826,28 +1002,47 @@
           var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
           editButton.type = 'button';
           editButton.addEventListener('click', function () {
-            panelState.editingBookingId = booking.BookingId || '';
-            document.getElementById('panel-booking-title').value = booking.Title || '';
-            document.getElementById('panel-booking-notes').value = booking.Notes || '';
-            if (isAdminUser_(panelState.model)) {
-              document.getElementById('panel-booking-name').value = booking.BookerName || '';
-              document.getElementById('panel-booking-surname').value = booking.BookerSurname || '';
+            var initial = {
+              title: booking.Title || '',
+              notes: booking.Notes || '',
+              bookerName: booking.BookerName || '',
+              bookerSurname: booking.BookerSurname || ''
+            };
+            var payload = promptBookingDraftValues_(initial, Boolean(isAdmin));
+            if (!payload) {
+              return;
             }
-            setBookingSubmitLabel_();
-            ROOMS_UI.setNotice(panelNotice, 'Prenotazione in modifica. Aggiorna i campi e conferma.', '');
+
+            if (isTimetableRow) {
+              panelState.draft.timetableUpdates[booking.BookingId] = payload;
+              delete panelState.draft.timetableDeletes[booking.BookingId];
+              ROOMS_UI.setNotice(panelNotice, 'Modifica orario registrata in bozza. Clicca Salva.', 'success');
+            } else {
+              panelState.draft.updates[booking.BookingId] = payload;
+              delete panelState.draft.deletes[booking.BookingId];
+              ROOMS_UI.setNotice(panelNotice, 'Modifica registrata in bozza. Clicca Salva.', 'success');
+            }
+            updateDraftUiState_();
+            renderRoomPanel(panelState.model);
           });
           wrap.appendChild(editButton);
 
-          var deleteButton = ROOMS_UI.el('button', 'button warn', 'Elimina');
+          var deleteButton = ROOMS_UI.el('button', 'button warn', 'X');
           deleteButton.type = 'button';
           deleteButton.addEventListener('click', function () {
             if (!window.confirm('Confermare eliminazione prenotazione?')) {
               return;
             }
-            panelState.draft.deletes[booking.BookingId] = true;
-            delete panelState.draft.updates[booking.BookingId];
-            panelState.editingBookingId = '';
-            setBookingSubmitLabel_();
+            if (isTimetableRow) {
+              panelState.draft.timetableDeletes[booking.BookingId] = {
+                bookingId: booking.BookingId,
+                notes: ''
+              };
+              delete panelState.draft.timetableUpdates[booking.BookingId];
+            } else {
+              panelState.draft.deletes[booking.BookingId] = true;
+              delete panelState.draft.updates[booking.BookingId];
+            }
             updateDraftUiState_();
             renderRoomPanel(panelState.model);
             ROOMS_UI.setNotice(panelNotice, 'Eliminazione in bozza registrata. Clicca Salva.', 'success');
@@ -872,11 +1067,41 @@
             } else {
               delete panelState.selectedFreeSlotKeys[key];
             }
-            updateDraftUiState_();
+            updateDraftApplyButtonState_();
           });
           wrap.appendChild(checkbox);
           wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Seleziona'));
           return wrap;
+        }
+
+        function moveSelectedSlotsToDraft_() {
+          if (!panelState.model) {
+            return;
+          }
+          var availableSlots = getAvailableFreeSlots_(panelState.model, mergeDraftOnBookings_(panelState.model.bookings));
+          var selected = availableSlots.filter(function (slot) {
+            return Boolean(panelState.selectedFreeSlotKeys[normalizeSlotKey_(slot.startTime, slot.endTime)]);
+          });
+          if (!selected.length) {
+            ROOMS_UI.setNotice(panelNotice, 'Seleziona almeno uno slot libero da aggiungere alla bozza.', '');
+            return;
+          }
+          var identity = getUserIdentity_(panelState.model);
+          selected.forEach(function (slot) {
+            var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
+            panelState.draft.creates[slotKey] = {
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              title: (panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || '',
+              notes: '',
+              bookerName: identity.firstName || '',
+              bookerSurname: identity.surname || ''
+            };
+            delete panelState.selectedFreeSlotKeys[slotKey];
+          });
+          updateDraftUiState_();
+          renderRoomPanel(panelState.model);
+          ROOMS_UI.setNotice(panelNotice, 'Slot selezionati spostati in Prenotazioni del giorno (bozza).', 'success');
         }
 
         function formatEventDateLine_(eventDate) {
@@ -932,32 +1157,23 @@
           };
         }
 
-        function applyIdentityInputsFromModel_(model) {
-          var identity = getUserIdentity_(model);
-          var nameInput = document.getElementById('panel-booking-name');
-          var surnameInput = document.getElementById('panel-booking-surname');
-          if (!nameInput || !surnameInput) {
-            return;
-          }
-          if (!nameInput.value) {
-            nameInput.value = identity.firstName;
-          }
-          if (!surnameInput.value) {
-            surnameInput.value = identity.surname;
-          }
-          var editable = isAdminUser_(model);
-          nameInput.disabled = !editable;
-          surnameInput.disabled = !editable;
-        }
-
         function renderRoomPanel(model) {
           var effectiveModel = model || {};
           var room = effectiveModel.resource || null;
           var roomFound = Boolean(room && room.ResourceId);
           var isAulaMagna = Boolean(effectiveModel.isAulaMagna);
           var bookings = mergeDraftOnBookings_(effectiveModel.bookings);
-          var freeSlots = safeArray(effectiveModel.freeSlots);
+          var freeSlots = getAvailableFreeSlots_(effectiveModel, bookings);
           var identity = getUserIdentity_(effectiveModel);
+          var freeSlotKeySet = {};
+          freeSlots.forEach(function (slot) {
+            freeSlotKeySet[normalizeSlotKey_(slot.startTime, slot.endTime)] = true;
+          });
+          Object.keys(panelState.selectedFreeSlotKeys || {}).forEach(function (slotKey) {
+            if (!freeSlotKeySet[slotKey]) {
+              delete panelState.selectedFreeSlotKeys[slotKey];
+            }
+          });
 
           setText('panel-room-title', roomFound ? room.DisplayName : 'Aula non trovata');
           setText('panel-room-meta', roomFound
@@ -1012,9 +1228,9 @@
             bookings.map(function (booking) {
               return [
                 '🕒 ' + (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
-                booking.Title || '-',
+                booking.Title || (booking._draftAction === 'CREATE' ? '(bozza)' : '-'),
                 occupancyDisplayActor_(booking),
-                occupancySourceLabel_(booking),
+                bookingSourceNode_(booking),
                 bookingActionsNode(booking)
               ];
             }),
@@ -1029,13 +1245,8 @@
           if (bookingsDaySection) {
             bookingsDaySection.style.display = isAulaMagna ? 'none' : 'block';
           }
-          if (panelBookingFormSection) {
-            panelBookingFormSection.style.display = isAulaMagna ? 'none' : 'block';
-          }
 
           renderAulaMagnaEventsSection_(effectiveModel, roomFound);
-          applyIdentityInputsFromModel_(effectiveModel);
-          setBookingSubmitLabel_();
           updateDraftUiState_();
         }
 
@@ -1131,22 +1342,15 @@
           var fromDate = (panelIntervalFrom && panelIntervalFrom.value) || selectedDate;
           var toDate = (panelIntervalTo && panelIntervalTo.value) || selectedDate;
           var intervalDates = buildIntervalDates_(fromDate, toDate);
-          var freeSlots = safeArray(model.freeSlots);
-          var selectedSlots = freeSlots.filter(function (slot) {
-            return panelState.selectedFreeSlotKeys[normalizeSlotKey_(slot.startTime, slot.endTime)];
-          });
           var identity = getUserIdentity_(model);
-          var createName = document.getElementById('panel-booking-name').value || identity.firstName;
-          var createSurname = document.getElementById('panel-booking-surname').value || identity.surname;
-          if (!isAdminUser_(model)) {
-            createName = identity.firstName;
-            createSurname = identity.surname;
-          }
+          var isAdmin = isAdminUser_(model);
+          var draftCreates = panelState.draft.creates || {};
 
           var creates = [];
           var seen = {};
           intervalDates.forEach(function (isoDate) {
-            selectedSlots.forEach(function (slot) {
+            Object.keys(draftCreates).forEach(function (slotKey) {
+              var slot = draftCreates[slotKey] || {};
               var key = isoDate + '|' + slot.startTime + '|' + slot.endTime;
               if (seen[key]) {
                 return;
@@ -1157,10 +1361,10 @@
                 bookingDate: isoDate,
                 startTime: slot.startTime,
                 endTime: slot.endTime,
-                title: document.getElementById('panel-booking-title').value,
-                notes: document.getElementById('panel-booking-notes').value,
-                bookerName: createName,
-                bookerSurname: createSurname
+                title: slot.title || '',
+                notes: slot.notes || '',
+                bookerName: isAdmin ? (slot.bookerName || identity.firstName) : identity.firstName,
+                bookerSurname: isAdmin ? (slot.bookerSurname || identity.surname) : identity.surname
               });
             });
           });
@@ -1174,11 +1378,22 @@
           var deletes = Object.keys(panelState.draft.deletes || {}).map(function (bookingId) {
             return { bookingId: bookingId };
           });
+          var timetableDeletes = Object.keys(panelState.draft.timetableDeletes || {}).map(function (bookingId) {
+            return { bookingId: bookingId };
+          });
+          var timetableUpdates = Object.keys(panelState.draft.timetableUpdates || {}).map(function (bookingId) {
+            return {
+              bookingId: bookingId,
+              payload: panelState.draft.timetableUpdates[bookingId]
+            };
+          });
 
           return {
             creates: creates,
             updates: updates,
-            deletes: deletes
+            deletes: deletes,
+            timetableDeletes: timetableDeletes,
+            timetableUpdates: timetableUpdates
           };
         }
 
@@ -1196,7 +1411,13 @@
             ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Intervallo non valido', 'error');
             return Promise.reject(error);
           }
-          if (!payload.creates.length && !payload.updates.length && !payload.deletes.length) {
+          if (
+            !payload.creates.length &&
+            !payload.updates.length &&
+            !payload.deletes.length &&
+            !payload.timetableDeletes.length &&
+            !payload.timetableUpdates.length
+          ) {
             ROOMS_UI.setNotice(panelNotice, 'Nessuna modifica da salvare.', '');
             return Promise.resolve();
           }
@@ -1489,28 +1710,8 @@
             requestPanelDateReload_((panelDateInput && panelDateInput.value) || toIsoDate_(new Date()), true);
           });
         }
-
-        if (bookingSubmitButton) {
-          bookingSubmitButton.addEventListener('click', function () {
-            if (!panelState.editingBookingId) {
-              return;
-            }
-            var payload = {
-              title: document.getElementById('panel-booking-title').value,
-              notes: document.getElementById('panel-booking-notes').value
-            };
-            if (isAdminUser_(panelState.model)) {
-              payload.bookerName = document.getElementById('panel-booking-name').value;
-              payload.bookerSurname = document.getElementById('panel-booking-surname').value;
-            }
-            panelState.draft.updates[panelState.editingBookingId] = payload;
-            delete panelState.draft.deletes[panelState.editingBookingId];
-            panelState.editingBookingId = '';
-            setBookingSubmitLabel_();
-            updateDraftUiState_();
-            renderRoomPanel(panelState.model);
-            ROOMS_UI.setNotice(panelNotice, 'Modifica in bozza registrata. Clicca Salva.', 'success');
-          });
+        if (panelDraftApplyButton) {
+          panelDraftApplyButton.addEventListener('click', moveSelectedSlotsToDraft_);
         }
 
         if (panelEventsManage) {

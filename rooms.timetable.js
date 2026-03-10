@@ -5,6 +5,7 @@ ROOMS_APP.Timetable = {
   CONFIG_LABORATORI_SHEET_KEY_: 'TIMETABLE_LABORATORI_SHEET',
   DEFAULT_DOCENTI_SHEET_: 'ORARIO_DOCENTI',
   DEFAULT_LABORATORI_SHEET_: 'ORARIO_LABORATORI',
+  TIMETABLE_DISABLED_RULE_KEY_: 'TIMETABLE_DISABLED',
   HEADER_SCAN_ROWS_: 12,
 
   PERIOD_TIME_MAP_: {
@@ -407,6 +408,7 @@ ROOMS_APP.Timetable = {
     var targetResource = ROOMS_APP.normalizeString(resourceId);
     var activeRows = this.listActiveRows_();
     var results = this.buildOccurrencesForDateFromRows_(activeRows, targetDate, targetResource);
+    results = this.filterDisabledOccurrences_(results, targetDate, targetResource);
     Logger.log(
       '[PERF] Timetable.listOccupanciesForDate total=%sms rows=%s resourceFilter=%s results=%s',
       Date.now() - startedAt,
@@ -434,7 +436,8 @@ ROOMS_APP.Timetable = {
       var targetDate = ROOMS_APP.toIsoDate(cursor);
       var weekday = ROOMS_APP.getWeekdayName(targetDate);
       var weekdayRows = byWeekday[weekday] || [];
-      upcoming = upcoming.concat(this.buildOccurrencesForDateFromRows_(weekdayRows, targetDate, targetResource));
+      var dayRows = this.buildOccurrencesForDateFromRows_(weekdayRows, targetDate, targetResource);
+      upcoming = upcoming.concat(this.filterDisabledOccurrences_(dayRows, targetDate, targetResource));
     }
     upcoming = ROOMS_APP.sortBy(upcoming, ['BookingDate', 'StartTime', 'EndTime', 'BookingId']);
     Logger.log(
@@ -514,6 +517,54 @@ ROOMS_APP.Timetable = {
       .map(function (row) {
         return ROOMS_APP.Timetable.buildOccurrenceView_(row, targetDate, hasResourceFilter ? normalizedTargetResource : '');
       });
+  },
+
+  filterDisabledOccurrences_: function (occurrences, targetDate, targetResource) {
+    var disabledSet = this.getDisabledRuleValueSet_(targetDate, targetResource);
+    if (!Object.keys(disabledSet).length) {
+      return occurrences || [];
+    }
+    return (occurrences || []).filter(function (occurrence) {
+      var ruleValue = ROOMS_APP.Timetable.buildDisableRuleValueFromOccurrence_(occurrence);
+      return !disabledSet[ruleValue];
+    });
+  },
+
+  getDisabledRuleValueSet_: function (targetDate, targetResource) {
+    var resourceFilter = ROOMS_APP.normalizeString(targetResource);
+    var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES).filter(function (row) {
+      var enabledValue = ROOMS_APP.normalizeString(row.IsEnabled);
+      var isEnabled = enabledValue === '' ? true : ROOMS_APP.asBoolean(enabledValue);
+      if (!isEnabled) {
+        return false;
+      }
+      if (ROOMS_APP.normalizeString(row.RuleKey).toUpperCase() !== ROOMS_APP.Timetable.TIMETABLE_DISABLED_RULE_KEY_) {
+        return false;
+      }
+      if (ROOMS_APP.toIsoDate(row.BookingDate) !== targetDate) {
+        return false;
+      }
+      if (resourceFilter && !ROOMS_APP.Timetable.matchesResourceId_(row.ResourceId, resourceFilter)) {
+        return false;
+      }
+      return true;
+    });
+    var set = {};
+    rows.forEach(function (row) {
+      var ruleValue = ROOMS_APP.normalizeString(row.RuleValue);
+      if (ruleValue) {
+        set[ruleValue] = true;
+      }
+    });
+    return set;
+  },
+
+  buildDisableRuleValueFromOccurrence_: function (occurrence) {
+    return [
+      ROOMS_APP.normalizeString(occurrence && occurrence.OccupancyId),
+      ROOMS_APP.normalizeString(occurrence && occurrence.StartTime),
+      ROOMS_APP.normalizeString(occurrence && occurrence.EndTime)
+    ].join('|');
   },
 
   indexRowsByWeekday_: function (rows) {
