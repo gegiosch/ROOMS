@@ -33,23 +33,32 @@ ROOMS_APP.Policy = {
   },
 
   getDailyOpening: function (dateString) {
-    var opening = this.getSpecialOpening(dateString);
-    if (opening) {
-      return {
-        isOpen: true,
-        openTime: opening.OpenTime,
-        closeTime: opening.CloseTime,
-        source: 'SPECIAL_OPENING',
-        label: opening.Label
-      };
-    }
-
     var holiday = this.getHoliday(dateString);
     if (holiday) {
       return {
         isOpen: false,
         source: 'HOLIDAY',
         label: holiday.Label
+      };
+    }
+
+    var closures = this.getClosuresForDate(dateString);
+    if (closures.length) {
+      return {
+        isOpen: false,
+        source: 'CLOSURE',
+        label: ROOMS_APP.normalizeString(closures[0].Label) || 'Chiusura straordinaria'
+      };
+    }
+
+    var opening = this.getSpecialOpening(dateString);
+    if (opening) {
+      return {
+        isOpen: true,
+        openTime: opening.OpenTime || ROOMS_APP.getConfigValue('OPEN_TIME', '08:00'),
+        closeTime: opening.CloseTime || ROOMS_APP.getConfigValue('CLOSE_TIME', '18:00'),
+        source: 'SPECIAL_OPENING',
+        label: opening.Label
       };
     }
 
@@ -70,6 +79,70 @@ ROOMS_APP.Policy = {
       source: 'WEEK_SCHEDULE',
       label: weekdayName
     };
+  },
+
+  getEffectiveOpeningForResource: function (resourceId, dateString) {
+    var base = this.getDailyOpening(dateString);
+    if (!base || !base.isOpen) {
+      return {
+        isOpen: false,
+        source: base ? base.source : 'UNKNOWN',
+        label: base ? base.label : 'N/D',
+        openTime: '',
+        closeTime: '',
+        baseOpenTime: '',
+        baseCloseTime: '',
+        resourceOpenTime: '',
+        resourceCloseTime: ''
+      };
+    }
+
+    var resource = this.getResource(resourceId) || {};
+    var resourceOpen = this.normalizeOptionalTime_(resource.OpenTime);
+    var resourceClose = this.normalizeOptionalTime_(resource.CloseTime);
+    var finalOpen = base.openTime;
+    var finalClose = base.closeTime;
+
+    if (resourceOpen && resourceOpen > finalOpen) {
+      finalOpen = resourceOpen;
+    }
+    if (resourceClose && resourceClose < finalClose) {
+      finalClose = resourceClose;
+    }
+
+    if (!finalOpen || !finalClose || finalOpen >= finalClose) {
+      return {
+        isOpen: false,
+        source: 'RESOURCE_RESTRICTION',
+        label: 'Finestra locale aula non disponibile',
+        openTime: '',
+        closeTime: '',
+        baseOpenTime: base.openTime,
+        baseCloseTime: base.closeTime,
+        resourceOpenTime: resourceOpen,
+        resourceCloseTime: resourceClose
+      };
+    }
+
+    return {
+      isOpen: true,
+      source: base.source,
+      label: base.label,
+      openTime: finalOpen,
+      closeTime: finalClose,
+      baseOpenTime: base.openTime,
+      baseCloseTime: base.closeTime,
+      resourceOpenTime: resourceOpen,
+      resourceCloseTime: resourceClose
+    };
+  },
+
+  normalizeOptionalTime_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value);
+    if (!normalized) {
+      return '';
+    }
+    return /^\d{2}:\d{2}$/.test(normalized) ? normalized : '';
   },
 
   findBlockingClosure: function (dateString, startTime, endTime) {
@@ -121,6 +194,10 @@ ROOMS_APP.Policy = {
     if (!normalized.bookerSurname && emailIdentity.surname) {
       normalized.bookerSurname = emailIdentity.surname;
     }
+    if (!user.isAdmin) {
+      normalized.bookerName = emailIdentity.firstName || normalized.bookerName;
+      normalized.bookerSurname = emailIdentity.surname || normalized.bookerSurname;
+    }
 
     if (!user.email) {
       errors.push('User authentication is required.');
@@ -137,6 +214,9 @@ ROOMS_APP.Policy = {
     var resource = this.getResource(normalized.resourceId);
     if (!resource || !ROOMS_APP.asBoolean(resource.IsActive) || !ROOMS_APP.asBoolean(resource.IsBookable)) {
       errors.push('Selected room is not available for booking.');
+    }
+    if (resource && ROOMS_APP.slugify(resource.DisplayName || '') === 'AULA_MAGNA') {
+      errors.push('Aula Magna è gestita tramite eventi dedicati (solo admin).');
     }
 
     if (!normalized.bookingDate || !normalized.startTime || !normalized.endTime) {
@@ -180,7 +260,7 @@ ROOMS_APP.Policy = {
       errors.push('Booking date is in the past.');
     }
 
-    var dailyOpening = this.getDailyOpening(normalized.bookingDate);
+    var dailyOpening = this.getEffectiveOpeningForResource(normalized.resourceId, normalized.bookingDate);
     if (!dailyOpening.isOpen) {
       errors.push('Room is closed on the selected date.');
     } else {

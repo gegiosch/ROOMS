@@ -64,6 +64,8 @@ ROOMS_APP.Schema = {
       'LayoutCol',
       'LayoutColSpan',
       'LayoutRowSpan',
+      'OpenTime',
+      'CloseTime',
       'IsBookable',
       'IsActive',
       'SortKey',
@@ -299,8 +301,28 @@ ROOMS_APP.Schema = {
   syncResourcesFromCanonical_: function (headers, canonicalRows) {
     var sheetName = ROOMS_APP.SHEET_NAMES.RESOURCES;
     var canonicalOnlyRows = this.normalizeCanonicalResourceRows_(headers, canonicalRows);
+    var existingById = {};
+    ROOMS_APP.DB.readRows(sheetName).forEach(function (row) {
+      var resourceId = ROOMS_APP.normalizeString(row.ResourceId);
+      if (resourceId && !existingById[resourceId]) {
+        existingById[resourceId] = row;
+      }
+    });
+
+    canonicalOnlyRows.forEach(function (row) {
+      var existing = existingById[ROOMS_APP.normalizeString(row.ResourceId)] || null;
+      if (!existing) {
+        return;
+      }
+      if (!ROOMS_APP.normalizeString(row.OpenTime)) {
+        row.OpenTime = ROOMS_APP.normalizeString(existing.OpenTime);
+      }
+      if (!ROOMS_APP.normalizeString(row.CloseTime)) {
+        row.CloseTime = ROOMS_APP.normalizeString(existing.CloseTime);
+      }
+    });
     // Canonical inventory is the single source of truth for ROOMS_RESOURCES.
-    // Existing rows are not merged: every ensure run fully rewrites data rows.
+    // Existing rows are fully rewritten, preserving only per-resource open/close overrides.
     ROOMS_APP.DB.replaceRows(sheetName, headers, canonicalOnlyRows);
   },
 
@@ -365,6 +387,8 @@ ROOMS_APP.Schema = {
           LayoutCol: String(index + 1),
           LayoutColSpan: '1',
           LayoutRowSpan: '1',
+          OpenTime: '',
+          CloseTime: '',
           IsBookable: 'TRUE',
           IsActive: 'TRUE',
           SortKey: areaCode + '_' + ('00' + (index + 1)).slice(-2),

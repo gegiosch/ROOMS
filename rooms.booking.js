@@ -348,16 +348,17 @@ ROOMS_APP.Booking = {
     var user = ROOMS_APP.Auth.getUserContext();
     var effectiveNow = ROOMS_APP.Auth.getEffectiveNow(null, user);
     var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
+    var fallbackDate = dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow));
     return {
       ok: false,
       errorMessage: errorMessage || 'Dati aula non disponibili',
-      date: dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow)),
+      date: fallbackDate,
       requestedResourceId: ROOMS_APP.normalizeString(requestedResourceId),
       resource: null,
       resources: [],
       bookings: [],
-      userBookingsToday: [],
-      timetableBookingsToday: [],
+      userBookingsDay: [],
+      timetableBookingsDay: [],
       upcomingBookings: [],
       userUpcomingBookings: [],
       timetableUpcomingBookings: [],
@@ -366,12 +367,21 @@ ROOMS_APP.Booking = {
       isAulaMagna: false,
       freeSlots: [],
       slots: [],
+      dailySlots: [],
       isOpen: false,
       openTime: roomConfig.openTime,
       closeTime: roomConfig.closeTime,
+      openingWindow: {
+        isOpen: false,
+        source: 'UNKNOWN',
+        openTime: '',
+        closeTime: ''
+      },
       status: 'UNKNOWN',
+      statusSummary: 'Dati aula non disponibili',
       currentBooking: null,
       user: user,
+      userDisplayName: user.displayName || [user.firstName || '', user.surname || ''].join(' ').trim(),
       simulation: {
         active: Boolean(simulation.active),
         simulatedNowISO: simulation.iso || ''
@@ -380,7 +390,7 @@ ROOMS_APP.Booking = {
     };
   },
 
-  getRoomViewModel: function (resourceId, dateString) {
+  getRoomViewModel: function (resourceId, dateString, options) {
     var startedAt = Date.now();
     var stepStartedAt = startedAt;
     var requestedResourceId = ROOMS_APP.normalizeString(resourceId || '');
@@ -388,6 +398,7 @@ ROOMS_APP.Booking = {
     var effectiveNow = ROOMS_APP.Auth.getEffectiveNow(null, user);
     var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
     var date = dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow));
+    var viewOptions = options || {};
 
     try {
       var allResources = ROOMS_APP.Board.listResources_();
@@ -412,33 +423,31 @@ ROOMS_APP.Booking = {
 
       var selectedResourceId = resource ? resource.ResourceId : '';
       stepStartedAt = Date.now();
-      var userUpcomingBookings = resource ? this.enrichBookingsWithPermissions_(this.listUpcomingBookingsForRoom(selectedResourceId, date), user) : [];
-      var userBookingsToday = userUpcomingBookings.filter(function (booking) {
-        return booking.BookingDate === date;
-      });
+      var userBookingsDay = resource ? this.enrichBookingsWithPermissions_(this.listBookingsForDay(selectedResourceId, date), user) : [];
       var bookingsMs = Date.now() - stepStartedAt;
 
       stepStartedAt = Date.now();
-      var timetableUpcomingBookings = resource ? ROOMS_APP.Timetable.listUpcomingOccupanciesForRoom(
-        selectedResourceId,
-        date,
-        ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)
-      ) : [];
-      var timetableBookingsToday = timetableUpcomingBookings.filter(function (booking) {
-        return booking.BookingDate === date;
-      });
+      var timetableBookingsDay = resource ? ROOMS_APP.Timetable.listOccupanciesForDate(selectedResourceId, date) : [];
       var timetableMs = Date.now() - stepStartedAt;
 
-      var bookings = this.mergeRoomOccupancies_(userBookingsToday, timetableBookingsToday);
-
-      var upcomingBookings = this.mergeRoomOccupancies_(userUpcomingBookings, timetableUpcomingBookings);
+      var bookings = this.mergeRoomOccupancies_(userBookingsDay, timetableBookingsDay);
 
       stepStartedAt = Date.now();
+      var openingWindow = resource ? ROOMS_APP.Policy.getEffectiveOpeningForResource(selectedResourceId, date) : {
+        isOpen: false,
+        source: 'UNKNOWN',
+        openTime: '',
+        closeTime: ''
+      };
       var timeline = resource ? ROOMS_APP.Slots.getDaySlotsFromOccupancies(
         selectedResourceId,
         date,
-        userBookingsToday,
-        timetableBookingsToday
+        userBookingsDay,
+        timetableBookingsDay,
+        openingWindow,
+        {
+          splitFreeSlotsHalfHour: Boolean(viewOptions.splitFreeSlotsHalfHour)
+        }
       ) : {
         bookings: [],
         timetableOccupancies: [],
@@ -456,12 +465,24 @@ ROOMS_APP.Booking = {
 
       stepStartedAt = Date.now();
       var currentTime = simulation.active ? simulation.time : Utilities.formatDate(effectiveNow, ROOMS_APP.getTimezone(), 'HH:mm');
-      var current = bookings.filter(function (booking) {
+      var currentDateIso = simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow);
+      var isCurrentDate = date === currentDateIso;
+      var current = isCurrentDate ? bookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
-      })[0] || null;
-      var ownBookings = userUpcomingBookings.filter(function (booking) {
+      })[0] || null : null;
+      var ownBookings = userBookingsDay.filter(function (booking) {
         return ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail(user.email);
       });
+      var statusSummary = '';
+      if (!timeline.isOpen) {
+        statusSummary = 'Aula non disponibile nel giorno selezionato';
+      } else if (current) {
+        statusSummary = 'Occupata ora da ' + (current.DisplayLabel || current.BookerSurname || current.BookerName || current.Title || 'N/D');
+      } else if (!isCurrentDate) {
+        statusSummary = 'Orario del giorno selezionato';
+      } else {
+        statusSummary = 'Nessuna occupazione in corso';
+      }
       var composeMs = Date.now() - stepStartedAt;
 
       var model = {
@@ -471,31 +492,38 @@ ROOMS_APP.Booking = {
         requestedResourceId: requestedResourceId,
         resource: resource,
         bookings: bookings,
-        userBookingsToday: userBookingsToday,
-        timetableBookingsToday: timetableBookingsToday,
-        upcomingBookings: upcomingBookings,
-        userUpcomingBookings: userUpcomingBookings,
-        timetableUpcomingBookings: timetableUpcomingBookings,
+        userBookingsDay: userBookingsDay,
+        timetableBookingsDay: timetableBookingsDay,
+        upcomingBookings: [],
+        userUpcomingBookings: [],
+        timetableUpcomingBookings: [],
         ownBookings: ownBookings,
         upcomingEvents: upcomingEvents,
         isAulaMagna: isAulaMagna,
         freeSlots: timeline.freeSlots || [],
         slots: timeline.slots || [],
+        dailySlots: timeline.slots || [],
         isOpen: timeline.isOpen,
         openTime: timeline.openTime || this.getRoomConfig_().openTime,
         closeTime: timeline.closeTime || this.getRoomConfig_().closeTime,
+        openingWindow: openingWindow,
         status: current ? 'OCCUPIED' : 'FREE',
+        statusSummary: statusSummary,
         currentBooking: current,
         user: user,
+        userDisplayName: user.displayName || [user.firstName || '', user.surname || ''].join(' ').trim(),
         simulation: {
           active: Boolean(simulation.active),
           simulatedNowISO: simulation.iso || ''
         },
         resources: allResources,
-        config: this.getRoomConfig_()
+        config: this.getRoomConfig_(),
+        options: {
+          splitFreeSlotsHalfHour: Boolean(viewOptions.splitFreeSlotsHalfHour)
+        }
       };
       Logger.log(
-        '[PERF] Booking.getRoomViewModel total=%sms resources=%sms bookings=%sms timetable=%sms slots=%sms events=%sms compose=%sms bookingsToday=%s upcoming=%s freeSlots=%s',
+        '[PERF] Booking.getRoomViewModel total=%sms resources=%sms bookings=%sms timetable=%sms slots=%sms events=%sms compose=%sms dailyBookings=%s freeSlots=%s splitFree=%s',
         Date.now() - startedAt,
         resourcesMs,
         bookingsMs,
@@ -503,9 +531,9 @@ ROOMS_APP.Booking = {
         slotsMs,
         eventsMs,
         composeMs,
-        userBookingsToday.length + timetableBookingsToday.length,
-        upcomingBookings.length,
-        (timeline.freeSlots || []).length
+        userBookingsDay.length + timetableBookingsDay.length,
+        (timeline.freeSlots || []).length,
+        Boolean(viewOptions.splitFreeSlotsHalfHour)
       );
       return model;
     } catch (error) {
@@ -596,10 +624,192 @@ ROOMS_APP.Booking = {
       bookingEnabled: ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true),
       allowRecurring: ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true),
       showBookerName: ROOMS_APP.getBooleanConfig('SHOW_BOOKER_NAME', false),
-      slotMinutes: ROOMS_APP.getNumberConfig('SLOT_MINUTES', 30),
+      slotMinutes: 60,
+      freeSplitMinutes: 30,
       openTime: ROOMS_APP.getConfigValue('OPEN_TIME', '08:00'),
       closeTime: ROOMS_APP.getConfigValue('CLOSE_TIME', '18:00'),
       eventDaysAhead: ROOMS_APP.getNumberConfig('AULA_MAGNA_EVENT_DAYS_AHEAD', 14)
+    };
+  },
+
+  getAulaMagnaEditorModel: function (resourceId, dateString) {
+    var actor = ROOMS_APP.Auth.requireAdmin();
+    var requestedResourceId = ROOMS_APP.normalizeString(resourceId || this.AULA_MAGNA_RESOURCE_ID_);
+    var baseModel = this.getRoomViewModel(requestedResourceId, dateString || ROOMS_APP.toIsoDate(new Date()));
+    var allRows = ROOMS_APP.sortBy(
+      ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS).filter(function (row) {
+        var eventResourceId = ROOMS_APP.normalizeString(row.ResourceId);
+        var isActive = ROOMS_APP.normalizeString(row.IsActive) === '' ? true : ROOMS_APP.asBoolean(row.IsActive);
+        return isActive && ROOMS_APP.Timetable.matchesResourceId_(eventResourceId, requestedResourceId);
+      }).map(function (row) {
+        return {
+          EventId: ROOMS_APP.normalizeString(row.EventId),
+          ResourceId: ROOMS_APP.normalizeString(row.ResourceId),
+          EventDate: ROOMS_APP.toIsoDate(row.EventDate),
+          StartTime: ROOMS_APP.toTimeString(row.StartTime),
+          EndTime: ROOMS_APP.toTimeString(row.EndTime),
+          EventName: ROOMS_APP.normalizeString(row.EventName),
+          Notes: ROOMS_APP.normalizeString(row.Notes),
+          IsActive: ROOMS_APP.normalizeString(row.IsActive) === '' ? 'TRUE' : String(row.IsActive),
+          CreatedAtISO: ROOMS_APP.normalizeString(row.CreatedAtISO),
+          UpdatedAtISO: ROOMS_APP.normalizeString(row.UpdatedAtISO)
+        };
+      }),
+      ['EventDate', 'StartTime', 'EndTime', 'EventName']
+    );
+    return {
+      resourceId: baseModel && baseModel.resource ? baseModel.resource.ResourceId : requestedResourceId,
+      displayName: baseModel && baseModel.resource ? baseModel.resource.DisplayName : 'AULA MAGNA',
+      isAdmin: Boolean(actor.isAdmin),
+      isSuperAdmin: Boolean(actor.isSuperAdmin),
+      events: safeCopy_(allRows)
+    };
+
+    function safeCopy_(rows) {
+      return (rows || []).map(function (row) {
+        var cloned = {};
+        Object.keys(row || {}).forEach(function (key) {
+          cloned[key] = row[key];
+        });
+        return cloned;
+      });
+    }
+  },
+
+  applyAulaMagnaEventChanges: function (resourceId, changes) {
+    var actor = ROOMS_APP.Auth.requireAdmin();
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var targetResourceId = ROOMS_APP.normalizeString(resourceId || this.AULA_MAGNA_RESOURCE_ID_);
+    var replaceRows = changes && Array.isArray(changes.replaceRows) ? changes.replaceRows : null;
+    var normalizedChanges = this.normalizeAulaMagnaEventChanges_(changes);
+    var self = this;
+
+    return this.withBookingLock_(function () {
+      var headers = ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS);
+      var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS);
+      var created = 0;
+      var updated = 0;
+      var deleted = 0;
+
+      if (replaceRows) {
+        var keepRows = rows.filter(function (row) {
+          return !ROOMS_APP.Timetable.matchesResourceId_(row.ResourceId, targetResourceId);
+        });
+        var rebuiltRows = replaceRows.map(function (payload) {
+          return self.validateAulaMagnaEventRow_(
+            targetResourceId,
+            payload,
+            ROOMS_APP.normalizeString(payload.EventId || payload.eventId || Utilities.getUuid()),
+            ROOMS_APP.normalizeString(payload.CreatedAtISO || payload.createdAtISO || nowIso),
+            nowIso
+          );
+        });
+        ROOMS_APP.DB.replaceRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS, headers, keepRows.concat(rebuiltRows));
+        self.writeAudit_('APPLY_AULA_MAGNA_EVENTS', '', '', targetResourceId, actor.email, 'OK', {
+          mode: 'replace',
+          rowCount: rebuiltRows.length
+        });
+        return self.getRoomViewModel(targetResourceId, ROOMS_APP.toIsoDate(new Date()));
+      }
+
+      normalizedChanges.deletes.forEach(function (eventId) {
+        var index = self.findAulaMagnaEventIndexById_(rows, eventId);
+        if (index < 0) {
+          return;
+        }
+        rows.splice(index, 1);
+        deleted += 1;
+      });
+
+      normalizedChanges.updates.forEach(function (entry) {
+        var index = self.findAulaMagnaEventIndexById_(rows, entry.eventId);
+        if (index < 0) {
+          throw new Error('Evento non trovato: ' + entry.eventId);
+        }
+        var existing = rows[index];
+        var next = self.validateAulaMagnaEventRow_(targetResourceId, entry.payload, existing.EventId, existing.CreatedAtISO || nowIso, nowIso);
+        rows[index] = next;
+        updated += 1;
+      });
+
+      normalizedChanges.creates.forEach(function (payload) {
+        rows.push(self.validateAulaMagnaEventRow_(targetResourceId, payload, Utilities.getUuid(), nowIso, nowIso));
+        created += 1;
+      });
+
+      ROOMS_APP.DB.replaceRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS, headers, rows);
+      self.writeAudit_('APPLY_AULA_MAGNA_EVENTS', '', '', targetResourceId, actor.email, 'OK', {
+        created: created,
+        updated: updated,
+        deleted: deleted
+      });
+      return self.getRoomViewModel(targetResourceId, ROOMS_APP.toIsoDate(new Date()));
+    });
+  },
+
+  normalizeAulaMagnaEventChanges_: function (changes) {
+    var source = changes || {};
+    return {
+      creates: (Array.isArray(source.creates) ? source.creates : []).map(function (entry) {
+        return entry && typeof entry === 'object' ? entry : {};
+      }),
+      updates: (Array.isArray(source.updates) ? source.updates : []).map(function (entry) {
+        return {
+          eventId: ROOMS_APP.normalizeString(entry && entry.eventId),
+          payload: entry && entry.payload && typeof entry.payload === 'object' ? entry.payload : {}
+        };
+      }).filter(function (entry) {
+        return Boolean(entry.eventId);
+      }),
+      deletes: (Array.isArray(source.deletes) ? source.deletes : []).map(function (entry) {
+        return ROOMS_APP.normalizeString(entry && entry.eventId ? entry.eventId : entry);
+      }).filter(function (eventId) {
+        return Boolean(eventId);
+      })
+    };
+  },
+
+  findAulaMagnaEventIndexById_: function (rows, eventId) {
+    var normalized = ROOMS_APP.normalizeString(eventId);
+    if (!normalized) {
+      return -1;
+    }
+    var index;
+    for (index = 0; index < (rows || []).length; index += 1) {
+      if (ROOMS_APP.normalizeString(rows[index] && rows[index].EventId) === normalized) {
+        return index;
+      }
+    }
+    return -1;
+  },
+
+  validateAulaMagnaEventRow_: function (resourceId, payload, eventId, createdAtIso, updatedAtIso) {
+    var eventDate = ROOMS_APP.toIsoDate(payload.EventDate || payload.eventDate);
+    var startTime = ROOMS_APP.toTimeString(payload.StartTime || payload.startTime);
+    var endTime = ROOMS_APP.toTimeString(payload.EndTime || payload.endTime);
+    var eventName = ROOMS_APP.normalizeString(payload.EventName || payload.eventName);
+
+    if (!eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+      throw new Error('Data evento non valida.');
+    }
+    if (!startTime || !endTime || startTime >= endTime) {
+      throw new Error('Orario evento non valido.');
+    }
+    if (!eventName) {
+      throw new Error('Nome evento obbligatorio.');
+    }
+
+    return {
+      EventId: ROOMS_APP.normalizeString(eventId),
+      ResourceId: ROOMS_APP.normalizeString(resourceId || this.AULA_MAGNA_RESOURCE_ID_),
+      EventDate: eventDate,
+      StartTime: startTime,
+      EndTime: endTime,
+      EventName: eventName,
+      IsActive: ROOMS_APP.normalizeString(payload.IsActive || payload.isActive) === '' ? 'TRUE' : String(payload.IsActive || payload.isActive),
+      Notes: ROOMS_APP.normalizeString(payload.Notes || payload.notes),
+      CreatedAtISO: ROOMS_APP.normalizeString(createdAtIso || updatedAtIso),
+      UpdatedAtISO: ROOMS_APP.normalizeString(updatedAtIso)
     };
   },
 

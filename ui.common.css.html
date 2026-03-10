@@ -611,16 +611,15 @@ body.board-monitor #board-root {
 }
 
 .room-panel-loading {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 220;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 10px;
-  border-radius: 14px;
-  background: rgba(2, 6, 23, 0.72);
+  background: rgba(2, 6, 23, 0.84);
   backdrop-filter: blur(2px);
 }
 
@@ -678,6 +677,7 @@ body.board-monitor #board-root {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 4px;
 }
 
 .room-panel-actions {
@@ -700,18 +700,72 @@ body.board-monitor #board-root {
   padding: 14px;
 }
 
-.room-panel-summary .metric-value {
-  font-size: 18px;
-  color: #e5e7eb;
+.room-panel-summary.compact {
+  padding: 12px;
 }
 
-.room-panel-summary .grid.grid-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.room-panel-summary-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
 }
 
+.room-panel-summary-grid h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.room-panel-summary .metric-value {
+  font-size: 16px;
+  color: #e5e7eb;
+}
+
+.room-panel-controls-row {
+  display: grid;
+  margin-top: 8px;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.room-panel-control {
+  min-width: 0;
+}
+
+.room-panel-control label {
+  display: block;
+  margin-bottom: 4px;
+  color: #cbd5f5;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.split-toggle-wrap {
+  display: flex;
+  align-items: flex-end;
+}
+
+.split-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.split-toggle input {
+  accent-color: #60a5fa;
+}
+
+.panel-user-email {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .panel-user-value {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.2;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -748,6 +802,21 @@ body.board-monitor #board-root {
 .room-panel-section h3 {
   margin: 0 0 10px;
   color: #e5e7eb;
+}
+
+.room-panel-events-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.room-panel-events-header h3 {
+  margin: 0;
+}
+
+.aula-magna-editor-dialog {
+  width: min(860px, calc(100vw - 56px));
 }
 
 .room-panel-unsaved-confirm {

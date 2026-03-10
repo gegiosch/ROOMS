@@ -115,17 +115,35 @@ function getRoomViewModel(resourceId, dateString, requestContext) {
   });
 }
 
-function getRoomPanelData(resourceId, dateString, requestContext) {
+function getRoomPanelData(resourceId, dateString, panelOptions, requestContext) {
   var startedAt = Date.now();
   var normalizedResourceId = ROOMS_APP.normalizeString(resourceId);
-  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+  var options = panelOptions && typeof panelOptions === 'object' ? panelOptions : {};
+  var runtimeContext = requestContext;
+  if (!runtimeContext && options && (
+    options.simulatedNow ||
+    options.simulatedDateTime ||
+    options.__simulatedNow
+  )) {
+    runtimeContext = options;
+  }
+  var slotOptions = {
+    splitFreeSlotsHalfHour: Boolean(
+      options && (
+        options.splitFreeSlotsHalfHour === true ||
+        options.splitFreeSlotsHalfHour === 'true'
+      )
+    )
+  };
+  return withRuntimeContext_(extractRuntimeContext_(runtimeContext), function () {
     var simulation = ROOMS_APP.Auth.getSimulationContext_();
     var targetDate = dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()));
     try {
-      var model = ROOMS_APP.Booking.getRoomViewModel(normalizedResourceId, targetDate);
+      var model = ROOMS_APP.Booking.getRoomViewModel(normalizedResourceId, targetDate, slotOptions);
       logTiming_('getRoomPanelData', startedAt, {
         resourceId: normalizedResourceId,
         date: targetDate,
+        splitFree: slotOptions.splitFreeSlotsHalfHour ? 'TRUE' : 'FALSE',
         ok: model && model.ok ? 'TRUE' : 'FALSE'
       });
       return model;
@@ -137,6 +155,18 @@ function getRoomPanelData(resourceId, dateString, requestContext) {
       });
       throw error;
     }
+  });
+}
+
+function getAulaMagnaEditorModel(resourceId, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.getAulaMagnaEditorModel(resourceId, dateString);
+  });
+}
+
+function applyAulaMagnaEventChanges(resourceId, changes, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.applyAulaMagnaEventChanges(resourceId, changes || {});
   });
 }
 
@@ -280,10 +310,10 @@ function routeApiRequest_(payload) {
     return getBoardViewModel(payload);
   }
   if (action === 'room') {
-    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date, payload);
+    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date, payload, payload);
   }
   if (action === 'roomPanel') {
-    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date, payload);
+    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date, payload, payload);
   }
   if (action === 'createBooking') {
     return ROOMS_APP.Booking.createBooking(payload);
@@ -298,6 +328,18 @@ function routeApiRequest_(payload) {
     return ROOMS_APP.Booking.applyRoomChanges(
       normalizeRoomIdParam_(payload),
       payload.date,
+      payload.changes || payload
+    );
+  }
+  if (action === 'getAulaMagnaEditorModel') {
+    return ROOMS_APP.Booking.getAulaMagnaEditorModel(
+      normalizeRoomIdParam_(payload),
+      payload.date
+    );
+  }
+  if (action === 'applyAulaMagnaEventChanges') {
+    return ROOMS_APP.Booking.applyAulaMagnaEventChanges(
+      normalizeRoomIdParam_(payload),
       payload.changes || payload
     );
   }
