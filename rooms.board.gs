@@ -309,7 +309,11 @@ ROOMS_APP.Board = {
       return 'N/D';
     }
     if (ROOMS_APP.normalizeString(occupancy.SourceKind) === 'TIMETABLE') {
-      return ROOMS_APP.Timetable.getDisplayLabel(occupancy);
+      return ROOMS_APP.normalizeString(
+        occupancy.TeacherName ||
+        occupancy.BookerName ||
+        ROOMS_APP.Timetable.getDisplayLabel(occupancy)
+      );
     }
     return this.getBookingSurname_(occupancy);
   },

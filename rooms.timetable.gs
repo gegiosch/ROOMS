@@ -189,7 +189,6 @@ ROOMS_APP.Timetable = {
         continue;
       }
 
-      var teacherName = sourceKind === 'classroom' ? rowLabel : '';
       var colIndex;
       for (colIndex = 0; colIndex < columnMeta.usableColumns.length; colIndex += 1) {
         var column = columnMeta.usableColumns[colIndex];
@@ -204,12 +203,16 @@ ROOMS_APP.Timetable = {
 
         var resourceId;
         var resourceLabel;
+        var teacherName;
         if (sourceKind === 'classroom') {
           resourceId = classCode;
           resourceLabel = classCode;
+          teacherName = rowLabel;
         } else {
           resourceId = rowLabel;
           resourceLabel = rowLabel;
+          // For spaces/labs we store the class in TeacherName so board ORA/NEXT can use one display field.
+          teacherName = classCode;
         }
         if (!resourceId) {
           continue;
@@ -438,7 +441,15 @@ ROOMS_APP.Timetable = {
     if (!occupancy) {
       return 'N/D';
     }
-    return ROOMS_APP.normalizeString(occupancy.DisplayLabel || occupancy.ClassCode || occupancy.BookerSurname || occupancy.Title || 'N/D');
+    return ROOMS_APP.normalizeString(
+      occupancy.TeacherName ||
+      occupancy.BookerName ||
+      occupancy.DisplayLabel ||
+      occupancy.ClassCode ||
+      occupancy.BookerSurname ||
+      occupancy.Title ||
+      'N/D'
+    );
   },
 
   isValidClassCode_: function (value) {
@@ -531,6 +542,7 @@ ROOMS_APP.Timetable = {
       Title: ROOMS_APP.normalizeString(row.ResourceLabel || row.ResourceId),
       BookerEmail: '',
       BookerName: ROOMS_APP.normalizeString(row.TeacherName),
+      TeacherName: ROOMS_APP.normalizeString(row.TeacherName),
       BookerSurname: ROOMS_APP.normalizeString(row.ClassCode),
       ClassCode: ROOMS_APP.normalizeString(row.ClassCode),
       DisplayLabel: displayLabel,
