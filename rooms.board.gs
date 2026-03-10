@@ -20,11 +20,11 @@ ROOMS_APP.Board = {
     var startedAt = Date.now();
     var stepStartedAt = startedAt;
     var user = ROOMS_APP.Auth.getUserContext();
-    var now = ROOMS_APP.Auth.getEffectiveNow(null, user);
     var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
-    var nowIso = ROOMS_APP.toIsoDateTime(now);
-    var today = ROOMS_APP.toIsoDate(now);
-    var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
+    var now = simulation.active && simulation.date ? simulation.date : new Date();
+    var nowIso = simulation.active ? simulation.iso : ROOMS_APP.toIsoDateTime(now);
+    var today = simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(now);
+    var currentTime = simulation.active ? simulation.time : Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
     var resources = this.listResourcesForBoard_();
     var activeResourceIds = {};
     resources.forEach(function (resource) {
@@ -46,7 +46,7 @@ ROOMS_APP.Board = {
     var timetableMs = Date.now() - stepStartedAt;
 
     stepStartedAt = Date.now();
-    var aulaMagna = this.buildAulaMagnaEventBlock_(resources, now);
+    var aulaMagna = this.buildAulaMagnaEventBlock_(resources, now, simulation);
     var eventsMs = Date.now() - stepStartedAt;
 
     stepStartedAt = Date.now();
@@ -138,10 +138,11 @@ ROOMS_APP.Board = {
     return model;
   },
 
-  buildAulaMagnaEventBlock_: function (resources, now) {
+  buildAulaMagnaEventBlock_: function (resources, now, simulation) {
     var resource = this.findAulaMagnaResource_(resources);
-    var nowDate = ROOMS_APP.toIsoDate(now || new Date());
-    var currentTime = Utilities.formatDate(now || new Date(), ROOMS_APP.getTimezone(), 'HH:mm');
+    var simulationActive = Boolean(simulation && simulation.active);
+    var nowDate = simulationActive ? simulation.dateIso : ROOMS_APP.toIsoDate(now || new Date());
+    var currentTime = simulationActive ? simulation.time : Utilities.formatDate(now || new Date(), ROOMS_APP.getTimezone(), 'HH:mm');
     var horizonDays = Math.max(0, ROOMS_APP.getNumberConfig('AULA_MAGNA_EVENT_DAYS_AHEAD', 14));
     var endDate = this.addDaysToIsoDate_(nowDate, horizonDays);
     var self = this;

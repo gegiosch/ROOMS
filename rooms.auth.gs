@@ -93,8 +93,10 @@ ROOMS_APP.Auth = {
     var parsed = this.parseSimulationDateTime_(candidate);
     return {
       active: Boolean(user && user.isSuperAdmin && parsed),
-      iso: parsed ? ROOMS_APP.toIsoDateTime(parsed) : '',
-      date: parsed || null
+      iso: parsed ? parsed.iso : '',
+      dateIso: parsed ? parsed.dateIso : '',
+      time: parsed ? parsed.time : '',
+      date: parsed ? parsed.date : null
     };
   },
 
@@ -103,13 +105,54 @@ ROOMS_APP.Auth = {
     if (!normalized || !this.SIMULATION_INPUT_PATTERN_.test(normalized)) {
       return null;
     }
-
-    var raw = normalized.length === 16 ? (normalized + ':00') : normalized;
-    var parsed = new Date(raw);
-    if (isNaN(parsed.getTime())) {
+    var match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) {
       return null;
     }
-    return parsed;
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var hour = Number(match[4]);
+    var minute = Number(match[5]);
+    var second = Number(match[6] || '00');
+    if (
+      !isFinite(year) || !isFinite(month) || !isFinite(day) ||
+      !isFinite(hour) || !isFinite(minute) || !isFinite(second) ||
+      month < 1 || month > 12 ||
+      day < 1 || day > 31 ||
+      hour < 0 || hour > 23 ||
+      minute < 0 || minute > 59 ||
+      second < 0 || second > 59
+    ) {
+      return null;
+    }
+
+    var parsed = new Date(year, month - 1, day, hour, minute, second, 0);
+    if (
+      isNaN(parsed.getTime()) ||
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day ||
+      parsed.getHours() !== hour ||
+      parsed.getMinutes() !== minute ||
+      parsed.getSeconds() !== second
+    ) {
+      return null;
+    }
+
+    var dateIso = [
+      String(year),
+      ('0' + String(month)).slice(-2),
+      ('0' + String(day)).slice(-2)
+    ].join('-');
+    var time = ('0' + String(hour)).slice(-2) + ':' + ('0' + String(minute)).slice(-2);
+
+    return {
+      iso: dateIso + 'T' + time + ':' + ('0' + String(second)).slice(-2),
+      dateIso: dateIso,
+      time: time,
+      date: parsed
+    };
   },
 
   getAdminEntry_: function (email) {

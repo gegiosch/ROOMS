@@ -351,7 +351,7 @@ ROOMS_APP.Booking = {
     return {
       ok: false,
       errorMessage: errorMessage || 'Dati aula non disponibili',
-      date: dateString || ROOMS_APP.toIsoDate(effectiveNow),
+      date: dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow)),
       requestedResourceId: ROOMS_APP.normalizeString(requestedResourceId),
       resource: null,
       resources: [],
@@ -387,7 +387,7 @@ ROOMS_APP.Booking = {
     var user = ROOMS_APP.Auth.getUserContext();
     var effectiveNow = ROOMS_APP.Auth.getEffectiveNow(null, user);
     var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
-    var date = dateString || ROOMS_APP.toIsoDate(effectiveNow);
+    var date = dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow));
 
     try {
       var allResources = ROOMS_APP.Board.listResources_();
@@ -455,8 +455,7 @@ ROOMS_APP.Booking = {
       var eventsMs = Date.now() - stepStartedAt;
 
       stepStartedAt = Date.now();
-      var now = effectiveNow;
-      var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
+      var currentTime = simulation.active ? simulation.time : Utilities.formatDate(effectiveNow, ROOMS_APP.getTimezone(), 'HH:mm');
       var current = bookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
       })[0] || null;

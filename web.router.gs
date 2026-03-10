@@ -119,7 +119,8 @@ function getRoomPanelData(resourceId, dateString, requestContext) {
   var startedAt = Date.now();
   var normalizedResourceId = ROOMS_APP.normalizeString(resourceId);
   return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
-    var targetDate = dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow());
+    var simulation = ROOMS_APP.Auth.getSimulationContext_();
+    var targetDate = dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()));
     try {
       var model = ROOMS_APP.Booking.getRoomViewModel(normalizedResourceId, targetDate);
       logTiming_('getRoomPanelData', startedAt, {
@@ -159,9 +160,10 @@ function updateRoomBooking(bookingId, payload, requestContext) {
 
 function applyRoomPanelChanges(resourceId, dateString, changes, requestContext) {
   return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    var simulation = ROOMS_APP.Auth.getSimulationContext_();
     return ROOMS_APP.Booking.applyRoomChanges(
       ROOMS_APP.normalizeString(resourceId),
-      dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()),
+      dateString || (simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow())),
       changes || {}
     );
   });
