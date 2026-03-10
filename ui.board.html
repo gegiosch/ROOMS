@@ -271,8 +271,8 @@
           return ROOMS_UI.getSimulatedNow_();
         }
 
-        function formatSimulationIndicator_(isoValue) {
-          var parsed = parseSimulationDateTime_(isoValue);
+        function formatSimulationIndicator_(value) {
+          var parsed = value instanceof Date ? value : parseSimulationDateTime_(value);
           if (!parsed) {
             return '';
           }
@@ -282,6 +282,10 @@
           var hours = ('0' + String(parsed.getHours())).slice(-2);
           var minutes = ('0' + String(parsed.getMinutes())).slice(-2);
           return day + '/' + month + '/' + year + ' ' + hours + ':' + minutes;
+        }
+
+        function normalizeEmail_(value) {
+          return String(value || '').trim().toLowerCase();
         }
 
         function createTile(tile) {
@@ -457,7 +461,7 @@
           if (simulationIndicator) {
             if (isSuperAdmin && effectiveSimulation) {
               simulationIndicator.style.display = 'inline-flex';
-              simulationIndicator.textContent = 'Simulazione attiva: ' + formatSimulationIndicator_(ROOMS_APP.toIsoDateTime(effectiveSimulation));
+              simulationIndicator.textContent = 'Simulazione attiva: ' + formatSimulationIndicator_(effectiveSimulation);
             } else {
               simulationIndicator.style.display = 'none';
               simulationIndicator.textContent = '';
@@ -1030,7 +1034,7 @@
 
         function buildEffectiveRoomModel_(model) {
           var base = model || {};
-          var selectedDate = base.date || ROOMS_APP_DATE_FALLBACK_();
+          var selectedDate = base.date || getLocalDateFallback_();
           var draft = panelState.draft || createEmptyDraftState_();
           var byId = collectPersistedBookings_(base);
 
@@ -1074,7 +1078,7 @@
           todayBookings = sortRowsBy_(todayBookings, ['StartTime', 'EndTime']);
 
           var own = upcoming.filter(function (booking) {
-            return ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail((base.user && base.user.email) || '');
+            return normalizeEmail_(booking.BookerEmail) === normalizeEmail_((base.user && base.user.email) || '');
           });
 
           var simulationIso = (base && base.simulation && base.simulation.active) ? base.simulation.simulatedNowISO : '';
@@ -1421,7 +1425,7 @@
         }
 
         function loadRoomPanelData(resourceId, options) {
-          var requestDate = (options && options.date) || (panelDateInput && panelDateInput.value) || ((panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_());
+          var requestDate = (options && options.date) || (panelDateInput && panelDateInput.value) || ((panelState.model && panelState.model.date) || getLocalDateFallback_());
           var showSpinner = !(options && options.showSpinner === false);
           if (showSpinner) {
             showRoomPanelLoading((options && options.loadingMessage) || 'Caricamento dati aula...');
@@ -1449,7 +1453,7 @@
             });
         }
 
-        function ROOMS_APP_DATE_FALLBACK_() {
+        function getLocalDateFallback_() {
           var now = getClientEffectiveNow_();
           var yyyy = String(now.getFullYear());
           var mm = ('0' + String(now.getMonth() + 1)).slice(-2);
@@ -1479,7 +1483,7 @@
           setText('panel-room-meta', 'Caricamento dati aula...');
           ROOMS_UI.setNotice(panelNotice, 'Caricamento aula ' + resourceId + '...', '');
           loadRoomPanelData(resourceId, {
-            date: (panelDateInput && panelDateInput.value) || ROOMS_APP_DATE_FALLBACK_(),
+            date: (panelDateInput && panelDateInput.value) || getLocalDateFallback_(),
             silentNotice: false,
             loadingMessage: 'Caricamento aula ' + resourceId + '...'
           });
@@ -1504,7 +1508,7 @@
         function panelBookingPayload() {
           return {
             resourceId: panelState.resourceId,
-            bookingDate: (panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(),
+            bookingDate: (panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || getLocalDateFallback_(),
             startTime: document.getElementById('panel-booking-start').value,
             endTime: document.getElementById('panel-booking-end').value,
             title: document.getElementById('panel-booking-title').value,
@@ -1572,7 +1576,7 @@
             return Promise.resolve();
           }
 
-          var targetDate = (panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_();
+          var targetDate = (panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || getLocalDateFallback_();
           showRoomPanelLoading('Salvataggio modifiche in corso...');
           if (panelSaveAllButton) {
             panelSaveAllButton.disabled = true;
@@ -1601,14 +1605,14 @@
             return;
           }
           if (hasPendingDraftChanges_()) {
-            pendingDiscardRollbackDate = (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_();
+            pendingDiscardRollbackDate = (panelState.model && panelState.model.date) || getLocalDateFallback_();
           } else {
             pendingDiscardRollbackDate = '';
           }
           ensureCanDiscardDraft_(function () {
             pendingDiscardRollbackDate = '';
             loadRoomPanelData(panelState.resourceId, {
-              date: dateValue || ROOMS_APP_DATE_FALLBACK_(),
+              date: dateValue || getLocalDateFallback_(),
               silentNotice: Boolean(silentNotice)
             });
           });
@@ -1676,7 +1680,7 @@
           closeSimulationModal_();
           updateSimulationUi_(state);
 
-          var fallbackDate = ROOMS_APP_DATE_FALLBACK_();
+          var fallbackDate = getLocalDateFallback_();
           if (panelState.model) {
             panelState.model.date = fallbackDate;
           }
@@ -1711,7 +1715,7 @@
               render(model);
               if (isPanelOpen() && panelState.resourceId && !hasPendingDraftChanges_() && !options.skipPanelRefresh) {
                 loadRoomPanelData(panelState.resourceId, {
-                  date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_(),
+                  date: (panelState.model && panelState.model.date) || getLocalDateFallback_(),
                   silentNotice: true,
                   showSpinner: false
                 });
@@ -1817,7 +1821,7 @@
               ROOMS_UI.setNotice(panelNotice, 'Seleziona prima un\'aula.', 'error');
               return;
             }
-            requestPanelDateReload_((panelDateInput && panelDateInput.value) || ROOMS_APP_DATE_FALLBACK_(), false);
+            requestPanelDateReload_((panelDateInput && panelDateInput.value) || getLocalDateFallback_(), false);
           });
         }
         if (panelDateInput) {
@@ -1825,7 +1829,7 @@
             if (!panelState.resourceId) {
               return;
             }
-            requestPanelDateReload_(panelDateInput.value || ROOMS_APP_DATE_FALLBACK_(), true);
+            requestPanelDateReload_(panelDateInput.value || getLocalDateFallback_(), true);
           });
         }
 
@@ -1873,7 +1877,7 @@
           ROOMS_UI.call('commitRecurringRoomBooking', panelRecurringPayload())
             .then(function (result) {
               ROOMS_UI.setNotice(document.getElementById('panel-recurring-result'), 'Serie creata: ' + result.seriesId + ' (' + result.createdCount + ' prenotazioni)', 'success');
-              loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || ROOMS_APP_DATE_FALLBACK_() });
+              loadRoomPanelData(panelState.resourceId, { date: (panelState.model && panelState.model.date) || getLocalDateFallback_() });
               refresh();
             })
             .catch(function (error) {
