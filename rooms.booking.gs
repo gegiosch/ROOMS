@@ -345,10 +345,13 @@ ROOMS_APP.Booking = {
 
   buildRoomFallbackModel_: function (requestedResourceId, dateString, errorMessage) {
     var roomConfig = this.getRoomConfig_();
+    var user = ROOMS_APP.Auth.getUserContext();
+    var effectiveNow = ROOMS_APP.Auth.getEffectiveNow(null, user);
+    var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
     return {
       ok: false,
       errorMessage: errorMessage || 'Dati aula non disponibili',
-      date: dateString || ROOMS_APP.toIsoDate(new Date()),
+      date: dateString || ROOMS_APP.toIsoDate(effectiveNow),
       requestedResourceId: ROOMS_APP.normalizeString(requestedResourceId),
       resource: null,
       resources: [],
@@ -368,7 +371,11 @@ ROOMS_APP.Booking = {
       closeTime: roomConfig.closeTime,
       status: 'UNKNOWN',
       currentBooking: null,
-      user: ROOMS_APP.Auth.getUserContext(),
+      user: user,
+      simulation: {
+        active: Boolean(simulation.active),
+        simulatedNowISO: simulation.iso || ''
+      },
       config: roomConfig
     };
   },
@@ -376,9 +383,11 @@ ROOMS_APP.Booking = {
   getRoomViewModel: function (resourceId, dateString) {
     var startedAt = Date.now();
     var stepStartedAt = startedAt;
-    var date = dateString || ROOMS_APP.toIsoDate(new Date());
     var requestedResourceId = ROOMS_APP.normalizeString(resourceId || '');
     var user = ROOMS_APP.Auth.getUserContext();
+    var effectiveNow = ROOMS_APP.Auth.getEffectiveNow(null, user);
+    var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
+    var date = dateString || ROOMS_APP.toIsoDate(effectiveNow);
 
     try {
       var allResources = ROOMS_APP.Board.listResources_();
@@ -446,7 +455,7 @@ ROOMS_APP.Booking = {
       var eventsMs = Date.now() - stepStartedAt;
 
       stepStartedAt = Date.now();
-      var now = new Date();
+      var now = effectiveNow;
       var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
       var current = bookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
@@ -479,6 +488,10 @@ ROOMS_APP.Booking = {
         status: current ? 'OCCUPIED' : 'FREE',
         currentBooking: current,
         user: user,
+        simulation: {
+          active: Boolean(simulation.active),
+          simulatedNowISO: simulation.iso || ''
+        },
         resources: allResources,
         config: this.getRoomConfig_()
       };

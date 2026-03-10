@@ -18,6 +18,7 @@
             <span class="legend-pill"><span class="dot occupied"></span> Occupata</span>
             <span class="legend-pill"><span class="dot next"></span> Prossima prenotazione</span>
           </div>
+          <span class="status-pill simulation-indicator" id="board-simulation-indicator" style="display:none;"></span>
           <span class="status-pill" id="board-page-indicator">Pagina 1/1</span>
           <span class="status-pill" id="board-updated-at">Aggiornamento in corso...</span>
         </div>
@@ -29,7 +30,23 @@
     </div>
     <div class="board-floating-controls">
       <a id="board-admin-button" class="board-floating-button admin" href="?page=admin" style="display:none;">⚙ Configura</a>
+      <button id="board-simulation-toggle" class="board-floating-button simulation" type="button" style="display:none;">Simula ora</button>
       <button id="board-fullscreen-toggle" class="board-floating-button fullscreen" type="button" title="Schermo intero" aria-label="Schermo intero">⛶</button>
+    </div>
+    <div id="board-simulation-modal" class="board-simulation-modal" style="display:none;">
+      <div class="board-simulation-dialog">
+        <h3>Simula data e ora</h3>
+        <p class="muted">Questa simulazione è visibile solo in questa sessione browser.</p>
+        <div class="grid grid-2">
+          <input id="simulation-date-input" class="input" type="date">
+          <input id="simulation-time-input" class="input" type="time" step="60">
+        </div>
+        <div class="toolbar">
+          <button id="simulation-apply" class="button" type="button">Applica</button>
+          <button id="simulation-reset" class="button secondary" type="button">Reset</button>
+          <button id="simulation-cancel" class="button secondary" type="button">Chiudi</button>
+        </div>
+      </div>
     </div>
     <div id="room-panel-overlay" class="room-panel-overlay" style="display:none;">
       <aside class="room-panel" role="dialog" aria-modal="true" aria-label="Dettaglio aula">
@@ -177,6 +194,14 @@
         var boardShell = document.getElementById('board-shell');
         var fullscreenButton = document.getElementById('board-fullscreen-toggle');
         var adminButton = document.getElementById('board-admin-button');
+        var simulationButton = document.getElementById('board-simulation-toggle');
+        var simulationIndicator = document.getElementById('board-simulation-indicator');
+        var simulationModal = document.getElementById('board-simulation-modal');
+        var simulationDateInput = document.getElementById('simulation-date-input');
+        var simulationTimeInput = document.getElementById('simulation-time-input');
+        var simulationApplyButton = document.getElementById('simulation-apply');
+        var simulationResetButton = document.getElementById('simulation-reset');
+        var simulationCancelButton = document.getElementById('simulation-cancel');
         var panelOverlay = document.getElementById('room-panel-overlay');
         var panelCloseButton = document.getElementById('room-panel-close');
         var panelNotice = document.getElementById('panel-notice');
@@ -208,6 +233,55 @@
 
         function getBranchLabel(model, branchKey) {
           return model.branchLabels && model.branchLabels[branchKey] ? model.branchLabels[branchKey] : branchKey;
+        }
+
+        function isSuperAdminUser_(model) {
+          return Boolean(model && model.user && model.user.isSuperAdmin);
+        }
+
+        function parseSimulationDateTime_(value) {
+          var normalized = String(value || '').trim();
+          if (!normalized) {
+            return null;
+          }
+          if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) {
+            normalized += ':00';
+          }
+          if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+            return null;
+          }
+          var parsed = new Date(normalized);
+          if (isNaN(parsed.getTime())) {
+            return null;
+          }
+          return parsed;
+        }
+
+        function toSimulationIso_(dateValue, timeValue) {
+          if (!dateValue || !timeValue) {
+            return '';
+          }
+          return String(dateValue) + 'T' + String(timeValue).slice(0, 5) + ':00';
+        }
+
+        function getSimulationIsoFromClient_() {
+          if (!isSuperAdminUser_(state)) {
+            return '';
+          }
+          return ROOMS_UI.getSimulatedNow_();
+        }
+
+        function formatSimulationIndicator_(isoValue) {
+          var parsed = parseSimulationDateTime_(isoValue);
+          if (!parsed) {
+            return '';
+          }
+          var day = ('0' + String(parsed.getDate())).slice(-2);
+          var month = ('0' + String(parsed.getMonth() + 1)).slice(-2);
+          var year = String(parsed.getFullYear()).slice(-2);
+          var hours = ('0' + String(parsed.getHours())).slice(-2);
+          var minutes = ('0' + String(parsed.getMinutes())).slice(-2);
+          return day + '/' + month + '/' + year + ' ' + hours + ':' + minutes;
         }
 
         function createTile(tile) {
@@ -343,6 +417,66 @@
           boardShell.classList.toggle('fullscreen-compact', shouldUseFullscreenCompact(model));
         }
 
+        function closeSimulationModal_() {
+          if (!simulationModal) {
+            return;
+          }
+          simulationModal.style.display = 'none';
+        }
+
+        function openSimulationModal_() {
+          if (!simulationModal || !isSuperAdminUser_(state)) {
+            return;
+          }
+          var sourceIso = (state && state.user && state.user.simulatedNowISO) || getSimulationIsoFromClient_();
+          var parsed = parseSimulationDateTime_(sourceIso) || new Date();
+          if (simulationDateInput) {
+            simulationDateInput.value = [
+              String(parsed.getFullYear()),
+              ('0' + String(parsed.getMonth() + 1)).slice(-2),
+              ('0' + String(parsed.getDate())).slice(-2)
+            ].join('-');
+          }
+          if (simulationTimeInput) {
+            simulationTimeInput.value = ('0' + String(parsed.getHours())).slice(-2) + ':' + ('0' + String(parsed.getMinutes())).slice(-2);
+          }
+          simulationModal.style.display = 'flex';
+        }
+
+        function updateSimulationUi_(model) {
+          var isSuperAdmin = isSuperAdminUser_(model);
+          var simulationActive = Boolean(model && model.user && model.user.simulationActive);
+          var simulatedNowIso = simulationActive ? String(model.user.simulatedNowISO || '') : '';
+          var fallbackIso = getSimulationIsoFromClient_();
+          var effectiveSimulation = parseSimulationDateTime_(simulatedNowIso) || parseSimulationDateTime_(fallbackIso);
+
+          if (simulationButton) {
+            simulationButton.style.display = isSuperAdmin ? 'inline-flex' : 'none';
+          }
+
+          if (simulationIndicator) {
+            if (isSuperAdmin && effectiveSimulation) {
+              simulationIndicator.style.display = 'inline-flex';
+              simulationIndicator.textContent = 'Simulazione attiva: ' + formatSimulationIndicator_(ROOMS_APP.toIsoDateTime(effectiveSimulation));
+            } else {
+              simulationIndicator.style.display = 'none';
+              simulationIndicator.textContent = '';
+            }
+          }
+
+          if (!isSuperAdmin) {
+            closeSimulationModal_();
+          }
+        }
+
+        function getClientEffectiveNow_() {
+          var simulated = parseSimulationDateTime_(getSimulationIsoFromClient_());
+          if (simulated) {
+            return simulated;
+          }
+          return new Date();
+        }
+
         function buildCompactMergedPage_(model) {
           var pages = getModelPages(model);
           var branchOrder = (model && model.branchOrder) ? model.branchOrder : [];
@@ -441,6 +575,7 @@
           if (adminButton) {
             adminButton.style.display = (model.user && model.user.isAdmin) ? 'inline-flex' : 'none';
           }
+          updateSimulationUi_(model);
 
           var root = document.getElementById('board-root');
           ROOMS_UI.clearNode(root);
@@ -942,8 +1077,13 @@
             return ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail((base.user && base.user.email) || '');
           });
 
-          var now = new Date();
-          var nowDate = ROOMS_APP_DATE_FALLBACK_();
+          var simulationIso = (base && base.simulation && base.simulation.active) ? base.simulation.simulatedNowISO : '';
+          var now = parseSimulationDateTime_(simulationIso) || getClientEffectiveNow_();
+          var nowDate = [
+            String(now.getFullYear()),
+            ('0' + String(now.getMonth() + 1)).slice(-2),
+            ('0' + String(now.getDate())).slice(-2)
+          ].join('-');
           var nowTime = ('0' + String(now.getHours())).slice(-2) + ':' + ('0' + String(now.getMinutes())).slice(-2);
           var current = null;
           if (selectedDate === nowDate) {
@@ -1310,7 +1450,7 @@
         }
 
         function ROOMS_APP_DATE_FALLBACK_() {
-          var now = new Date();
+          var now = getClientEffectiveNow_();
           var yyyy = String(now.getFullYear());
           var mm = ('0' + String(now.getMonth() + 1)).slice(-2);
           var dd = ('0' + String(now.getDate())).slice(-2);
@@ -1503,6 +1643,52 @@
           }
         }
 
+        function applySimulationDateTime_() {
+          if (!isSuperAdminUser_(state)) {
+            return;
+          }
+          var dateValue = simulationDateInput ? simulationDateInput.value : '';
+          var timeValue = simulationTimeInput ? simulationTimeInput.value : '';
+          var nextIso = toSimulationIso_(dateValue, timeValue);
+          if (!parseSimulationDateTime_(nextIso)) {
+            window.alert('Inserire una data e ora valide per la simulazione.');
+            return;
+          }
+
+          ROOMS_UI.setSimulatedNow_(nextIso);
+          closeSimulationModal_();
+          updateSimulationUi_(state);
+
+          if (panelState.model) {
+            panelState.model.date = dateValue;
+          }
+          if (panelDateInput) {
+            panelDateInput.value = dateValue;
+          }
+          if (isPanelOpen() && hasPendingDraftChanges_()) {
+            ROOMS_UI.setNotice(panelNotice, 'Simulazione aggiornata. Salva o annulla la bozza per ricaricare i dati.', '');
+          }
+          refresh();
+        }
+
+        function resetSimulationDateTime_() {
+          ROOMS_UI.clearSimulatedNow_();
+          closeSimulationModal_();
+          updateSimulationUi_(state);
+
+          var fallbackDate = ROOMS_APP_DATE_FALLBACK_();
+          if (panelState.model) {
+            panelState.model.date = fallbackDate;
+          }
+          if (panelDateInput) {
+            panelDateInput.value = fallbackDate;
+          }
+          if (isPanelOpen() && hasPendingDraftChanges_()) {
+            ROOMS_UI.setNotice(panelNotice, 'Simulazione disattivata. Salva o annulla la bozza per ricaricare i dati.', '');
+          }
+          refresh();
+        }
+
         function rotate() {
           if (shouldUseFullscreenCompact(state)) {
             return;
@@ -1543,6 +1729,25 @@
         window.addEventListener('resize', applyFitScale);
         if (fullscreenButton) {
           fullscreenButton.addEventListener('click', toggleFullscreen);
+        }
+        if (simulationButton) {
+          simulationButton.addEventListener('click', openSimulationModal_);
+        }
+        if (simulationApplyButton) {
+          simulationApplyButton.addEventListener('click', applySimulationDateTime_);
+        }
+        if (simulationResetButton) {
+          simulationResetButton.addEventListener('click', resetSimulationDateTime_);
+        }
+        if (simulationCancelButton) {
+          simulationCancelButton.addEventListener('click', closeSimulationModal_);
+        }
+        if (simulationModal) {
+          simulationModal.addEventListener('click', function (event) {
+            if (event.target === simulationModal) {
+              closeSimulationModal_();
+            }
+          });
         }
         if (panelSaveAllButton) {
           panelSaveAllButton.addEventListener('click', function () {
@@ -1587,6 +1792,10 @@
           });
         }
         window.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape' && simulationModal && simulationModal.style.display === 'flex') {
+            closeSimulationModal_();
+            return;
+          }
           if (event.key === 'Escape' && isPanelOpen()) {
             closeRoomPanel();
           }

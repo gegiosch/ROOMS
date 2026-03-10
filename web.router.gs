@@ -8,7 +8,9 @@ function doGet(e) {
   try {
     var response;
     if (page === 'api') {
-      response = jsonResponse_(routeApiRequest_(params));
+      response = jsonResponse_(withRuntimeContext_(extractRuntimeContext_(params), function () {
+        return routeApiRequest_(params);
+      }));
       logTiming_('doGet', startedAt, {
         page: page,
         mode: 'api'
@@ -61,7 +63,9 @@ function doPost(e) {
   var body = ROOMS_APP.parseJson((e && e.postData && e.postData.contents) || '{}', {});
   var action = body.action || body.pageAction || '';
   try {
-    var response = jsonResponse_(routeApiRequest_(body));
+    var response = jsonResponse_(withRuntimeContext_(extractRuntimeContext_(body), function () {
+      return routeApiRequest_(body);
+    }));
     logTiming_('doPost', startedAt, {
       action: action
     });
@@ -87,66 +91,80 @@ function runSetup() {
   };
 }
 
-function getBoardViewModel() {
+function getBoardViewModel(requestContext) {
   var startedAt = Date.now();
-  try {
-    var model = ROOMS_APP.Board.getBoardViewModel();
-    logTiming_('getBoardViewModel', startedAt, {
-      pageCount: model && model.pageCount || 0
-    });
-    return model;
-  } catch (error) {
-    logTiming_('getBoardViewModel', startedAt, {
-      error: String(error && error.message ? error.message : error)
-    });
-    throw error;
-  }
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    try {
+      var model = ROOMS_APP.Board.getBoardViewModel();
+      logTiming_('getBoardViewModel', startedAt, {
+        pageCount: model && model.pageCount || 0
+      });
+      return model;
+    } catch (error) {
+      logTiming_('getBoardViewModel', startedAt, {
+        error: String(error && error.message ? error.message : error)
+      });
+      throw error;
+    }
+  });
 }
 
-function getRoomViewModel(resourceId, dateString) {
-  return ROOMS_APP.Booking.getRoomViewModel(ROOMS_APP.normalizeString(resourceId), dateString);
+function getRoomViewModel(resourceId, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.getRoomViewModel(ROOMS_APP.normalizeString(resourceId), dateString);
+  });
 }
 
-function getRoomPanelData(resourceId, dateString) {
+function getRoomPanelData(resourceId, dateString, requestContext) {
   var startedAt = Date.now();
   var normalizedResourceId = ROOMS_APP.normalizeString(resourceId);
-  var targetDate = dateString || ROOMS_APP.toIsoDate(new Date());
-  try {
-    var model = ROOMS_APP.Booking.getRoomViewModel(normalizedResourceId, targetDate);
-    logTiming_('getRoomPanelData', startedAt, {
-      resourceId: normalizedResourceId,
-      date: targetDate,
-      ok: model && model.ok ? 'TRUE' : 'FALSE'
-    });
-    return model;
-  } catch (error) {
-    logTiming_('getRoomPanelData', startedAt, {
-      resourceId: normalizedResourceId,
-      date: targetDate,
-      error: String(error && error.message ? error.message : error)
-    });
-    throw error;
-  }
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    var targetDate = dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow());
+    try {
+      var model = ROOMS_APP.Booking.getRoomViewModel(normalizedResourceId, targetDate);
+      logTiming_('getRoomPanelData', startedAt, {
+        resourceId: normalizedResourceId,
+        date: targetDate,
+        ok: model && model.ok ? 'TRUE' : 'FALSE'
+      });
+      return model;
+    } catch (error) {
+      logTiming_('getRoomPanelData', startedAt, {
+        resourceId: normalizedResourceId,
+        date: targetDate,
+        error: String(error && error.message ? error.message : error)
+      });
+      throw error;
+    }
+  });
 }
 
-function createRoomBooking(payload) {
-  return ROOMS_APP.Booking.createBooking(payload);
+function createRoomBooking(payload, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.createBooking(payload);
+  });
 }
 
-function cancelRoomBooking(bookingId, notes) {
-  return ROOMS_APP.Booking.cancelBooking(bookingId, notes);
+function cancelRoomBooking(bookingId, notes, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.cancelBooking(bookingId, notes);
+  });
 }
 
-function updateRoomBooking(bookingId, payload) {
-  return ROOMS_APP.Booking.updateBooking(bookingId, payload || {});
+function updateRoomBooking(bookingId, payload, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.updateBooking(bookingId, payload || {});
+  });
 }
 
-function applyRoomPanelChanges(resourceId, dateString, changes) {
-  return ROOMS_APP.Booking.applyRoomChanges(
-    ROOMS_APP.normalizeString(resourceId),
-    dateString || ROOMS_APP.toIsoDate(new Date()),
-    changes || {}
-  );
+function applyRoomPanelChanges(resourceId, dateString, changes, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.applyRoomChanges(
+      ROOMS_APP.normalizeString(resourceId),
+      dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()),
+      changes || {}
+    );
+  });
 }
 
 function previewRecurringRoomBooking(payload) {
@@ -257,13 +275,13 @@ function renderTemplate_(filename, viewModel) {
 function routeApiRequest_(payload) {
   var action = payload.action || payload.pageAction;
   if (action === 'board') {
-    return ROOMS_APP.Board.getBoardViewModel();
+    return getBoardViewModel(payload);
   }
   if (action === 'room') {
-    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date);
+    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date, payload);
   }
   if (action === 'roomPanel') {
-    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date);
+    return getRoomPanelData(normalizeRoomIdParam_(payload), payload.date, payload);
   }
   if (action === 'createBooking') {
     return ROOMS_APP.Booking.createBooking(payload);
@@ -335,7 +353,11 @@ function renderBoardPage_(params) {
     schoolName: '',
     user: {
       email: '',
-      isAdmin: false
+      isAdmin: false,
+      role: 'USER',
+      isSuperAdmin: false,
+      simulationActive: false,
+      simulatedNowISO: ''
     },
     branchOrder: [],
     branchLabels: {},
@@ -346,6 +368,39 @@ function renderBoardPage_(params) {
     initialModelJson: JSON.stringify(bootstrapModel),
     initialRoomId: normalizeRoomIdParam_(params)
   });
+}
+
+function extractRuntimeContext_(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  return {
+    simulatedNow: ROOMS_APP.normalizeString(
+      payload.simulatedNow ||
+      payload.simulatedDateTime ||
+      payload.__simulatedNow ||
+      ''
+    )
+  };
+}
+
+function withRuntimeContext_(requestContext, callback) {
+  var previousContext = ROOMS_APP.RUNTIME_CONTEXT_ || null;
+  var actor = ROOMS_APP.Auth.getUserContext();
+  var simulation = ROOMS_APP.Auth.getSimulationContext_(requestContext, actor);
+  ROOMS_APP.RUNTIME_CONTEXT_ = {
+    simulatedNow: simulation.active ? simulation.iso : '',
+    actorEmail: actor.email,
+    role: actor.role || 'USER',
+    isSuperAdmin: Boolean(actor.isSuperAdmin)
+  };
+
+  try {
+    return callback();
+  } finally {
+    ROOMS_APP.RUNTIME_CONTEXT_ = previousContext;
+  }
 }
 
 function logTiming_(label, startedAt, payload) {

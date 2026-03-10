@@ -2,8 +2,16 @@
 window.ROOMS_INITIAL_MODEL = window.ROOMS_INITIAL_MODEL || {};
 
 window.ROOMS_UI = {
+  SIMULATION_STORAGE_KEY: 'rooms_superadmin_simulated_now',
+
   call: function (methodName) {
     var args = Array.prototype.slice.call(arguments, 1);
+    var simulatedNow = this.getSimulatedNow_();
+    if (simulatedNow) {
+      args.push({
+        simulatedNow: simulatedNow
+      });
+    }
     return new Promise(function (resolve, reject) {
       if (typeof google === 'undefined' || !google.script || !google.script.run) {
         reject(new Error('google.script.run is unavailable in this context.'));
@@ -18,6 +26,39 @@ window.ROOMS_UI = {
 
       runner[methodName].apply(runner, args);
     });
+  },
+
+  getSimulatedNow_: function () {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return '';
+      }
+      return String(window.localStorage.getItem(this.SIMULATION_STORAGE_KEY) || '');
+    } catch (error) {
+      return '';
+    }
+  },
+
+  setSimulatedNow_: function (value) {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return;
+      }
+      window.localStorage.setItem(this.SIMULATION_STORAGE_KEY, String(value || ''));
+    } catch (error) {
+      // no-op
+    }
+  },
+
+  clearSimulatedNow_: function () {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return;
+      }
+      window.localStorage.removeItem(this.SIMULATION_STORAGE_KEY);
+    } catch (error) {
+      // no-op
+    }
   },
 
   setNotice: function (element, message, kind) {

@@ -20,7 +20,8 @@ ROOMS_APP.Board = {
     var startedAt = Date.now();
     var stepStartedAt = startedAt;
     var user = ROOMS_APP.Auth.getUserContext();
-    var now = new Date();
+    var now = ROOMS_APP.Auth.getEffectiveNow(null, user);
+    var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
     var nowIso = ROOMS_APP.toIsoDateTime(now);
     var today = ROOMS_APP.toIsoDate(now);
     var currentTime = Utilities.formatDate(now, ROOMS_APP.getTimezone(), 'HH:mm');
@@ -110,7 +111,11 @@ ROOMS_APP.Board = {
       schoolName: ROOMS_APP.getConfigValue('SCHOOL_NAME', 'IIS Alessandrini'),
       user: {
         email: user.email,
-        isAdmin: user.isAdmin
+        isAdmin: user.isAdmin,
+        role: user.role || 'USER',
+        isSuperAdmin: Boolean(user.isSuperAdmin),
+        simulationActive: Boolean(simulation.active),
+        simulatedNowISO: simulation.iso || ''
       },
       aulaMagna: aulaMagna,
       branchOrder: this.BRANCH_ORDER_.slice(),

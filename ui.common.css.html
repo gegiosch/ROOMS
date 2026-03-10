@@ -335,6 +335,12 @@ body.board-monitor .board-topbar .chip-row {
   gap: 6px;
 }
 
+.simulation-indicator {
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fcd34d;
+  background: rgba(51, 36, 15, 0.7);
+}
+
 body.board-monitor #board-root {
   height: 100%;
 }
@@ -538,6 +544,45 @@ body.board-monitor #board-root {
   height: 34px;
   padding: 0;
   cursor: pointer;
+}
+
+.board-floating-button.simulation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.board-simulation-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 6, 23, 0.56);
+}
+
+.board-simulation-dialog {
+  width: min(420px, calc(100vw - 40px));
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(2, 6, 23, 0.96);
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.58);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.board-simulation-dialog h3 {
+  margin: 0;
+}
+
+.board-simulation-dialog p {
+  margin: 0;
 }
 
 .room-panel-overlay {
