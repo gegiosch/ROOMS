@@ -956,7 +956,7 @@
           var roomFound = Boolean(room && room.ResourceId);
           var isAulaMagna = Boolean(effectiveModel.isAulaMagna);
           var bookings = mergeDraftOnBookings_(effectiveModel.bookings);
-          var dailySlots = safeArray(effectiveModel.dailySlots || effectiveModel.slots);
+          var freeSlots = safeArray(effectiveModel.freeSlots);
           var identity = getUserIdentity_(effectiveModel);
 
           setText('panel-room-title', roomFound ? room.DisplayName : 'Aula non trovata');
@@ -994,17 +994,16 @@
           renderTable(
             'panel-daily-slots-table',
             ['Orario', 'Stato', 'Occupante', 'Fonte', 'Azione'],
-            dailySlots.map(function (slot) {
-              var occupancy = slot.occupancy || null;
+            freeSlots.map(function (slot) {
               return [
                 '🕒 ' + (slot.startTime || '') + ' - ' + (slot.endTime || ''),
-                slot.isOccupied ? 'Occupato' : 'Libero',
-                slot.isOccupied ? occupancyDisplayActor_(occupancy || slot) : 'LIBERO',
-                slot.isOccupied ? occupancySourceLabel_(occupancy || slot) : '-',
+                'Libero',
+                'LIBERO',
+                '-',
                 slotSelectionNode(slot)
               ];
             }),
-            effectiveModel.isOpen ? 'Nessuno slot disponibile nel giorno selezionato.' : 'Aula non disponibile nel giorno selezionato.'
+            effectiveModel.isOpen ? 'Nessuno slot libero disponibile nel giorno selezionato.' : 'Aula non disponibile nel giorno selezionato.'
           );
 
           renderTable(
@@ -1132,9 +1131,9 @@
           var fromDate = (panelIntervalFrom && panelIntervalFrom.value) || selectedDate;
           var toDate = (panelIntervalTo && panelIntervalTo.value) || selectedDate;
           var intervalDates = buildIntervalDates_(fromDate, toDate);
-          var dailySlots = safeArray(model.dailySlots || model.slots);
-          var selectedSlots = dailySlots.filter(function (slot) {
-            return !slot.isOccupied && panelState.selectedFreeSlotKeys[normalizeSlotKey_(slot.startTime, slot.endTime)];
+          var freeSlots = safeArray(model.freeSlots);
+          var selectedSlots = freeSlots.filter(function (slot) {
+            return panelState.selectedFreeSlotKeys[normalizeSlotKey_(slot.startTime, slot.endTime)];
           });
           var identity = getUserIdentity_(model);
           var createName = document.getElementById('panel-booking-name').value || identity.firstName;

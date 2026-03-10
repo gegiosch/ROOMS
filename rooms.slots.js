@@ -14,6 +14,8 @@ ROOMS_APP.Slots = {
   getDaySlotsFromOccupancies: function (resourceId, dateString, bookings, timetableOccupancies, opening, options) {
     var openingWindow = opening || ROOMS_APP.Policy.getEffectiveOpeningForResource(resourceId, dateString);
     var settings = options || {};
+    var windowOpenTime = this.normalizeTimeValue_(openingWindow.openTime);
+    var windowCloseTime = this.normalizeTimeValue_(openingWindow.closeTime);
     var occupancies = this.sortOccupancies_(
       (bookings || []).map(function (booking) {
         var enriched = {};
@@ -27,7 +29,7 @@ ROOMS_APP.Slots = {
       }).concat(timetableOccupancies || [])
     );
 
-    if (!openingWindow.isOpen) {
+    if (!openingWindow.isOpen || !windowOpenTime || !windowCloseTime || this.toMinutes_(windowOpenTime) >= this.toMinutes_(windowCloseTime)) {
       return {
         isOpen: false,
         openTime: '',
@@ -41,38 +43,42 @@ ROOMS_APP.Slots = {
       };
     }
 
-    var baseSlots = this.buildBaseSlots_(dateString, openingWindow.openTime, openingWindow.closeTime);
+    var baseSlots = this.buildBaseSlots_(dateString, windowOpenTime, windowCloseTime);
     var slotRows = this.applyOccupanciesToSlots_(baseSlots, occupancies);
     if (settings.splitFreeSlotsHalfHour) {
       slotRows = this.splitFreeSlotsIntoHalfHours_(slotRows);
     }
+    slotRows = this.filterValidSlots_(slotRows, windowOpenTime, windowCloseTime);
 
     return {
       isOpen: true,
-      openTime: openingWindow.openTime,
-      closeTime: openingWindow.closeTime,
+      openTime: windowOpenTime,
+      closeTime: windowCloseTime,
       openingSource: openingWindow.source || '',
       bookings: bookings || [],
       timetableOccupancies: timetableOccupancies || [],
       occupancies: occupancies,
       slots: slotRows,
-      freeSlots: this.extractFreeSlots_(slotRows)
+      freeSlots: this.extractFreeSlots_(slotRows, windowOpenTime, windowCloseTime)
     };
   },
 
-  buildBaseSlots_: function (dateString, openTime, closeTime) {
+  buildBaseSlots_: function (_dateString, openTime, closeTime) {
     var slots = [];
-    var cursor = ROOMS_APP.combineDateTime(dateString, openTime);
-    var end = ROOMS_APP.combineDateTime(dateString, closeTime);
+    var startMinutes = this.toMinutes_(openTime);
+    var endMinutes = this.toMinutes_(closeTime);
 
-    while (cursor.getTime() < end.getTime()) {
-      var slotStart = Utilities.formatDate(cursor, ROOMS_APP.getTimezone(), 'HH:mm');
-      var next = new Date(Math.min(cursor.getTime() + this.BASE_SLOT_MINUTES_ * 60000, end.getTime()));
-      var slotEnd = Utilities.formatDate(next, ROOMS_APP.getTimezone(), 'HH:mm');
+    if (startMinutes == null || endMinutes == null || startMinutes >= endMinutes) {
+      return slots;
+    }
+
+    var cursor = startMinutes;
+    while (cursor < endMinutes) {
+      var next = Math.min(cursor + this.BASE_SLOT_MINUTES_, endMinutes);
       slots.push({
-        startTime: slotStart,
-        endTime: slotEnd,
-        slotMinutes: ROOMS_APP.minutesBetween(slotStart, slotEnd)
+        startTime: this.minutesToTime_(cursor),
+        endTime: this.minutesToTime_(next),
+        slotMinutes: next - cursor
       });
       cursor = next;
     }
@@ -82,10 +88,25 @@ ROOMS_APP.Slots = {
 
   applyOccupanciesToSlots_: function (slots, occupancies) {
     var self = this;
+    var normalizedOccupancies = (occupancies || []).map(function (entry) {
+      var startTime = self.normalizeTimeValue_(entry.StartTime);
+      var endTime = self.normalizeTimeValue_(entry.EndTime);
+      return {
+        row: entry,
+        startMinutes: self.toMinutes_(startTime),
+        endMinutes: self.toMinutes_(endTime)
+      };
+    }).filter(function (entry) {
+      return entry.startMinutes != null && entry.endMinutes != null && entry.endMinutes > entry.startMinutes;
+    });
+
     return (slots || []).map(function (slot) {
-      var occupancy = (occupancies || []).filter(function (entry) {
-        return !(slot.endTime <= entry.StartTime || slot.startTime >= entry.EndTime);
+      var slotStart = self.toMinutes_(slot.startTime);
+      var slotEnd = self.toMinutes_(slot.endTime);
+      var occupancyEntry = normalizedOccupancies.filter(function (entry) {
+        return !(slotEnd <= entry.startMinutes || slotStart >= entry.endMinutes);
       })[0] || null;
+      var occupancy = occupancyEntry ? occupancyEntry.row : null;
 
       return {
         startTime: slot.startTime,
@@ -108,12 +129,21 @@ ROOMS_APP.Slots = {
     var output = [];
 
     (slots || []).forEach(function (slot) {
-      if (slot.isOccupied || slot.slotMinutes !== self.BASE_SLOT_MINUTES_) {
+      var slotStart = self.toMinutes_(slot.startTime);
+      var slotEnd = self.toMinutes_(slot.endTime);
+      if (
+        slot.isOccupied ||
+        Number(slot.slotMinutes) !== self.BASE_SLOT_MINUTES_ ||
+        slotStart == null ||
+        slotEnd == null ||
+        slotEnd - slotStart !== self.BASE_SLOT_MINUTES_
+      ) {
         output.push(slot);
         return;
       }
 
-      var firstEnd = ROOMS_APP.addMinutes(slot.startTime, self.HALF_SLOT_MINUTES_);
+      var firstEndMinutes = slotStart + self.HALF_SLOT_MINUTES_;
+      var firstEnd = self.minutesToTime_(firstEndMinutes);
       output.push({
         startTime: slot.startTime,
         endTime: firstEnd,
@@ -147,15 +177,99 @@ ROOMS_APP.Slots = {
     return output;
   },
 
-  extractFreeSlots_: function (slots) {
+  extractFreeSlots_: function (slots, openTime, closeTime) {
+    var self = this;
     return (slots || []).filter(function (slot) {
-      return !slot.isOccupied;
+      return !slot.isOccupied && self.isValidSlot_(slot, openTime, closeTime);
     }).map(function (slot) {
       return {
         startTime: slot.startTime,
-        endTime: slot.endTime
+        endTime: slot.endTime,
+        slotMinutes: slot.slotMinutes,
+        isOccupied: false,
+        canBook: true,
+        bookingId: '',
+        sourceKind: '',
+        sourceType: '',
+        displayActor: '',
+        title: '',
+        occupancy: null,
+        isSplitFreeSlot: Boolean(slot.isSplitFreeSlot)
       };
     });
+  },
+
+  filterValidSlots_: function (slots, openTime, closeTime) {
+    var self = this;
+    return (slots || []).filter(function (slot) {
+      return self.isValidSlot_(slot, openTime, closeTime);
+    });
+  },
+
+  isValidSlot_: function (slot, openTime, closeTime) {
+    if (!slot) {
+      return false;
+    }
+    var start = this.toMinutes_(slot.startTime);
+    var end = this.toMinutes_(slot.endTime);
+    var open = this.toMinutes_(openTime);
+    var close = this.toMinutes_(closeTime);
+    if (start == null || end == null || open == null || close == null) {
+      return false;
+    }
+    if (end <= start) {
+      return false;
+    }
+    if (start < open || end > close) {
+      return false;
+    }
+    return true;
+  },
+
+  normalizeTimeValue_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value);
+    if (!normalized) {
+      return '';
+    }
+    var match = normalized.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+      return '';
+    }
+    var hours = Number(match[1]);
+    var minutes = Number(match[2]);
+    if (!isFinite(hours) || !isFinite(minutes)) {
+      return '';
+    }
+    if (minutes < 0 || minutes > 59) {
+      return '';
+    }
+    if (hours < 0 || hours > 24) {
+      return '';
+    }
+    if (hours === 24 && minutes !== 0) {
+      return '';
+    }
+    return (hours < 10 ? '0' : '') + hours + ':' + (minutes < 10 ? '0' : '') + minutes;
+  },
+
+  toMinutes_: function (timeString) {
+    var normalized = this.normalizeTimeValue_(timeString);
+    if (!normalized) {
+      return null;
+    }
+    var parts = normalized.split(':');
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  },
+
+  minutesToTime_: function (minutes) {
+    var total = Number(minutes);
+    if (!isFinite(total) || total < 0) {
+      return '';
+    }
+    var bounded = Math.min(total, 24 * 60);
+    var hours = Math.floor(bounded / 60);
+    var mins = bounded % 60;
+    return (hours < 10 ? '0' : '') + hours + ':' + (mins < 10 ? '0' : '') + mins;
   },
 
   sortOccupancies_: function (rows) {
