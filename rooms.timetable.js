@@ -153,6 +153,8 @@ ROOMS_APP.Timetable = {
       this.CONFIG_LABORATORI_SHEET_KEY_,
       this.DEFAULT_LABORATORI_SHEET_
     );
+    var spaceLookup = this.buildSpaceResourceLookup_();
+    var unresolvedLabels = {};
     return this.parseMatrixSheet_(
       sheetName,
       'TIMETABLE_SPACE',
@@ -160,7 +162,10 @@ ROOMS_APP.Timetable = {
       currentById,
       nowIso,
       this.CONFIG_LABORATORI_SHEET_KEY_,
-      {}
+      {
+        spaceLookup: spaceLookup,
+        unresolvedLabels: unresolvedLabels
+      }
     );
   },
 
@@ -209,8 +214,13 @@ ROOMS_APP.Timetable = {
           resourceLabel = classCode;
           teacherName = rowLabel;
         } else {
-          resourceId = rowLabel;
-          resourceLabel = rowLabel;
+          var resolvedSpace = this.resolveSpaceResource_(rowLabel, parseOptions && parseOptions.spaceLookup);
+          if (!resolvedSpace) {
+            this.logUnresolvedSpaceLabel_(rowLabel, sheetName, parseOptions && parseOptions.unresolvedLabels);
+            continue;
+          }
+          resourceId = resolvedSpace.ResourceId;
+          resourceLabel = resolvedSpace.DisplayName || rowLabel;
           // For spaces/labs we store the class in TeacherName so board ORA/NEXT can use one display field.
           teacherName = classCode;
         }
@@ -654,6 +664,65 @@ ROOMS_APP.Timetable = {
       }
     });
     return set;
+  },
+
+  buildSpaceResourceLookup_: function () {
+    var lookup = {};
+    var self = this;
+    ROOMS_APP.Board.listResources_().forEach(function (resource) {
+      var candidates = self.buildResourceLookupCandidates_([
+        resource.ResourceId,
+        resource.DisplayName
+      ]);
+      candidates.forEach(function (candidate) {
+        if (!lookup[candidate]) {
+          lookup[candidate] = resource;
+        }
+      });
+    });
+    return lookup;
+  },
+
+  buildResourceLookupCandidates_: function (values) {
+    var candidates = {};
+    (values || []).forEach(function (value) {
+      var normalized = ROOMS_APP.normalizeString(value);
+      if (!normalized) {
+        return;
+      }
+      candidates[normalized.toUpperCase()] = true;
+      candidates[ROOMS_APP.slugify(normalized)] = true;
+      candidates[normalized.toUpperCase().replace(/[^A-Z0-9]+/g, '')] = true;
+    });
+    return Object.keys(candidates).filter(function (value) {
+      return Boolean(value);
+    });
+  },
+
+  resolveSpaceResource_: function (rowLabel, lookup) {
+    var keys = this.buildResourceLookupCandidates_([rowLabel]);
+    var index;
+    for (index = 0; index < keys.length; index += 1) {
+      var candidate = keys[index];
+      if (lookup && lookup[candidate]) {
+        return lookup[candidate];
+      }
+    }
+    return null;
+  },
+
+  logUnresolvedSpaceLabel_: function (rowLabel, sheetName, seenMap) {
+    var key = ROOMS_APP.normalizeString(rowLabel);
+    if (!key) {
+      return;
+    }
+    if (seenMap && seenMap[key]) {
+      return;
+    }
+    if (seenMap) {
+      seenMap[key] = true;
+    }
+    Logger.log('[WARN] Timetable space row not resolved to resource: "%s" in sheet "%s"', key, sheetName);
   },
 
   matchesResourceId_: function (rowResourceId, expectedResourceId) {
