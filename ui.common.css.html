@@ -11,6 +11,7 @@
   --state-next: #fbbf24;
   --border: #1e293b;
   --shadow: 0 30px 80px rgba(2, 6, 23, 0.45);
+  --monitor-ui-scale: 1;
 }
 
 * {
@@ -449,6 +450,68 @@ body.board-monitor #board-root {
 
 .board-shell.fullscreen-active.fullscreen-compact .lab-block {
   padding-top: 0;
+}
+
+.board-shell.monitor-mode .title-block h1 {
+  font-size: calc(clamp(20px, 1.7vw, 26px) * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .subtitle,
+.board-shell.monitor-mode .eyebrow {
+  font-size: calc(12px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .status-pill,
+.board-shell.monitor-mode .legend-pill {
+  font-size: calc(11px * var(--monitor-ui-scale));
+  padding: calc(4px * var(--monitor-ui-scale)) calc(7px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .branch-panel {
+  padding: calc(6px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .branch-label,
+.board-shell.monitor-mode .floor-group-label,
+.board-shell.monitor-mode .spine-node {
+  font-size: calc(12px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .room-tile {
+  min-height: calc(62px * var(--monitor-ui-scale));
+  padding: calc(8px * var(--monitor-ui-scale)) calc(10px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .room-title {
+  font-size: calc(15px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .room-lines {
+  font-size: calc(12px * var(--monitor-ui-scale));
+  line-height: 1.2;
+}
+
+.board-shell.monitor-mode .aula-magna-special {
+  min-height: calc(300px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .aula-magna-current-title {
+  font-size: calc(16px * var(--monitor-ui-scale));
+}
+
+.board-shell.monitor-mode .aula-magna-current-time,
+.board-shell.monitor-mode .aula-magna-event-line,
+.board-shell.monitor-mode .aula-magna-empty {
+  font-size: calc(12px * var(--monitor-ui-scale));
+}
+
+.monitor-readonly-tile,
+.monitor-readonly-branch {
+  cursor: default;
+}
+
+.monitor-readonly-tile:disabled {
+  opacity: 1;
 }
 
 .tree-left-column .branch-pa1-aula {

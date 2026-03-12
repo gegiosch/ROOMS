@@ -4,6 +4,7 @@ function doGet(e) {
   var startedAt = Date.now();
   var params = (e && e.parameter) || {};
   var page = params.page || 'board';
+  var isMonitorMode = isMonitorModeRequest_(params);
 
   try {
     var response;
@@ -27,7 +28,7 @@ function doGet(e) {
       return response;
     }
 
-    if (page === 'admin') {
+    if (page === 'admin' && !isMonitorMode) {
       ROOMS_APP.Auth.requireAdmin();
       response = renderTemplate_('ui.admin', {
         pageTitle: 'Admin',
@@ -93,7 +94,7 @@ function runSetup() {
 
 function getBoardViewModel(requestContext) {
   var startedAt = Date.now();
-  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     try {
       var model = ROOMS_APP.Board.getBoardViewModel();
       logTiming_('getBoardViewModel', startedAt, {
@@ -386,6 +387,7 @@ function normalizeRoomIdParam_(payload) {
 }
 
 function renderBoardPage_(params) {
+  var isMonitorMode = isMonitorModeRequest_(params);
   var bootstrapModel = {
     generatedAtISO: '',
     date: '',
@@ -393,6 +395,8 @@ function renderBoardPage_(params) {
     rotationSec: 15,
     pageCount: 1,
     fullscreenCompactEnabled: true,
+    isMonitorMode: isMonitorMode,
+    monitorUiScale: Math.max(0.5, ROOMS_APP.getNumberConfig('MONITOR_UI_SCALE', 1) || 1),
     appName: 'ROOMS',
     schoolName: '',
     user: {
@@ -420,6 +424,8 @@ function extractRuntimeContext_(payload) {
   }
 
   return {
+    mode: ROOMS_APP.normalizeString(payload.mode || ''),
+    isMonitorMode: isMonitorModeRequest_(payload),
     simulatedNow: ROOMS_APP.normalizeString(
       payload.simulatedNow ||
       payload.simulatedDateTime ||
@@ -434,6 +440,8 @@ function withRuntimeContext_(requestContext, callback) {
   var actor = ROOMS_APP.Auth.getUserContext();
   var simulation = ROOMS_APP.Auth.getSimulationContext_(requestContext, actor);
   ROOMS_APP.RUNTIME_CONTEXT_ = {
+    mode: requestContext && requestContext.mode ? requestContext.mode : '',
+    isMonitorMode: Boolean(requestContext && requestContext.isMonitorMode),
     simulatedNow: simulation.active ? simulation.iso : '',
     actorEmail: actor.email,
     role: actor.role || 'USER',
@@ -457,4 +465,21 @@ function logTiming_(label, startedAt, payload) {
     serialized = '{}';
   }
   Logger.log('[PERF] %s %sms %s', label, elapsedMs, serialized);
+}
+
+function isMonitorModeRequest_(payload) {
+  return ROOMS_APP.normalizeString(payload && payload.mode).toLowerCase() === 'monitor';
+}
+
+function extractRuntimeContextFromArgs_(argsLike) {
+  var merged = {};
+  Array.prototype.slice.call(argsLike || []).forEach(function (entry) {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    Object.keys(entry).forEach(function (key) {
+      merged[key] = entry[key];
+    });
+  });
+  return extractRuntimeContext_(merged);
 }

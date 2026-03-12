@@ -427,9 +427,15 @@
           tileNode.type = 'button';
           tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
           tileNode.dataset.resourceId = tile.resourceId;
-          tileNode.addEventListener('click', function () {
-            openRoomPanel(tile.resourceId);
-          });
+          if (isMonitorMode_(state)) {
+            tileNode.disabled = true;
+            tileNode.setAttribute('aria-disabled', 'true');
+            tileNode.classList.add('monitor-readonly-tile');
+          } else {
+            tileNode.addEventListener('click', function () {
+              openRoomPanel(tile.resourceId);
+            });
+          }
           tileNode.appendChild(ROOMS_UI.el('div', 'room-title', tile.displayName));
 
           var lines = ROOMS_UI.el('div', 'room-lines');
@@ -481,9 +487,13 @@
           upcomingSection.appendChild(list);
           content.appendChild(upcomingSection);
           branch.appendChild(content);
-          branch.addEventListener('click', function () {
-            openRoomPanel(resourceId);
-          });
+          if (isMonitorMode_(state)) {
+            branch.classList.add('monitor-readonly-branch');
+          } else {
+            branch.addEventListener('click', function () {
+              openRoomPanel(resourceId);
+            });
+          }
           return branch;
         }
 
@@ -521,6 +531,10 @@
           return (model && model.pages && model.pages.length) ? model.pages : [];
         }
 
+        function isMonitorMode_(model) {
+          return Boolean(model && model.isMonitorMode);
+        }
+
         function shouldUseFullscreenCompact(model) {
           return Boolean(isFullscreenActive() && model && model.fullscreenCompactEnabled);
         }
@@ -529,8 +543,14 @@
           if (!boardShell) {
             return;
           }
+          var monitorScale = Number(model && model.monitorUiScale || 1);
+          if (!isFinite(monitorScale) || monitorScale <= 0) {
+            monitorScale = 1;
+          }
           boardShell.classList.toggle('fullscreen-active', isFullscreenActive());
           boardShell.classList.toggle('fullscreen-compact', shouldUseFullscreenCompact(model));
+          boardShell.classList.toggle('monitor-mode', isMonitorMode_(model));
+          boardShell.style.setProperty('--monitor-ui-scale', String(monitorScale));
         }
 
         function resolveVisiblePages_(model) {
@@ -594,7 +614,7 @@
           setText('board-updated-at', 'Aggiornato: ' + (state.generatedAtISO || ''));
           setText('board-page-indicator', 'Pagina ' + ((visiblePages.length ? (pageIndex % visiblePages.length) : 0) + 1) + '/' + Math.max(visiblePages.length, 1));
           if (adminButton) {
-            adminButton.style.display = state.user && state.user.isAdmin ? 'inline-flex' : 'none';
+            adminButton.style.display = !isMonitorMode_(state) && state.user && state.user.isAdmin ? 'inline-flex' : 'none';
           }
           updateSimulationUi_(state);
 
@@ -669,15 +689,16 @@
 
         function updateSimulationUi_(model) {
           var isSuperAdmin = isSuperAdminUser_(model);
+          var isMonitorMode = isMonitorMode_(model);
           var simulatedNowIso = (model && model.user && model.user.simulationActive) ? String(model.user.simulatedNowISO || '') : '';
           var fallbackIso = getSimulationIsoFromClient_();
           var effectiveSimulation = parseSimulationDateTime_(simulatedNowIso) || parseSimulationDateTime_(fallbackIso);
 
           if (simulationButton) {
-            simulationButton.style.display = isSuperAdmin ? 'inline-flex' : 'none';
+            simulationButton.style.display = !isMonitorMode && isSuperAdmin ? 'inline-flex' : 'none';
           }
           if (simulationIndicator) {
-            if (isSuperAdmin && effectiveSimulation) {
+            if (!isMonitorMode && isSuperAdmin && effectiveSimulation) {
               simulationIndicator.style.display = 'inline-flex';
               simulationIndicator.textContent = 'Simulazione attiva: ' + formatSimulationIndicator_(effectiveSimulation);
             } else {
@@ -1478,6 +1499,9 @@
         }
 
         function openRoomPanel(resourceId) {
+          if (isMonitorMode_(state)) {
+            return;
+          }
           if (!resourceId) {
             return;
           }
@@ -1491,6 +1515,12 @@
             return;
           }
           openRoomPanelInternal_(resourceId);
+        }
+
+        function buildBoardRequestContext_() {
+          return {
+            mode: isMonitorMode_(state) ? 'monitor' : ''
+          };
         }
 
         function buildIntervalDates_(fromDate, toDate) {
@@ -1812,11 +1842,11 @@
 
         function refresh(options) {
           options = options || {};
-          ROOMS_UI.call('getBoardViewModel')
+          ROOMS_UI.call('getBoardViewModel', buildBoardRequestContext_())
             .then(function (model) {
               pageIndex = pageIndex % Math.max(getModelPages(model).length, 1);
               render(model);
-              if (isPanelOpen() && panelState.resourceId && !hasPendingDraftChanges_() && !options.skipPanelRefresh) {
+              if (!isMonitorMode_(model) && isPanelOpen() && panelState.resourceId && !hasPendingDraftChanges_() && !options.skipPanelRefresh) {
                 loadRoomPanelData(panelState.resourceId, {
                   date: (panelState.model && panelState.model.date) || toIsoDate_(new Date()),
                   silentNotice: true,
@@ -2001,7 +2031,7 @@
         rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
         refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);
 
-        if (initialRoomId) {
+        if (initialRoomId && !isMonitorMode_(state)) {
           openRoomPanel(initialRoomId);
         }
       }());

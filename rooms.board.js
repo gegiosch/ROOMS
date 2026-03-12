@@ -20,6 +20,8 @@ ROOMS_APP.Board = {
     var startedAt = Date.now();
     var stepStartedAt = startedAt;
     var user = ROOMS_APP.Auth.getUserContext();
+    var runtimeContext = ROOMS_APP.RUNTIME_CONTEXT_ || {};
+    var isMonitorMode = Boolean(runtimeContext.isMonitorMode);
     var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
     var now = simulation.active && simulation.date ? simulation.date : new Date();
     var nowIso = simulation.active ? simulation.iso : ROOMS_APP.toIsoDateTime(now);
@@ -106,6 +108,8 @@ ROOMS_APP.Board = {
       rotationSec: ROOMS_APP.getNumberConfig('BOARD_ROTATION_SEC', 15),
       pageCount: pages.length,
       fullscreenCompactEnabled: ROOMS_APP.getBooleanConfig('BOARD_FULLSCREEN_COMPACT', true),
+      isMonitorMode: isMonitorMode,
+      monitorUiScale: Math.max(0.5, ROOMS_APP.getNumberConfig('MONITOR_UI_SCALE', 1) || 1),
       palette: ROOMS_APP.PALETTE,
       appName: ROOMS_APP.getConfigValue('APP_NAME', 'ROOMS'),
       schoolName: ROOMS_APP.getConfigValue('SCHOOL_NAME', 'IIS Alessandrini'),
