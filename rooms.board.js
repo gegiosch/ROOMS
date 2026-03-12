@@ -16,6 +16,14 @@ ROOMS_APP.Board = {
   BRANCH_PAGE_CAPACITY_: 12,
   AULA_MAGNA_RESOURCE_ID_: 'AULA_MAGNA',
 
+  normalizeMonitorUiScale_: function (value) {
+    var parsed = Number(value);
+    if (!isFinite(parsed) || parsed <= 0) {
+      return 1;
+    }
+    return Math.max(0.5, Math.min(2, parsed));
+  },
+
   getBoardViewModel: function () {
     var startedAt = Date.now();
     var stepStartedAt = startedAt;
@@ -109,7 +117,7 @@ ROOMS_APP.Board = {
       pageCount: pages.length,
       fullscreenCompactEnabled: ROOMS_APP.getBooleanConfig('BOARD_FULLSCREEN_COMPACT', true),
       isMonitorMode: isMonitorMode,
-      monitorUiScale: Math.max(0.5, ROOMS_APP.getNumberConfig('MONITOR_UI_SCALE', 1) || 1),
+      monitorUiScale: this.normalizeMonitorUiScale_(ROOMS_APP.getConfigValue('MONITOR_UI_SCALE', '1')),
       palette: ROOMS_APP.PALETTE,
       appName: ROOMS_APP.getConfigValue('APP_NAME', 'ROOMS'),
       schoolName: ROOMS_APP.getConfigValue('SCHOOL_NAME', 'IIS Alessandrini'),

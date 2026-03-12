@@ -555,14 +555,19 @@
           return Boolean(isFullscreenActive() && model && model.fullscreenCompactEnabled);
         }
 
+        function normalizeMonitorUiScaleLocal_(value) {
+          var parsed = Number(value);
+          if (!isFinite(parsed) || parsed <= 0) {
+            return 1;
+          }
+          return Math.max(0.5, Math.min(2, parsed));
+        }
+
         function applyFullscreenCompactMode(model) {
           if (!boardShell) {
             return;
           }
-          var monitorScale = Number(model && model.monitorUiScale || 1);
-          if (!isFinite(monitorScale) || monitorScale <= 0) {
-            monitorScale = 1;
-          }
+          var monitorScale = normalizeMonitorUiScaleLocal_(model && model.monitorUiScale);
           boardShell.classList.toggle('fullscreen-active', isFullscreenActive());
           boardShell.classList.toggle('fullscreen-compact', shouldUseFullscreenCompact(model));
           boardShell.classList.toggle('monitor-mode', isMonitorModeEffective_(model));
