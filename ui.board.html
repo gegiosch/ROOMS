@@ -427,7 +427,7 @@
           tileNode.type = 'button';
           tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
           tileNode.dataset.resourceId = tile.resourceId;
-          if (isMonitorMode_(state)) {
+          if (shouldBlockRoomPanel_()) {
             tileNode.disabled = true;
             tileNode.setAttribute('aria-disabled', 'true');
             tileNode.classList.add('monitor-readonly-tile');
@@ -487,7 +487,7 @@
           upcomingSection.appendChild(list);
           content.appendChild(upcomingSection);
           branch.appendChild(content);
-          if (isMonitorMode_(state)) {
+          if (shouldBlockRoomPanel_()) {
             branch.classList.add('monitor-readonly-branch');
           } else {
             branch.addEventListener('click', function () {
@@ -535,6 +535,22 @@
           return Boolean(model && model.isMonitorMode);
         }
 
+        function hasMonitorModeQuery_() {
+          try {
+            return String(new URLSearchParams(window.location.search).get('mode') || '').toLowerCase() === 'monitor';
+          } catch (error) {
+            return false;
+          }
+        }
+
+        function isMonitorModeEffective_(model) {
+          return isMonitorMode_(model) || hasMonitorModeQuery_();
+        }
+
+        function shouldBlockRoomPanel_() {
+          return isMonitorModeEffective_(state);
+        }
+
         function shouldUseFullscreenCompact(model) {
           return Boolean(isFullscreenActive() && model && model.fullscreenCompactEnabled);
         }
@@ -549,7 +565,7 @@
           }
           boardShell.classList.toggle('fullscreen-active', isFullscreenActive());
           boardShell.classList.toggle('fullscreen-compact', shouldUseFullscreenCompact(model));
-          boardShell.classList.toggle('monitor-mode', isMonitorMode_(model));
+          boardShell.classList.toggle('monitor-mode', isMonitorModeEffective_(model));
           boardShell.style.setProperty('--monitor-ui-scale', String(monitorScale));
         }
 
@@ -607,6 +623,9 @@
 
         function render(model) {
           state = model || {};
+          if (shouldBlockRoomPanel_() && isPanelOpen()) {
+            closeRoomPanelImmediate_();
+          }
           applyFullscreenCompactMode(state);
           visiblePages = resolveVisiblePages_(state);
           setText('board-app-name', state.appName || 'ROOMS');
@@ -614,7 +633,7 @@
           setText('board-updated-at', 'Aggiornato: ' + (state.generatedAtISO || ''));
           setText('board-page-indicator', 'Pagina ' + ((visiblePages.length ? (pageIndex % visiblePages.length) : 0) + 1) + '/' + Math.max(visiblePages.length, 1));
           if (adminButton) {
-            adminButton.style.display = !isMonitorMode_(state) && state.user && state.user.isAdmin ? 'inline-flex' : 'none';
+            adminButton.style.display = !isMonitorModeEffective_(state) && state.user && state.user.isAdmin ? 'inline-flex' : 'none';
           }
           updateSimulationUi_(state);
 
@@ -689,7 +708,7 @@
 
         function updateSimulationUi_(model) {
           var isSuperAdmin = isSuperAdminUser_(model);
-          var isMonitorMode = isMonitorMode_(model);
+          var isMonitorMode = isMonitorModeEffective_(model);
           var simulatedNowIso = (model && model.user && model.user.simulationActive) ? String(model.user.simulatedNowISO || '') : '';
           var fallbackIso = getSimulationIsoFromClient_();
           var effectiveSimulation = parseSimulationDateTime_(simulatedNowIso) || parseSimulationDateTime_(fallbackIso);
@@ -745,6 +764,9 @@
         }
 
         function openPanelShell() {
+          if (shouldBlockRoomPanel_()) {
+            return;
+          }
           if (panelOverlay) {
             panelOverlay.style.display = 'flex';
           }
@@ -1478,6 +1500,9 @@
         }
 
         function openRoomPanelInternal_(resourceId) {
+          if (shouldBlockRoomPanel_()) {
+            return;
+          }
           panelState.isOpen = true;
           panelState.resourceId = resourceId;
           openPanelShell();
@@ -1499,7 +1524,7 @@
         }
 
         function openRoomPanel(resourceId) {
-          if (isMonitorMode_(state)) {
+          if (shouldBlockRoomPanel_()) {
             return;
           }
           if (!resourceId) {
@@ -1519,7 +1544,7 @@
 
         function buildBoardRequestContext_() {
           return {
-            mode: isMonitorMode_(state) ? 'monitor' : ''
+            mode: shouldBlockRoomPanel_() ? 'monitor' : ''
           };
         }
 
@@ -1846,7 +1871,7 @@
             .then(function (model) {
               pageIndex = pageIndex % Math.max(getModelPages(model).length, 1);
               render(model);
-              if (!isMonitorMode_(model) && isPanelOpen() && panelState.resourceId && !hasPendingDraftChanges_() && !options.skipPanelRefresh) {
+              if (!isMonitorModeEffective_(model) && isPanelOpen() && panelState.resourceId && !hasPendingDraftChanges_() && !options.skipPanelRefresh) {
                 loadRoomPanelData(panelState.resourceId, {
                   date: (panelState.model && panelState.model.date) || toIsoDate_(new Date()),
                   silentNotice: true,
@@ -2005,7 +2030,31 @@
             }
           });
         }
+        function suppressMonitorBoardInteraction_(event) {
+          if (!shouldBlockRoomPanel_()) {
+            return;
+          }
+          var boardRoot = document.getElementById('board-root');
+          if (!boardRoot || !boardRoot.contains(event.target)) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+          }
+        }
+        document.addEventListener('pointerdown', suppressMonitorBoardInteraction_, true);
+        document.addEventListener('click', suppressMonitorBoardInteraction_, true);
         window.addEventListener('keydown', function (event) {
+          if (shouldBlockRoomPanel_()) {
+            var boardRoot = document.getElementById('board-root');
+            if (boardRoot && boardRoot.contains(event.target) && (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar')) {
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
+          }
           if (event.key === 'Escape' && simulationModal && simulationModal.style.display === 'flex') {
             closeSimulationModal_();
             return;
@@ -2031,7 +2080,7 @@
         rotationTimer = window.setInterval(rotate, (state.rotationSec || 15) * 1000);
         refreshTimer = window.setInterval(refresh, (state.refreshSec || 60) * 1000);
 
-        if (initialRoomId && !isMonitorMode_(state)) {
+        if (initialRoomId && !shouldBlockRoomPanel_()) {
           openRoomPanel(initialRoomId);
         }
       }());
