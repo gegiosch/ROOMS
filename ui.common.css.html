@@ -157,6 +157,12 @@ a {
   color-scheme: dark;
 }
 
+.input[type="date"],
+.input[type="time"] {
+  color-scheme: dark;
+  padding-right: 10px;
+}
+
 .select {
   appearance: none;
   -webkit-appearance: none;
@@ -170,9 +176,15 @@ a {
 
 .input[type="date"]::-webkit-calendar-picker-indicator,
 .input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(90%) sepia(10%) saturate(342%) hue-rotate(185deg) brightness(97%) contrast(96%);
-  opacity: 0.95;
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
   cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
 }
 
 .input[type="date"]::-webkit-datetime-edit,
