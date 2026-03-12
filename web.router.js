@@ -80,6 +80,10 @@ function doPost(e) {
   }
 }
 
+function getRedirectTargetForHost(host) {
+  return ROOMS_APP.buildRedirectTargetForHost(host);
+}
+
 function runSetup() {
   var actor = ROOMS_APP.Auth.requireAdmin();
   ROOMS_APP.Schema.ensureAll();
