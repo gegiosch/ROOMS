@@ -1091,8 +1091,9 @@
         }
 
         function getAvailableFreeSlots_(model, mergedBookings) {
-          var candidateSlots = safeArray(model && model.freeSlots);
-          if (!candidateSlots.length) {
+          var hasExplicitFreeSlots = Boolean(model) && Array.isArray(model.freeSlots);
+          var candidateSlots = hasExplicitFreeSlots ? safeArray(model && model.freeSlots) : [];
+          if (!hasExplicitFreeSlots) {
             candidateSlots = safeArray(model && (model.dailySlots || model.slots));
           }
           var occupiedSlotKeys = {};
