@@ -274,6 +274,7 @@
           model: null,
           dateContext: '',
           loadRequestSeq: 0,
+          loadingRequestToken: 0,
           selectedFreeSlotKeys: {},
           draft: {
             creates: {},
@@ -1578,6 +1579,7 @@
           var requestToken = ++panelState.loadRequestSeq;
           var showSpinner = !(options && options.showSpinner === false);
           if (showSpinner) {
+            panelState.loadingRequestToken = requestToken;
             showRoomPanelLoading((options && options.loadingMessage) || 'Caricamento dati aula...');
           }
           return ROOMS_UI.call('getRoomPanelData', resourceId, requestDate, buildRequestContext_())
@@ -1602,7 +1604,8 @@
               ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore caricamento aula', 'error');
             })
             .then(function () {
-              if (showSpinner && requestToken === panelState.loadRequestSeq) {
+              if (showSpinner && panelState.loadingRequestToken === requestToken) {
+                panelState.loadingRequestToken = 0;
                 hideRoomPanelLoading();
               }
             });
