@@ -213,9 +213,18 @@ ROOMS_APP.Slots = {
   filterBookableFreeSlotsForDate_: function (slots, selectedDate, todayDate, currentTimeOfDay) {
     var normalizedSelectedDate = ROOMS_APP.toIsoDate(selectedDate || '');
     var normalizedTodayDate = ROOMS_APP.toIsoDate(todayDate || '');
-    if (!normalizedSelectedDate || !normalizedTodayDate || normalizedSelectedDate !== normalizedTodayDate) {
+    if (!normalizedSelectedDate || !normalizedTodayDate) {
       return (slots || []).slice();
     }
+
+    var dateOffset = ROOMS_APP.daysBetween(normalizedTodayDate, normalizedSelectedDate);
+    if (dateOffset > 0) {
+      return (slots || []).slice();
+    }
+    if (dateOffset < 0) {
+      return (slots || []).slice();
+    }
+
     return this.filterPastFreeSlots_(slots, currentTimeOfDay);
   },
 
