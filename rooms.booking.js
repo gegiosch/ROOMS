@@ -540,6 +540,9 @@ ROOMS_APP.Booking = {
       var currentTime = simulation.active ? simulation.time : Utilities.formatDate(effectiveNow, ROOMS_APP.getTimezone(), 'HH:mm');
       var currentDateIso = simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(effectiveNow);
       var isCurrentDate = date === currentDateIso;
+      if (isCurrentDate) {
+        timeline.freeSlots = ROOMS_APP.Slots.filterPastFreeSlots_(timeline.freeSlots || [], currentTime);
+      }
       var current = isCurrentDate ? bookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
       })[0] || null : null;

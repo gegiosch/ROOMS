@@ -199,6 +199,17 @@ ROOMS_APP.Slots = {
     });
   },
 
+  filterPastFreeSlots_: function (slots, currentTime) {
+    var self = this;
+    var nowMinutes = this.toMinutes_(currentTime);
+    if (nowMinutes == null) {
+      return (slots || []).slice();
+    }
+    return (slots || []).filter(function (slot) {
+      return self.toMinutes_(slot && slot.endTime) > nowMinutes;
+    });
+  },
+
   filterValidSlots_: function (slots, openTime, closeTime) {
     var self = this;
     return (slots || []).filter(function (slot) {

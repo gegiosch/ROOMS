@@ -256,6 +256,7 @@
           isOpen: false,
           resourceId: '',
           model: null,
+          dateContext: '',
           selectedFreeSlotKeys: {},
           draft: {
             creates: {},
@@ -282,6 +283,14 @@
 
         function safeArray(value) {
           return Array.isArray(value) ? value : [];
+        }
+
+        function getDefaultPanelDate_() {
+          return String((state && state.date) || toIsoDate_(new Date()));
+        }
+
+        function getPanelSelectedDate_() {
+          return String((panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || getDefaultPanelDate_());
         }
 
         function normalizeEmail_(value) {
@@ -803,6 +812,14 @@
           );
         }
 
+        function hasPendingSlotSelections_() {
+          return Boolean(Object.keys(panelState.selectedFreeSlotKeys || {}).length);
+        }
+
+        function hasUnsavedPanelChanges_() {
+          return hasPendingDraftChanges_() || hasPendingSlotSelections_();
+        }
+
         function updateDraftUiState_() {
           var dirty = hasPendingDraftChanges_();
           if (panelDirtyFlag) {
@@ -824,7 +841,7 @@
         }
 
         function ensureCanDiscardDraft_(onDiscard) {
-          if (!hasPendingDraftChanges_()) {
+          if (!hasUnsavedPanelChanges_()) {
             pendingDiscardRollbackDate = '';
             onDiscard();
             return;
@@ -839,6 +856,7 @@
           panelState.isOpen = false;
           panelState.resourceId = '';
           panelState.model = null;
+          panelState.dateContext = '';
           clearDraftState_();
           hideRoomPanelLoading();
           if (panelOverlay) {
@@ -997,9 +1015,9 @@
         }
 
         function getAvailableFreeSlots_(model, mergedBookings) {
-          var candidateSlots = safeArray(model && (model.slots || model.dailySlots || model.freeSlots));
+          var candidateSlots = safeArray(model && model.freeSlots);
           if (!candidateSlots.length) {
-            candidateSlots = safeArray(model && model.freeSlots);
+            candidateSlots = safeArray(model && (model.dailySlots || model.slots));
           }
           var occupiedSlotKeys = {};
           safeArray(mergedBookings).forEach(function (booking) {
@@ -1414,18 +1432,21 @@
             hidePanelError();
           }
 
+          var effectiveDate = effectiveModel.date || getDefaultPanelDate_();
+          var isNewDateContext = panelState.dateContext !== effectiveDate;
           if (panelDateInput) {
-            panelDateInput.value = effectiveModel.date || toIsoDate_(new Date());
+            panelDateInput.value = effectiveDate;
           }
-          if (panelIntervalFrom && !panelIntervalFrom.value) {
-            panelIntervalFrom.value = effectiveModel.date || toIsoDate_(new Date());
+          if (panelIntervalFrom && (isNewDateContext || !panelIntervalFrom.value)) {
+            panelIntervalFrom.value = effectiveDate;
           }
-          if (panelIntervalTo && !panelIntervalTo.value) {
-            panelIntervalTo.value = effectiveModel.date || toIsoDate_(new Date());
+          if (panelIntervalTo && (isNewDateContext || !panelIntervalTo.value)) {
+            panelIntervalTo.value = effectiveDate;
           }
           if (panelSplitFreeSlots) {
             panelSplitFreeSlots.checked = Boolean(effectiveModel.options && effectiveModel.options.splitFreeSlotsHalfHour);
           }
+          panelState.dateContext = effectiveDate;
 
           renderTable(
             'panel-daily-slots-table',
@@ -1477,7 +1498,7 @@
         }
 
         function loadRoomPanelData(resourceId, options) {
-          var requestDate = (options && options.date) || (panelDateInput && panelDateInput.value) || ((panelState.model && panelState.model.date) || toIsoDate_(new Date()));
+          var requestDate = String((options && options.date) || getPanelSelectedDate_());
           var showSpinner = !(options && options.showSpinner === false);
           if (showSpinner) {
             showRoomPanelLoading((options && options.loadingMessage) || 'Caricamento dati aula...');
@@ -1516,6 +1537,9 @@
           setText('panel-room-title', resourceId);
           setText('panel-room-meta', 'Caricamento dati aula...');
           ROOMS_UI.setNotice(panelNotice, 'Caricamento aula ' + resourceId + '...', '');
+          if (panelDateInput) {
+            panelDateInput.value = getDefaultPanelDate_();
+          }
           if (panelIntervalFrom) {
             panelIntervalFrom.value = '';
           }
@@ -1523,7 +1547,7 @@
             panelIntervalTo.value = '';
           }
           loadRoomPanelData(resourceId, {
-            date: (panelDateInput && panelDateInput.value) || toIsoDate_(new Date()),
+            date: getDefaultPanelDate_(),
             loadingMessage: 'Caricamento aula ' + resourceId + '...'
           });
         }
@@ -1570,7 +1594,7 @@
 
         function buildDraftChangesPayload_() {
           var model = panelState.model || {};
-          var selectedDate = (panelDateInput && panelDateInput.value) || model.date || toIsoDate_(new Date());
+          var selectedDate = getPanelSelectedDate_();
           var fromDate = (panelIntervalFrom && panelIntervalFrom.value) || selectedDate;
           var toDate = (panelIntervalTo && panelIntervalTo.value) || selectedDate;
           var intervalDates = buildIntervalDates_(fromDate, toDate);
@@ -1654,7 +1678,7 @@
             return Promise.resolve();
           }
 
-          var targetDate = (panelDateInput && panelDateInput.value) || (panelState.model && panelState.model.date) || toIsoDate_(new Date());
+          var targetDate = getPanelSelectedDate_();
           showRoomPanelLoading('Salvataggio modifiche in corso...');
           if (panelSaveAllButton) {
             panelSaveAllButton.disabled = true;
@@ -1666,7 +1690,10 @@
               renderRoomPanel(panelState.model);
               ROOMS_UI.setNotice(panelNotice, 'Modifiche salvate.', 'success');
               hideRoomPanelLoading();
-              refresh({ skipPanelRefresh: true });
+              refresh({
+                skipPanelRefresh: true,
+                preservePanelDate: targetDate
+              });
             }, function (error) {
               hideRoomPanelLoading();
               updateDraftUiState_();
@@ -1679,15 +1706,15 @@
           if (!panelState.resourceId) {
             return;
           }
-          if (hasPendingDraftChanges_()) {
-            pendingDiscardRollbackDate = (panelState.model && panelState.model.date) || toIsoDate_(new Date());
+          if (hasUnsavedPanelChanges_()) {
+            pendingDiscardRollbackDate = getPanelSelectedDate_();
           } else {
             pendingDiscardRollbackDate = '';
           }
           ensureCanDiscardDraft_(function () {
             pendingDiscardRollbackDate = '';
             loadRoomPanelData(panelState.resourceId, {
-              date: dateValue || toIsoDate_(new Date()),
+              date: dateValue || getDefaultPanelDate_(),
               silentNotice: Boolean(silentNotice)
             });
           });
@@ -1876,9 +1903,9 @@
             .then(function (model) {
               pageIndex = pageIndex % Math.max(getModelPages(model).length, 1);
               render(model);
-              if (!isMonitorModeEffective_(model) && isPanelOpen() && panelState.resourceId && !hasPendingDraftChanges_() && !options.skipPanelRefresh) {
+              if (!isMonitorModeEffective_(model) && isPanelOpen() && panelState.resourceId && !hasUnsavedPanelChanges_() && !options.skipPanelRefresh) {
                 loadRoomPanelData(panelState.resourceId, {
-                  date: (panelState.model && panelState.model.date) || toIsoDate_(new Date()),
+                  date: options.preservePanelDate || getPanelSelectedDate_(),
                   silentNotice: true,
                   showSpinner: false
                 });
@@ -1931,7 +1958,7 @@
             if (!panelState.resourceId) {
               return;
             }
-            requestPanelDateReload_(panelDateInput.value || toIsoDate_(new Date()), true);
+            requestPanelDateReload_(panelDateInput.value || getDefaultPanelDate_(), true);
           });
         }
         if (panelSplitFreeSlots) {
@@ -1939,7 +1966,7 @@
             if (!panelState.resourceId) {
               return;
             }
-            requestPanelDateReload_((panelDateInput && panelDateInput.value) || toIsoDate_(new Date()), true);
+            requestPanelDateReload_(getPanelSelectedDate_(), true);
           });
         }
         if (panelDraftApplyButton) {
