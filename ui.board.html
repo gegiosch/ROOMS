@@ -142,6 +142,17 @@
         </div>
       </div>
 
+      <div id="app-dialog-modal" class="room-panel-unsaved-confirm" style="display:none;">
+        <div class="room-panel-unsaved-dialog">
+          <h3 id="app-dialog-title">Conferma</h3>
+          <p id="app-dialog-message">-</p>
+          <div class="toolbar">
+            <button id="app-dialog-confirm" class="button" type="button">Conferma</button>
+            <button id="app-dialog-cancel" class="button secondary" type="button">Chiudi</button>
+          </div>
+        </div>
+      </div>
+
       <div id="panel-occupant-editor-modal" class="room-panel-unsaved-confirm" style="display:none;">
         <div class="room-panel-unsaved-dialog occupant-editor-dialog">
           <h3>Modifica occupante</h3>
@@ -234,6 +245,11 @@
         var unsavedConfirmOverlay = document.getElementById('room-panel-unsaved-confirm');
         var unsavedConfirmYes = document.getElementById('room-panel-unsaved-yes');
         var unsavedConfirmNo = document.getElementById('room-panel-unsaved-no');
+        var appDialogModal = document.getElementById('app-dialog-modal');
+        var appDialogTitle = document.getElementById('app-dialog-title');
+        var appDialogMessage = document.getElementById('app-dialog-message');
+        var appDialogConfirm = document.getElementById('app-dialog-confirm');
+        var appDialogCancel = document.getElementById('app-dialog-cancel');
         var occupantEditorModal = document.getElementById('panel-occupant-editor-modal');
         var occupantEditorSlot = document.getElementById('panel-occupant-editor-slot');
         var occupantEditorTitle = document.getElementById('panel-occupant-editor-title');
@@ -257,6 +273,7 @@
           resourceId: '',
           model: null,
           dateContext: '',
+          loadRequestSeq: 0,
           selectedFreeSlotKeys: {},
           draft: {
             creates: {},
@@ -276,6 +293,10 @@
           aulaEditor: {
             originalRows: [],
             rows: []
+          },
+          dialog: {
+            onConfirm: null,
+            onCancel: null
           }
         };
         var pendingDiscardAction = null;
@@ -777,6 +798,61 @@
           }
         }
 
+        function closeAppDialog_() {
+          if (appDialogModal) {
+            appDialogModal.style.display = 'none';
+          }
+          panelState.dialog.onConfirm = null;
+          panelState.dialog.onCancel = null;
+        }
+
+        function openAppDialog_(options) {
+          if (!appDialogModal) {
+            return;
+          }
+          var settings = options || {};
+          if (appDialogTitle) {
+            appDialogTitle.textContent = settings.title || 'Conferma';
+          }
+          if (appDialogMessage) {
+            appDialogMessage.textContent = settings.message || '';
+          }
+          if (appDialogConfirm) {
+            appDialogConfirm.textContent = settings.confirmLabel || 'Conferma';
+            appDialogConfirm.className = settings.confirmClass || 'button';
+            appDialogConfirm.style.display = settings.hideConfirm ? 'none' : 'inline-flex';
+          }
+          if (appDialogCancel) {
+            appDialogCancel.textContent = settings.cancelLabel || 'Chiudi';
+            appDialogCancel.style.display = settings.hideCancel ? 'none' : 'inline-flex';
+          }
+          panelState.dialog.onConfirm = typeof settings.onConfirm === 'function' ? settings.onConfirm : null;
+          panelState.dialog.onCancel = typeof settings.onCancel === 'function' ? settings.onCancel : null;
+          appDialogModal.style.display = 'flex';
+        }
+
+        function showAppAlert_(message, title) {
+          openAppDialog_({
+            title: title || 'Avviso',
+            message: message || '',
+            confirmLabel: 'OK',
+            cancelLabel: 'Chiudi',
+            hideCancel: true,
+            hideConfirm: false
+          });
+        }
+
+        function confirmAction_(message, onConfirm, title) {
+          openAppDialog_({
+            title: title || 'Conferma',
+            message: message || '',
+            confirmLabel: 'Conferma',
+            cancelLabel: 'Annulla',
+            confirmClass: 'button warn',
+            onConfirm: onConfirm
+          });
+        }
+
         function openPanelShell() {
           if (shouldBlockRoomPanel_()) {
             return;
@@ -1261,22 +1337,21 @@
           var deleteButton = ROOMS_UI.el('button', 'button warn', 'X');
           deleteButton.type = 'button';
           deleteButton.addEventListener('click', function () {
-            if (!window.confirm('Confermare eliminazione prenotazione?')) {
-              return;
-            }
-            if (isTimetableRow) {
-              panelState.draft.timetableDeletes[booking.BookingId] = {
-                bookingId: booking.BookingId,
-                notes: ''
-              };
-              delete panelState.draft.timetableUpdates[booking.BookingId];
-            } else {
-              panelState.draft.deletes[booking.BookingId] = true;
-              delete panelState.draft.updates[booking.BookingId];
-            }
-            updateDraftUiState_();
-            renderRoomPanel(panelState.model);
-            ROOMS_UI.setNotice(panelNotice, 'Eliminazione in bozza registrata. Clicca Salva.', 'success');
+            confirmAction_('Confermare eliminazione prenotazione?', function () {
+              if (isTimetableRow) {
+                panelState.draft.timetableDeletes[booking.BookingId] = {
+                  bookingId: booking.BookingId,
+                  notes: ''
+                };
+                delete panelState.draft.timetableUpdates[booking.BookingId];
+              } else {
+                panelState.draft.deletes[booking.BookingId] = true;
+                delete panelState.draft.updates[booking.BookingId];
+              }
+              updateDraftUiState_();
+              renderRoomPanel(panelState.model);
+              ROOMS_UI.setNotice(panelNotice, 'Eliminazione in bozza registrata. Clicca Salva.', 'success');
+            }, 'Elimina prenotazione');
           });
           wrap.appendChild(deleteButton);
           return wrap;
@@ -1499,12 +1574,16 @@
 
         function loadRoomPanelData(resourceId, options) {
           var requestDate = String((options && options.date) || getPanelSelectedDate_());
+          var requestToken = ++panelState.loadRequestSeq;
           var showSpinner = !(options && options.showSpinner === false);
           if (showSpinner) {
             showRoomPanelLoading((options && options.loadingMessage) || 'Caricamento dati aula...');
           }
           return ROOMS_UI.call('getRoomPanelData', resourceId, requestDate, buildRequestContext_())
             .then(function (model) {
+              if (requestToken !== panelState.loadRequestSeq) {
+                return null;
+              }
               if (!(options && options.keepDraft)) {
                 clearDraftState_();
               }
@@ -1515,11 +1594,14 @@
               }
             })
             .catch(function (error) {
+              if (requestToken !== panelState.loadRequestSeq) {
+                return null;
+              }
               showPanelError(error && error.message ? error.message : 'Errore caricamento aula');
               ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore caricamento aula', 'error');
             })
             .then(function () {
-              if (showSpinner) {
+              if (showSpinner && requestToken === panelState.loadRequestSeq) {
                 hideRoomPanelLoading();
               }
             });
@@ -1803,7 +1885,10 @@
           if (!forceClose) {
             var current = JSON.stringify(panelState.aulaEditor.rows || []);
             var original = JSON.stringify(panelState.aulaEditor.originalRows || []);
-            if (current !== original && !window.confirm('Sono presenti modifiche non salvate. Si vuole uscire senza salvare?')) {
+            if (current !== original) {
+              confirmAction_('Sono presenti modifiche non salvate. Si vuole uscire senza salvare?', function () {
+                closeAulaEditorModal_(true);
+              }, 'Modifiche non salvate');
               return;
             }
           }
@@ -1867,7 +1952,7 @@
           var timeValue = simulationTimeInput ? simulationTimeInput.value : '';
           var nextIso = toSimulationIso_(dateValue, timeValue);
           if (!parseSimulationDateTime_(nextIso)) {
-            window.alert('Inserire una data e ora valide per la simulazione.');
+            showAppAlert_('Inserire una data e ora valide per la simulazione.', 'Simulazione non valida');
             return;
           }
           ROOMS_UI.setSimulatedNow_(nextIso);
@@ -1985,6 +2070,31 @@
             }
           });
         }
+        if (appDialogConfirm) {
+          appDialogConfirm.addEventListener('click', function () {
+            var action = panelState.dialog.onConfirm;
+            closeAppDialog_();
+            if (typeof action === 'function') {
+              action();
+            }
+          });
+        }
+        if (appDialogCancel) {
+          appDialogCancel.addEventListener('click', function () {
+            var action = panelState.dialog.onCancel;
+            closeAppDialog_();
+            if (typeof action === 'function') {
+              action();
+            }
+          });
+        }
+        if (appDialogModal) {
+          appDialogModal.addEventListener('click', function (event) {
+            if (event.target === appDialogModal) {
+              closeAppDialog_();
+            }
+          });
+        }
 
         if (panelEventsManage) {
           panelEventsManage.addEventListener('click', openAulaEditorModal_);
@@ -1996,7 +2106,7 @@
             var end = aulaEditorEnd ? aulaEditorEnd.value : '';
             var name = aulaEditorName ? aulaEditorName.value : '';
             if (!eventDate || !start || !end || start >= end || !name) {
-              window.alert('Inserire data, orario e nome evento validi.');
+              showAppAlert_('Inserire data, orario e nome evento validi.', 'Evento non valido');
               return;
             }
             panelState.aulaEditor.rows.push({
@@ -2093,6 +2203,10 @@
           }
           if (event.key === 'Escape' && occupantEditorModal && occupantEditorModal.style.display === 'flex') {
             closeOccupantEditor_();
+            return;
+          }
+          if (event.key === 'Escape' && appDialogModal && appDialogModal.style.display === 'flex') {
+            closeAppDialog_();
             return;
           }
           if (event.key === 'Escape' && aulaEditorModal && aulaEditorModal.style.display === 'flex') {
