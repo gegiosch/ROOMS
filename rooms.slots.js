@@ -210,6 +210,15 @@ ROOMS_APP.Slots = {
     });
   },
 
+  filterBookableFreeSlotsForDate_: function (slots, selectedDate, todayDate, currentTimeOfDay) {
+    var normalizedSelectedDate = ROOMS_APP.toIsoDate(selectedDate || '');
+    var normalizedTodayDate = ROOMS_APP.toIsoDate(todayDate || '');
+    if (!normalizedSelectedDate || !normalizedTodayDate || normalizedSelectedDate !== normalizedTodayDate) {
+      return (slots || []).slice();
+    }
+    return this.filterPastFreeSlots_(slots, currentTimeOfDay);
+  },
+
   filterValidSlots_: function (slots, openTime, closeTime) {
     var self = this;
     return (slots || []).filter(function (slot) {
