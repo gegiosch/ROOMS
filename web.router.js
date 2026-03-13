@@ -443,6 +443,7 @@ function withRuntimeContext_(requestContext, callback) {
   var previousContext = ROOMS_APP.RUNTIME_CONTEXT_ || null;
   var actor = ROOMS_APP.Auth.getUserContext();
   var simulation = ROOMS_APP.Auth.getSimulationContext_(requestContext, actor);
+  ROOMS_APP.DB.beginRequestCache_();
   ROOMS_APP.RUNTIME_CONTEXT_ = {
     mode: requestContext && requestContext.mode ? requestContext.mode : '',
     isMonitorMode: Boolean(requestContext && requestContext.isMonitorMode),
@@ -456,6 +457,7 @@ function withRuntimeContext_(requestContext, callback) {
     return callback();
   } finally {
     ROOMS_APP.RUNTIME_CONTEXT_ = previousContext;
+    ROOMS_APP.DB.endRequestCache_();
   }
 }
 

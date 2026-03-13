@@ -598,8 +598,9 @@ ROOMS_APP.Booking = {
           splitFreeSlotsHalfHour: Boolean(viewOptions.splitFreeSlotsHalfHour)
         }
       };
+      var dbStats = ROOMS_APP.DB.getRequestStats_();
       Logger.log(
-        '[PERF] Booking.getRoomViewModel total=%sms resources=%sms bookings=%sms timetable=%sms slots=%sms events=%sms compose=%sms dailyBookings=%s freeSlots=%s splitFree=%s',
+        '[PERF] Booking.getRoomViewModel total=%sms resources=%sms bookings=%sms timetable=%sms slots=%sms events=%sms compose=%sms dailyBookings=%s freeSlots=%s splitFree=%s dbRequestHits=%s dbScriptHits=%s dbMisses=%s',
         Date.now() - startedAt,
         resourcesMs,
         bookingsMs,
@@ -609,7 +610,10 @@ ROOMS_APP.Booking = {
         composeMs,
         userBookingsDay.length + timetableBookingsDay.length,
         (timeline.freeSlots || []).length,
-        Boolean(viewOptions.splitFreeSlotsHalfHour)
+        Boolean(viewOptions.splitFreeSlotsHalfHour),
+        dbStats.requestHits,
+        dbStats.scriptHits,
+        dbStats.misses
       );
       return model;
     } catch (error) {
