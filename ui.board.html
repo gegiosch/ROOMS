@@ -65,7 +65,7 @@
           </div>
           <div class="room-panel-actions">
             <span id="panel-dirty-flag" class="status-pill panel-dirty-flag" style="display:none;">Modifiche non salvate</span>
-            <button id="panel-save-all" class="button" type="button" disabled>Salva</button>
+            <button id="panel-save-all" class="button room-panel-save" type="button" disabled>Salva</button>
             <button id="room-panel-close" class="button secondary room-panel-close" type="button">Chiudi</button>
           </div>
         </div>
@@ -111,7 +111,6 @@
         <section id="panel-daily-slots-section" class="panel table-card room-panel-section">
           <div class="room-panel-events-header">
             <h3>Slot del giorno ancora disponibili</h3>
-            <button class="button secondary" id="panel-draft-apply" type="button">Aggiorna prenotazione selezionata</button>
           </div>
           <div id="panel-daily-slots-table"></div>
         </section>
@@ -128,6 +127,11 @@
           </div>
           <div id="panel-events-table"></div>
         </section>
+
+        <div class="toolbar" style="justify-content:flex-end; margin-bottom:0;">
+          <button class="button room-panel-save" type="button" disabled>Salva</button>
+          <button class="button secondary room-panel-close" type="button">Chiudi</button>
+        </div>
 
       </aside>
 
@@ -230,7 +234,7 @@
         var simulationCancelButton = document.getElementById('simulation-cancel');
 
         var panelOverlay = document.getElementById('room-panel-overlay');
-        var panelCloseButton = document.getElementById('room-panel-close');
+        var panelCloseButtons = Array.prototype.slice.call(document.querySelectorAll('.room-panel-close'));
         var panelNotice = document.getElementById('panel-notice');
         var panelError = document.getElementById('panel-error');
         var panelLoading = document.getElementById('room-panel-loading');
@@ -238,10 +242,9 @@
         var panelSplitFreeSlots = document.getElementById('panel-split-free-slots');
         var panelIntervalFrom = document.getElementById('panel-interval-from');
         var panelIntervalTo = document.getElementById('panel-interval-to');
-        var panelSaveAllButton = document.getElementById('panel-save-all');
+        var panelSaveAllButtons = Array.prototype.slice.call(document.querySelectorAll('.room-panel-save'));
         var panelDirtyFlag = document.getElementById('panel-dirty-flag');
         var panelEventsManage = document.getElementById('panel-events-manage');
-        var panelDraftApplyButton = document.getElementById('panel-draft-apply');
         var unsavedConfirmOverlay = document.getElementById('room-panel-unsaved-confirm');
         var unsavedConfirmYes = document.getElementById('room-panel-unsaved-yes');
         var unsavedConfirmNo = document.getElementById('room-panel-unsaved-no');
@@ -902,19 +905,9 @@
           if (panelDirtyFlag) {
             panelDirtyFlag.style.display = dirty ? 'inline-flex' : 'none';
           }
-          if (panelSaveAllButton) {
-            panelSaveAllButton.disabled = !dirty;
-          }
-          updateDraftApplyButtonState_();
-        }
-
-        function updateDraftApplyButtonState_() {
-          if (!panelDraftApplyButton) {
-            return;
-          }
-          var canApply = !Boolean(panelState.model && panelState.model.isAulaMagna) &&
-            Boolean(Object.keys(panelState.selectedFreeSlotKeys || {}).length);
-          panelDraftApplyButton.disabled = !canApply;
+          panelSaveAllButtons.forEach(function (button) {
+            button.disabled = !dirty;
+          });
         }
 
         function ensureCanDiscardDraft_(onDiscard) {
@@ -1092,6 +1085,7 @@
         }
 
         function getAvailableFreeSlots_(model, mergedBookings) {
+          var includeDraftCreates = arguments.length > 2 && Boolean(arguments[2] && arguments[2].includeDraftCreates);
           var hasExplicitFreeSlots = Boolean(model) && Array.isArray(model.freeSlots);
           var candidateSlots = hasExplicitFreeSlots ? safeArray(model && model.freeSlots) : [];
           if (!hasExplicitFreeSlots) {
@@ -1111,13 +1105,51 @@
             if (!key || !slot.startTime || !slot.endTime) {
               return false;
             }
-            return !occupiedSlotKeys[key] && !draftCreates[key];
+            return !occupiedSlotKeys[key] && (includeDraftCreates || !draftCreates[key]);
           }).map(function (slot) {
             return {
               startTime: slot.startTime,
               endTime: slot.endTime
             };
           });
+        }
+
+        function ensureDraftCreateForSlot_(slot) {
+          if (!slot || !slot.startTime || !slot.endTime) {
+            return;
+          }
+          var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
+          var currentDraft = panelState.draft.creates[slotKey] || {};
+          var identity = getUserIdentity_(panelState.model);
+          panelState.selectedFreeSlotKeys[slotKey] = true;
+          panelState.draft.creates[slotKey] = {
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            title: currentDraft.title || ((panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || ''),
+            notes: currentDraft.notes || '',
+            bookerName: currentDraft.bookerName || identity.firstName || '',
+            bookerSurname: currentDraft.bookerSurname || identity.surname || '',
+            bookerEmail: currentDraft.bookerEmail || identity.email || ''
+          };
+        }
+
+        function clearDraftCreateSelection_(slotKey) {
+          delete panelState.selectedFreeSlotKeys[slotKey];
+          delete panelState.draft.creates[slotKey];
+        }
+
+        function syncFreeSlotSelection_(slot, isSelected) {
+          var slotKey = slot ? normalizeSlotKey_(slot.startTime, slot.endTime) : '';
+          if (!slotKey) {
+            return;
+          }
+          if (isSelected) {
+            ensureDraftCreateForSlot_(slot);
+          } else {
+            clearDraftCreateSelection_(slotKey);
+          }
+          updateDraftUiState_();
+          renderRoomPanel(panelState.model);
         }
 
         function renderTable(mountId, headers, rows, emptyText) {
@@ -1275,7 +1307,7 @@
         }
 
         function removeDraftCreate_(slotKey) {
-          delete panelState.draft.creates[slotKey];
+          clearDraftCreateSelection_(slotKey);
           updateDraftUiState_();
           renderRoomPanel(panelState.model);
           ROOMS_UI.setNotice(panelNotice, 'Prenotazione in bozza rimossa.', 'success');
@@ -1370,47 +1402,11 @@
           checkbox.type = 'checkbox';
           checkbox.checked = Boolean(panelState.selectedFreeSlotKeys[key]);
           checkbox.addEventListener('change', function () {
-            if (checkbox.checked) {
-              panelState.selectedFreeSlotKeys[key] = true;
-            } else {
-              delete panelState.selectedFreeSlotKeys[key];
-            }
-            updateDraftApplyButtonState_();
+            syncFreeSlotSelection_(slot, checkbox.checked);
           });
           wrap.appendChild(checkbox);
           wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Seleziona'));
           return wrap;
-        }
-
-        function moveSelectedSlotsToDraft_() {
-          if (!panelState.model) {
-            return;
-          }
-          var availableSlots = getAvailableFreeSlots_(panelState.model, mergeDraftOnBookings_(panelState.model.bookings));
-          var selected = availableSlots.filter(function (slot) {
-            return Boolean(panelState.selectedFreeSlotKeys[normalizeSlotKey_(slot.startTime, slot.endTime)]);
-          });
-          if (!selected.length) {
-            ROOMS_UI.setNotice(panelNotice, 'Seleziona almeno uno slot libero da aggiungere alla bozza.', '');
-            return;
-          }
-          var identity = getUserIdentity_(panelState.model);
-          selected.forEach(function (slot) {
-            var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
-            panelState.draft.creates[slotKey] = {
-              startTime: slot.startTime,
-              endTime: slot.endTime,
-              title: (panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || '',
-              notes: '',
-              bookerName: identity.firstName || '',
-              bookerSurname: identity.surname || '',
-              bookerEmail: identity.email || ''
-            };
-            delete panelState.selectedFreeSlotKeys[slotKey];
-          });
-          updateDraftUiState_();
-          renderRoomPanel(panelState.model);
-          ROOMS_UI.setNotice(panelNotice, 'Slot selezionati spostati in Prenotazioni del giorno (bozza).', 'success');
         }
 
         function formatEventDateLine_(eventDate) {
@@ -1477,18 +1473,33 @@
           var room = effectiveModel.resource || null;
           var roomFound = Boolean(room && room.ResourceId);
           var isAulaMagna = Boolean(effectiveModel.isAulaMagna);
-          var bookings = mergeDraftOnBookings_(effectiveModel.bookings);
-          var freeSlots = getAvailableFreeSlots_(effectiveModel, bookings);
-          var identity = getUserIdentity_(effectiveModel);
+          var slotBookings = mergeDraftOnBookings_(effectiveModel.bookings).filter(function (booking) {
+            return !(booking && booking._draftAction === 'CREATE');
+          });
+          var freeSlots = getAvailableFreeSlots_(effectiveModel, slotBookings, { includeDraftCreates: true });
           var freeSlotKeySet = {};
+          var freeSlotByKey = {};
           freeSlots.forEach(function (slot) {
-            freeSlotKeySet[normalizeSlotKey_(slot.startTime, slot.endTime)] = true;
+            var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
+            freeSlotKeySet[slotKey] = true;
+            freeSlotByKey[slotKey] = slot;
+          });
+          Object.keys(panelState.draft.creates || {}).forEach(function (slotKey) {
+            if (!freeSlotKeySet[slotKey]) {
+              delete panelState.draft.creates[slotKey];
+              delete panelState.selectedFreeSlotKeys[slotKey];
+            }
           });
           Object.keys(panelState.selectedFreeSlotKeys || {}).forEach(function (slotKey) {
             if (!freeSlotKeySet[slotKey]) {
               delete panelState.selectedFreeSlotKeys[slotKey];
+              delete panelState.draft.creates[slotKey];
+              return;
             }
+            ensureDraftCreateForSlot_(freeSlotByKey[slotKey]);
           });
+          var bookings = mergeDraftOnBookings_(effectiveModel.bookings);
+          var identity = getUserIdentity_(effectiveModel);
 
           setText('panel-room-title', roomFound ? room.DisplayName : 'Aula non trovata');
           setText('panel-room-meta', roomFound
@@ -1766,9 +1777,9 @@
 
           var targetDate = getPanelSelectedDate_();
           showRoomPanelLoading('Salvataggio modifiche in corso...');
-          if (panelSaveAllButton) {
-            panelSaveAllButton.disabled = true;
-          }
+          panelSaveAllButtons.forEach(function (button) {
+            button.disabled = true;
+          });
           return ROOMS_UI.call('applyRoomPanelChanges', panelState.resourceId, targetDate, payload)
             .then(function (model) {
               panelState.model = model && typeof model === 'object' ? model : {};
@@ -2034,14 +2045,14 @@
           });
         }
 
-        if (panelSaveAllButton) {
-          panelSaveAllButton.addEventListener('click', function () {
+        panelSaveAllButtons.forEach(function (button) {
+          button.addEventListener('click', function () {
             applyDraftChanges_().catch(function () {});
           });
-        }
-        if (panelCloseButton) {
-          panelCloseButton.addEventListener('click', closeRoomPanel);
-        }
+        });
+        panelCloseButtons.forEach(function (button) {
+          button.addEventListener('click', closeRoomPanel);
+        });
         if (panelDateInput) {
           panelDateInput.addEventListener('change', function () {
             if (!panelState.resourceId) {
@@ -2057,9 +2068,6 @@
             }
             requestPanelDateReload_(getPanelSelectedDate_(), true);
           });
-        }
-        if (panelDraftApplyButton) {
-          panelDraftApplyButton.addEventListener('click', moveSelectedSlotsToDraft_);
         }
         if (occupantEditorSave) {
           occupantEditorSave.addEventListener('click', saveOccupantEditor_);
