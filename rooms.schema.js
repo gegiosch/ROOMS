@@ -242,6 +242,7 @@ ROOMS_APP.Schema = {
       'OriginalTeacherEmail',
       'OriginalTeacherName',
       'OriginalStatus',
+      'HandlingType',
       'ReplacementTeacherEmail',
       'ReplacementTeacherName',
       'ReplacementSource',

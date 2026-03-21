@@ -1061,6 +1061,28 @@
           return String(value || '').trim().toUpperCase();
         }
 
+        function normalizeReplacementHandlingType_(value) {
+          var normalized = String(value || '').trim().toUpperCase();
+          if (normalized === 'LATE_ENTRY' || normalized === 'EARLY_EXIT' || normalized === 'CO_TEACHING') {
+            return normalized;
+          }
+          return 'SUBSTITUTION';
+        }
+
+        function getReplacementHandlingTypeLabel_(handlingType) {
+          var normalized = normalizeReplacementHandlingType_(handlingType);
+          if (normalized === 'LATE_ENTRY') {
+            return 'Entrata posticipata';
+          }
+          if (normalized === 'EARLY_EXIT') {
+            return 'Uscita anticipata';
+          }
+          if (normalized === 'CO_TEACHING') {
+            return 'Compresenza';
+          }
+          return 'Sostituzione';
+        }
+
         function buildReplacementAssignmentKey_(period, classCode, teacherEmail) {
           return [
             String(period || ''),
@@ -1096,6 +1118,7 @@
                 originalTeacherEmail: entry.originalTeacherEmail || '',
                 originalTeacherName: entry.originalTeacherName || '',
                 originalStatus: entry.originalStatus || '',
+                handlingType: normalizeReplacementHandlingType_(entry.handlingType),
                 replacementTeacherEmail: entry.replacementTeacherEmail || '',
                 replacementTeacherName: entry.replacementTeacherName || '',
                 replacementSource: entry.replacementSource || '',
@@ -1205,6 +1228,7 @@
               originalTeacherEmail: normalizeReplacementTeacherEmail_(entry.originalTeacherEmail),
               originalTeacherName: entry.originalTeacherName || '',
               originalStatus: entry.originalStatus || '',
+              handlingType: normalizeReplacementHandlingType_(entry.handlingType),
               replacementTeacherEmail: normalizeReplacementTeacherEmail_(entry.replacementTeacherEmail),
               replacementTeacherName: entry.replacementTeacherName || '',
               replacementSource: entry.replacementSource || '',
@@ -1233,6 +1257,7 @@
               var originalStatus = teacher.accompanist ? 'ACCOMPANIST' : 'ABSENT';
               var assignmentKey = buildReplacementAssignmentKey_(period, classCode, teacher.teacherEmail);
               var draftEntry = draftAssignmentMap[assignmentKey] || {};
+              var handlingType = normalizeReplacementHandlingType_(draftEntry.handlingType);
               var isCoveredByOuting = Boolean(
                 teacher.accompanist &&
                 classOutSet[classCode] &&
@@ -1247,10 +1272,31 @@
                   originalTeacherEmail: teacher.teacherEmail,
                   originalTeacherName: teacher.teacherName,
                   originalStatus: originalStatus,
+                  handlingType: 'SUBSTITUTION',
                   replacementTeacherEmail: '',
                   replacementTeacherName: '',
                   replacementSource: '',
                   replacementStatus: 'IN_USCITA',
+                  notes: draftEntry.notes || '',
+                  startTime: slot.startTime || '',
+                  endTime: slot.endTime || ''
+                });
+                return;
+              }
+
+              if (handlingType !== 'SUBSTITUTION') {
+                assignments.push({
+                  date: replacementState.date,
+                  period: String(period || ''),
+                  classCode: classCode,
+                  originalTeacherEmail: teacher.teacherEmail,
+                  originalTeacherName: teacher.teacherName,
+                  originalStatus: originalStatus,
+                  handlingType: handlingType,
+                  replacementTeacherEmail: '',
+                  replacementTeacherName: '',
+                  replacementSource: '',
+                  replacementStatus: handlingType,
                   notes: draftEntry.notes || '',
                   startTime: slot.startTime || '',
                   endTime: slot.endTime || ''
@@ -1266,6 +1312,7 @@
                   originalTeacherEmail: teacher.teacherEmail,
                   originalTeacherName: teacher.teacherName,
                   originalStatus: originalStatus,
+                  handlingType: 'SUBSTITUTION',
                   replacementTeacherEmail: draftEntry.replacementTeacherEmail || '',
                   replacementTeacherName: draftEntry.replacementTeacherName || '',
                   replacementSource: draftEntry.replacementSource || 'MANUAL',
@@ -1284,6 +1331,7 @@
                 originalTeacherEmail: teacher.teacherEmail,
                 originalTeacherName: teacher.teacherName,
                 originalStatus: originalStatus,
+                handlingType: 'SUBSTITUTION',
                 replacementTeacherEmail: '',
                 replacementTeacherName: '',
                 replacementSource: '',
@@ -1469,6 +1517,7 @@
               classCode: classCode,
               label: slot.label || '',
               requiresReplacement: requiresReplacement,
+              handlingType: assignment ? normalizeReplacementHandlingType_(assignment.handlingType) : 'SUBSTITUTION',
               status: assignment ? assignment.replacementStatus : 'NONE',
               assignment: assignment,
               candidates: [],
@@ -1482,7 +1531,7 @@
             if (assignment && assignment.replacementStatus !== 'TO_ASSIGN') {
               row.status = assignment.replacementStatus;
             }
-            if (assignment && assignment.replacementStatus !== 'IN_USCITA') {
+            if (assignment && row.handlingType === 'SUBSTITUTION' && assignment.replacementStatus !== 'IN_USCITA') {
               var candidateInfo = buildReplacementCandidateLists_(teachers, teacher, period, assignment, assignedByPeriod);
               row.candidates = candidateInfo.candidates;
               row.manualCandidates = candidateInfo.manualCandidates;
@@ -1832,6 +1881,12 @@
           } else if (normalized === 'TO_ASSIGN') {
             cssClass += ' to-assign';
             label = 'DA ASSEGNARE';
+          } else if (normalized === 'LATE_ENTRY') {
+            label = 'ENTRATA POSTICIPATA';
+          } else if (normalized === 'EARLY_EXIT') {
+            label = 'USCITA ANTICIPATA';
+          } else if (normalized === 'CO_TEACHING') {
+            label = 'COMPRESENZA';
           } else if (normalized === 'NO_ACTION') {
             label = 'NESSUNA AZIONE';
           } else if (normalized === 'NONE') {
@@ -2021,6 +2076,7 @@
                 originalTeacherEmail: detail.teacherEmail,
                 originalTeacherName: detail.teacherName,
                 originalStatus: detail.accompanist ? 'ACCOMPANIST' : 'ABSENT',
+                handlingType: row.handlingType || 'SUBSTITUTION',
                 replacementTeacherEmail: '',
                 replacementTeacherName: '',
                 replacementSource: '',
@@ -2034,6 +2090,50 @@
               } else if (row.status === 'IN_USCITA') {
                 actions.appendChild(ROOMS_UI.el('span', 'muted', 'Nessuna sostituzione richiesta.'));
               } else {
+                var managementSelect = document.createElement('select');
+                managementSelect.className = 'select replacement-detail-select';
+                managementSelect.disabled = !isReplacementDateValid_();
+                managementSelect.appendChild(new Option('Sostituzione', 'SUBSTITUTION'));
+                managementSelect.appendChild(new Option('Entrata posticipata', 'LATE_ENTRY'));
+                managementSelect.appendChild(new Option('Uscita anticipata', 'EARLY_EXIT'));
+                managementSelect.appendChild(new Option('Compresenza', 'CO_TEACHING'));
+                managementSelect.value = normalizeReplacementHandlingType_(assignment.handlingType || row.handlingType);
+                managementSelect.addEventListener('change', function () {
+                  var nextHandlingType = normalizeReplacementHandlingType_(managementSelect.value);
+                  delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                  if (nextHandlingType !== 'SUBSTITUTION') {
+                    upsertReplacementAssignment_(assignment, {
+                      handlingType: nextHandlingType,
+                      replacementTeacherEmail: '',
+                      replacementTeacherName: '',
+                      replacementSource: '',
+                      replacementStatus: nextHandlingType
+                    });
+                  } else {
+                    upsertReplacementAssignment_(assignment, {
+                      handlingType: 'SUBSTITUTION',
+                      replacementTeacherEmail: '',
+                      replacementTeacherName: '',
+                      replacementSource: '',
+                      replacementStatus: 'TO_ASSIGN'
+                    });
+                  }
+                  markReplacementDraftChanged_({
+                    clearNotice: true
+                  });
+                });
+                actions.appendChild(managementSelect);
+
+                if (normalizeReplacementHandlingType_(assignment.handlingType || row.handlingType) !== 'SUBSTITUTION') {
+                  actions.appendChild(ROOMS_UI.el('span', 'muted', getReplacementHandlingTypeLabel_(assignment.handlingType || row.handlingType)));
+                  return [
+                    (row.period || '') + 'a ora (' + (row.startTime || '--:--') + ' - ' + (row.endTime || '--:--') + ')',
+                    row.classCode || row.label || '-',
+                    createReplacementStatusNode_(row.status),
+                    actions
+                  ];
+                }
+
                 var select = document.createElement('select');
                 select.className = 'select replacement-detail-select';
                 select.disabled = !isReplacementDateValid_();
@@ -2053,6 +2153,7 @@
                   if (!selectedValue) {
                     delete replacementState.pendingManualAssignmentKeys[assignmentKey];
                     upsertReplacementAssignment_(assignment, {
+                      handlingType: 'SUBSTITUTION',
                       replacementTeacherEmail: '',
                       replacementTeacherName: '',
                       replacementSource: '',
@@ -2076,6 +2177,7 @@
                   })[0] || null;
                   delete replacementState.pendingManualAssignmentKeys[assignmentKey];
                   upsertReplacementAssignment_(assignment, {
+                    handlingType: 'SUBSTITUTION',
                     replacementTeacherEmail: teacherEmail,
                     replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
                     replacementSource: source,
@@ -2101,6 +2203,7 @@
                   manualSelect.addEventListener('change', function () {
                     if (!manualSelect.value) {
                       upsertReplacementAssignment_(assignment, {
+                        handlingType: 'SUBSTITUTION',
                         replacementTeacherEmail: '',
                         replacementTeacherName: '',
                         replacementSource: '',
@@ -2112,6 +2215,7 @@
                         return candidate.value === manualSelect.value;
                       })[0] || null;
                       upsertReplacementAssignment_(assignment, {
+                        handlingType: 'SUBSTITUTION',
                         replacementTeacherEmail: manualParts[0] || '',
                         replacementTeacherName: manualCandidate ? manualCandidate.teacherName : '',
                         replacementSource: 'MANUAL',

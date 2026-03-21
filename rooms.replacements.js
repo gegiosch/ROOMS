@@ -4,6 +4,12 @@ ROOMS_APP.Replacements = {
   REPORT_TYPE_: 'REPLACEMENTS',
   MANUAL_CANDIDATE_VALUE_: '__MANUAL__',
   MAX_NEXT_OPEN_DAY_SCAN_: 60,
+  HANDLING_TYPES_: {
+    SUBSTITUTION: 'SUBSTITUTION',
+    LATE_ENTRY: 'LATE_ENTRY',
+    EARLY_EXIT: 'EARLY_EXIT',
+    CO_TEACHING: 'CO_TEACHING'
+  },
 
   ensureSchema_: function () {
     ROOMS_APP.Schema.ensureReplacementClassOut();
@@ -145,6 +151,7 @@ ROOMS_APP.Replacements = {
         OriginalTeacherEmail: entry.originalTeacherEmail,
         OriginalTeacherName: entry.originalTeacherName,
         OriginalStatus: entry.originalStatus,
+        HandlingType: entry.handlingType,
         ReplacementTeacherEmail: entry.replacementTeacherEmail,
         ReplacementTeacherName: entry.replacementTeacherName,
         ReplacementSource: entry.replacementSource,
@@ -442,6 +449,36 @@ ROOMS_APP.Replacements = {
       return next;
     }
 
+    if (assignment && assignment.handlingType === this.HANDLING_TYPES_.LATE_ENTRY) {
+      next.TeacherEmail = teacherEmail;
+      next.TeacherName = 'ENTRATA POSTICIPATA';
+      next.BookerName = 'ENTRATA POSTICIPATA';
+      next.DisplayLabel = 'ENTRATA POSTICIPATA';
+      next.ReplacementStatus = assignment.replacementStatus || 'LATE_ENTRY';
+      next.IsNonBlocking = true;
+      return next;
+    }
+
+    if (assignment && assignment.handlingType === this.HANDLING_TYPES_.EARLY_EXIT) {
+      next.TeacherEmail = teacherEmail;
+      next.TeacherName = 'USCITA ANTICIPATA';
+      next.BookerName = 'USCITA ANTICIPATA';
+      next.DisplayLabel = 'USCITA ANTICIPATA';
+      next.ReplacementStatus = assignment.replacementStatus || 'EARLY_EXIT';
+      next.IsNonBlocking = true;
+      return next;
+    }
+
+    if (assignment && assignment.handlingType === this.HANDLING_TYPES_.CO_TEACHING) {
+      next.TeacherEmail = teacherEmail;
+      next.TeacherName = 'COMPRESENZA';
+      next.BookerName = 'COMPRESENZA';
+      next.DisplayLabel = 'COMPRESENZA';
+      next.ReplacementStatus = assignment.replacementStatus || 'CO_TEACHING';
+      next.IsNonBlocking = false;
+      return next;
+    }
+
     if (assignment && assignment.replacementStatus === 'TO_ASSIGN') {
       next.TeacherEmail = teacherEmail;
       next.TeacherName = 'DA SOSTITUIRE';
@@ -607,6 +644,7 @@ ROOMS_APP.Replacements = {
           originalTeacherEmail: activeLongAssignment ? activeLongAssignment.replacementTeacherEmail : originalTeacherEmail,
           originalTeacherName: activeLongAssignment ? activeLongAssignment.replacementTeacherDisplayName : ROOMS_APP.normalizeString(row.OriginalTeacherName),
           originalStatus: ROOMS_APP.normalizeString(row.OriginalStatus),
+          handlingType: ROOMS_APP.Replacements.normalizeHandlingType_(row.HandlingType),
           replacementTeacherEmail: ROOMS_APP.Replacements.normalizeTeacherEmail_(row.ReplacementTeacherEmail),
           replacementTeacherName: ROOMS_APP.normalizeString(row.ReplacementTeacherName),
           replacementSource: ROOMS_APP.normalizeString(row.ReplacementSource),
@@ -762,6 +800,7 @@ ROOMS_APP.Replacements = {
         originalTeacherEmail: originalTeacherEmail,
         originalTeacherName: originalTeacherName,
         originalStatus: ROOMS_APP.normalizeString(entry && (entry.originalStatus || entry.OriginalStatus)),
+        handlingType: ROOMS_APP.Replacements.normalizeHandlingType_(entry && (entry.handlingType || entry.HandlingType)),
         replacementTeacherEmail: ROOMS_APP.Replacements.normalizeTeacherEmail_(entry && (entry.replacementTeacherEmail || entry.ReplacementTeacherEmail)),
         replacementTeacherName: ROOMS_APP.normalizeString(entry && (entry.replacementTeacherName || entry.ReplacementTeacherName)),
         replacementSource: ROOMS_APP.normalizeString(entry && (entry.replacementSource || entry.ReplacementSource)),
@@ -807,6 +846,7 @@ ROOMS_APP.Replacements = {
         var originalStatus = teacher.accompanist ? 'ACCOMPANIST' : 'ABSENT';
         var assignmentKey = ROOMS_APP.Replacements.buildAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
         var draftEntry = draftAssignmentMap[assignmentKey] || {};
+        var handlingType = ROOMS_APP.Replacements.normalizeHandlingType_(draftEntry.handlingType);
         var isCoveredByOuting = Boolean(
           teacher.accompanist &&
           classOutSet[slot.classCode] &&
@@ -821,10 +861,31 @@ ROOMS_APP.Replacements = {
             originalTeacherEmail: teacher.teacherEmail,
             originalTeacherName: teacher.teacherName,
             originalStatus: originalStatus,
+            handlingType: ROOMS_APP.Replacements.HANDLING_TYPES_.SUBSTITUTION,
             replacementTeacherEmail: '',
             replacementTeacherName: '',
             replacementSource: '',
             replacementStatus: 'IN_USCITA',
+            notes: ROOMS_APP.normalizeString(draftEntry.notes),
+            startTime: slot.startTime,
+            endTime: slot.endTime
+          });
+          return;
+        }
+
+        if (handlingType !== ROOMS_APP.Replacements.HANDLING_TYPES_.SUBSTITUTION) {
+          assignments.push({
+            date: dateString,
+            period: period,
+            classCode: slot.classCode,
+            originalTeacherEmail: teacher.teacherEmail,
+            originalTeacherName: teacher.teacherName,
+            originalStatus: originalStatus,
+            handlingType: handlingType,
+            replacementTeacherEmail: '',
+            replacementTeacherName: '',
+            replacementSource: '',
+            replacementStatus: handlingType,
             notes: ROOMS_APP.normalizeString(draftEntry.notes),
             startTime: slot.startTime,
             endTime: slot.endTime
@@ -840,6 +901,7 @@ ROOMS_APP.Replacements = {
             originalTeacherEmail: teacher.teacherEmail,
             originalTeacherName: teacher.teacherName,
             originalStatus: originalStatus,
+            handlingType: ROOMS_APP.Replacements.HANDLING_TYPES_.SUBSTITUTION,
             replacementTeacherEmail: ROOMS_APP.normalizeEmail(draftEntry.replacementTeacherEmail),
             replacementTeacherName: ROOMS_APP.normalizeString(draftEntry.replacementTeacherName),
             replacementSource: ROOMS_APP.normalizeString(draftEntry.replacementSource || 'MANUAL'),
@@ -858,6 +920,7 @@ ROOMS_APP.Replacements = {
           originalTeacherEmail: teacher.teacherEmail,
           originalTeacherName: teacher.teacherName,
           originalStatus: originalStatus,
+          handlingType: ROOMS_APP.Replacements.HANDLING_TYPES_.SUBSTITUTION,
           replacementTeacherEmail: '',
           replacementTeacherName: '',
           replacementSource: '',
@@ -883,6 +946,7 @@ ROOMS_APP.Replacements = {
   },
 
   buildTeacherDetailRows_: function (normalized, teacher) {
+    var self = this;
     var assignmentsByKey = normalized.assignmentMap;
     var assignedByPeriod = this.buildAssignedTeacherSetByPeriod_(normalized.assignments);
     var rows = [];
@@ -910,6 +974,7 @@ ROOMS_APP.Replacements = {
         classCode: slot.classCode,
         label: slot.label,
         requiresReplacement: requiresReplacement,
+        handlingType: assignment ? self.normalizeHandlingType_(assignment.handlingType) : self.HANDLING_TYPES_.SUBSTITUTION,
         status: assignment ? assignment.replacementStatus : 'NONE',
         assignment: assignment,
         candidates: [],
@@ -929,7 +994,7 @@ ROOMS_APP.Replacements = {
       if (assignment && assignment.replacementStatus !== 'TO_ASSIGN') {
         row.status = assignment.replacementStatus;
       }
-      if (assignment && assignment.replacementStatus !== 'IN_USCITA') {
+      if (assignment && row.handlingType === self.HANDLING_TYPES_.SUBSTITUTION && assignment.replacementStatus !== 'IN_USCITA') {
         var candidateInfo = ROOMS_APP.Replacements.buildCandidateLists_(normalized, teacher, period, assignment, assignedByPeriod);
         row.candidates = candidateInfo.candidates;
         row.manualCandidates = candidateInfo.manualCandidates;
@@ -1082,13 +1147,16 @@ ROOMS_APP.Replacements = {
       textBody: textBody,
       htmlBody: htmlBody,
       reportModel: reportModel,
-      lines: reportModel.mainRows.map(function (entry) {
-        return entry.absentTeacher + ' -> ' + entry.designatedTeacher + ' (' + entry.periodClass + ')';
+      lines: reportModel.tableRows.map(function (entry) {
+        return entry.absentTeacher + ' -> ' + (entry.designatedTeacher || entry.noteLabel || '-') + ' (' + entry.periodSummary + ')';
       })
     };
   },
 
   buildReportViewModel_: function (normalized, summary, validationErrors) {
+    var periodColumns = Object.keys(ROOMS_APP.Timetable.getPeriodTimeMap()).sort(function (left, right) {
+      return Number(left) - Number(right);
+    });
     var classOutList = normalized.classes.filter(function (entry) {
       return entry.isOut;
     }).map(function (entry) {
@@ -1114,24 +1182,54 @@ ROOMS_APP.Replacements = {
         dateRange: entry.startDate + ' - ' + entry.endDate
       };
     });
-    var mainRows = normalized.assignments.map(function (entry) {
-      var designatedTeacher = 'DA SOSTITUIRE';
-      var typeLabel = 'Da assegnare';
-      if (entry.replacementStatus === 'IN_USCITA') {
-        designatedTeacher = 'IN USCITA';
-        typeLabel = 'Classe in uscita';
-      } else if (entry.replacementStatus === 'ASSIGNED') {
-        designatedTeacher = entry.replacementTeacherName;
-        typeLabel = entry.replacementSource || 'ASSIGNED';
+    var mainRows = [];
+    var teacherGroups = {};
+    var teacherOrder = [];
+
+    normalized.assignments.forEach(function (entry) {
+      var teacherKey = ROOMS_APP.Replacements.normalizeTeacherEmail_(entry.originalTeacherEmail) || entry.originalTeacherName;
+      var descriptor = ROOMS_APP.Replacements.describeReportAssignment_(entry);
+      var group;
+      var row;
+      if (!teacherGroups[teacherKey]) {
+        teacherGroups[teacherKey] = [];
+        teacherOrder.push(teacherKey);
       }
-      return {
-        absentTeacher: entry.originalTeacherName,
-        designatedTeacher: designatedTeacher,
-        typeLabel: typeLabel,
-        periodClass: entry.period + 'a ora - ' + entry.classCode,
-        notes: ROOMS_APP.normalizeString(entry.notes),
-        status: entry.replacementStatus
-      };
+      group = teacherGroups[teacherKey];
+      row = group.filter(function (candidate) {
+        return candidate.groupKey === descriptor.groupKey;
+      })[0] || null;
+      if (!row) {
+        row = {
+          groupKey: descriptor.groupKey,
+          absentTeacher: entry.originalTeacherName,
+          designatedTeacher: descriptor.designatedTeacher,
+          noteLabel: descriptor.noteLabel,
+          noteOnly: descriptor.noteOnly,
+          paymentLabel: '',
+          status: entry.replacementStatus,
+          periodCells: {},
+          periodSummary: ''
+        };
+        group.push(row);
+      }
+      row.periodCells[entry.period] = row.periodCells[entry.period]
+        ? row.periodCells[entry.period] + ' / ' + entry.classCode
+        : entry.classCode;
+    });
+
+    teacherOrder.forEach(function (teacherKey) {
+      var rows = teacherGroups[teacherKey] || [];
+      rows.forEach(function (row, index) {
+        row.showAbsentTeacher = index === 0;
+        row.absentTeacherRowSpan = index === 0 ? rows.length : 0;
+        row.periodSummary = periodColumns.map(function (period) {
+          return row.periodCells[period] ? (period + 'a: ' + row.periodCells[period]) : '';
+        }).filter(function (token) {
+          return Boolean(token);
+        }).join(', ');
+        mainRows.push(row);
+      });
     });
 
     return {
@@ -1141,8 +1239,15 @@ ROOMS_APP.Replacements = {
       validationErrors: (validationErrors || []).slice(),
       summary: summary,
       mainRows: mainRows,
-      toAssignRows: mainRows.filter(function (entry) {
-        return entry.status === 'TO_ASSIGN';
+      tableRows: mainRows,
+      periodColumns: periodColumns,
+      toAssignRows: normalized.assignments.filter(function (entry) {
+        return entry.replacementStatus === 'TO_ASSIGN';
+      }).map(function (entry) {
+        return {
+          absentTeacher: entry.originalTeacherName,
+          periodClass: entry.period + 'a ora - ' + entry.classCode
+        };
       }),
       classOutList: classOutList,
       absentTeachers: absentTeachers,
@@ -1164,11 +1269,16 @@ ROOMS_APP.Replacements = {
       lines.push('');
     }
     lines.push('SOSTITUZIONI:');
-    if (!reportModel.mainRows.length) {
+    if (!reportModel.tableRows.length) {
       lines.push('Nessuna sostituzione richiesta.');
     } else {
-      reportModel.mainRows.forEach(function (entry) {
-        lines.push('- ' + entry.absentTeacher + ' -> ' + entry.designatedTeacher + ' | ' + entry.typeLabel + ' | ' + entry.periodClass + (entry.notes ? ' | ' + entry.notes : ''));
+      reportModel.tableRows.forEach(function (entry) {
+        lines.push(
+          '- ' + entry.absentTeacher +
+          ' -> ' + (entry.designatedTeacher || '-') +
+          ' | ' + (entry.noteLabel || '-') +
+          ' | ' + (entry.periodSummary || '-')
+        );
       });
     }
     lines.push('');
@@ -1185,10 +1295,96 @@ ROOMS_APP.Replacements = {
     return lines.join('\n');
   },
 
+  describeReportAssignment_: function (entry) {
+    var handlingType = this.normalizeHandlingType_(entry.handlingType);
+    var sourceLabel = this.getReplacementSourceLabel_(entry.replacementSource);
+    var noteParts = [];
+    if (entry.replacementStatus === 'IN_USCITA') {
+      return {
+        groupKey: 'OUTING',
+        designatedTeacher: '',
+        noteLabel: 'Classe in uscita',
+        noteOnly: true
+      };
+    }
+    if (handlingType === this.HANDLING_TYPES_.LATE_ENTRY ||
+        handlingType === this.HANDLING_TYPES_.EARLY_EXIT ||
+        handlingType === this.HANDLING_TYPES_.CO_TEACHING) {
+      noteParts.push(this.getHandlingTypeLabel_(handlingType));
+      if (ROOMS_APP.normalizeString(entry.notes)) {
+        noteParts.push(ROOMS_APP.normalizeString(entry.notes));
+      }
+      return {
+        groupKey: handlingType + '|' + noteParts.join(' | '),
+        designatedTeacher: '',
+        noteLabel: noteParts.join(' | '),
+        noteOnly: true
+      };
+    }
+    if (entry.replacementStatus === 'ASSIGNED') {
+      if (sourceLabel) {
+        noteParts.push(sourceLabel);
+      }
+      if (ROOMS_APP.normalizeString(entry.notes)) {
+        noteParts.push(ROOMS_APP.normalizeString(entry.notes));
+      }
+      return {
+        groupKey: 'ASSIGNED|' + ROOMS_APP.normalizeString(entry.replacementTeacherName) + '|' + noteParts.join(' | '),
+        designatedTeacher: ROOMS_APP.normalizeString(entry.replacementTeacherName),
+        noteLabel: noteParts.join(' | '),
+        noteOnly: false
+      };
+    }
+    return {
+      groupKey: 'TO_ASSIGN|' + ROOMS_APP.normalizeString(entry.notes),
+      designatedTeacher: 'DA SOSTITUIRE',
+      noteLabel: ROOMS_APP.normalizeString(entry.notes),
+      noteOnly: false
+    };
+  },
+
+  getHandlingTypeLabel_: function (handlingType) {
+    var normalized = this.normalizeHandlingType_(handlingType);
+    if (normalized === this.HANDLING_TYPES_.LATE_ENTRY) {
+      return 'Entrata posticipata';
+    }
+    if (normalized === this.HANDLING_TYPES_.EARLY_EXIT) {
+      return 'Uscita anticipata';
+    }
+    if (normalized === this.HANDLING_TYPES_.CO_TEACHING) {
+      return 'Compresenza';
+    }
+    return 'Sostituzione';
+  },
+
+  getReplacementSourceLabel_: function (source) {
+    var normalized = ROOMS_APP.normalizeString(source).toUpperCase();
+    if (normalized === 'CLASS_OUT') {
+      return 'Classe in uscita';
+    }
+    if (normalized === 'MANUAL') {
+      return 'Altro docente';
+    }
+    return normalized;
+  },
+
   renderReportTemplate_: function (reportModel) {
     var template = HtmlService.createTemplateFromFile('ui.report.replacements');
     template.report = reportModel;
     return template.evaluate().getContent();
+  },
+
+  normalizeHandlingType_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value).toUpperCase();
+    if (!normalized) {
+      return this.HANDLING_TYPES_.SUBSTITUTION;
+    }
+    if (normalized === this.HANDLING_TYPES_.LATE_ENTRY ||
+        normalized === this.HANDLING_TYPES_.EARLY_EXIT ||
+        normalized === this.HANDLING_TYPES_.CO_TEACHING) {
+      return normalized;
+    }
+    return this.HANDLING_TYPES_.SUBSTITUTION;
   },
 
   validateDraft_: function (normalized) {
@@ -1309,6 +1505,7 @@ ROOMS_APP.Replacements = {
         originalTeacherEmail: originalTeacherEmail,
         originalTeacherName: ROOMS_APP.normalizeString(row.OriginalTeacherName),
         originalStatus: ROOMS_APP.normalizeString(row.OriginalStatus),
+        handlingType: ROOMS_APP.Replacements.normalizeHandlingType_(row.HandlingType),
         replacementTeacherEmail: ROOMS_APP.Replacements.normalizeTeacherEmail_(row.ReplacementTeacherEmail),
         replacementTeacherName: ROOMS_APP.normalizeString(row.ReplacementTeacherName),
         replacementSource: ROOMS_APP.normalizeString(row.ReplacementSource),
