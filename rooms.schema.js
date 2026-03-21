@@ -14,6 +14,25 @@ ROOMS_APP.Schema = {
     'Notes'
   ],
 
+  HEADER_MIN_WIDTHS_: {
+    Email: 180,
+    OrgUnitPath: 220,
+    Notes: 220,
+    Subject: 220,
+    Recipients: 260,
+    ReferenceDate: 120,
+    SentAtISO: 150,
+    UpdatedAtISO: 150,
+    CreatedAtISO: 150,
+    UpdatedBy: 150,
+    SentBy: 150,
+    ReportType: 120,
+    TeacherEmail: 180,
+    OriginalTeacherEmail: 180,
+    ReplacementTeacherEmail: 180,
+    ReplyTo: 180
+  },
+
   PLAIN_TEXT_SHEETS_: (function () {
     var sheets = {};
     sheets[ROOMS_APP.SHEET_NAMES.CONFIG] = true;
@@ -341,12 +360,7 @@ ROOMS_APP.Schema = {
 
     this.setPlainTextSheet_(sheet, sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.setFrozenRows(1);
-    sheet.getRange(1, 1, 1, headers.length)
-      .setFontWeight('bold')
-      .setBackground('#dbeafe')
-      .setWrap(true);
-    sheet.autoResizeColumns(1, headers.length);
+    this.applyManagedSheetFormatting_(sheet, headers);
     ROOMS_APP.DB.invalidateSheetCache_(sheetName);
   },
 
@@ -384,16 +398,41 @@ ROOMS_APP.Schema = {
     }
 
     this.setPlainTextSheet_(sheet, sheetName);
-    sheet.setFrozenRows(1);
-    if (currentHeaders.length) {
-      sheet.getRange(1, 1, 1, currentHeaders.length)
-        .setFontWeight('bold')
-        .setBackground('#dbeafe')
-        .setWrap(true);
-      sheet.autoResizeColumns(1, currentHeaders.length);
-    }
+    this.applyManagedSheetFormatting_(sheet, currentHeaders);
     if (changed) {
       ROOMS_APP.DB.invalidateSheetCache_(sheetName);
+    }
+  },
+
+  applyManagedSheetFormatting_: function (sheet, headers) {
+    var headerCount = headers && headers.length ? headers.length : 0;
+    var index;
+    if (!sheet || !headerCount) {
+      return;
+    }
+
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, headerCount)
+      .setFontWeight('bold')
+      .setBackground('#dbeafe')
+      .setWrap(true)
+      .setVerticalAlignment('middle');
+    sheet.autoResizeColumns(1, headerCount);
+
+    for (index = 0; index < headerCount; index += 1) {
+      this.applyMinimumColumnWidth_(sheet, index + 1, headers[index]);
+    }
+  },
+
+  applyMinimumColumnWidth_: function (sheet, columnIndex, headerLabel) {
+    var minimumWidth = this.HEADER_MIN_WIDTHS_[ROOMS_APP.normalizeString(headerLabel)] || 0;
+    var currentWidth;
+    if (!minimumWidth) {
+      return;
+    }
+    currentWidth = sheet.getColumnWidth(columnIndex);
+    if (currentWidth < minimumWidth) {
+      sheet.setColumnWidth(columnIndex, minimumWidth);
     }
   },
 
