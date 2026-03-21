@@ -420,6 +420,7 @@
         var replacementQuickSummary = document.getElementById('replacement-quick-summary');
         var replacementClassesTable = document.getElementById('replacement-classes-table');
         var replacementTeachersTable = document.getElementById('replacement-teachers-table');
+        var replacementDetailSection = replacementModal ? replacementModal.querySelector('.replacement-detail-section') : null;
         var replacementDetailTitle = document.getElementById('replacement-detail-title');
         var replacementDetailMeta = document.getElementById('replacement-detail-meta');
         var replacementDetailTable = document.getElementById('replacement-detail-table');
@@ -1722,6 +1723,23 @@
           }
         }
 
+        function scrollReplacementModalToDetail_() {
+          if (!replacementDialog) {
+            return;
+          }
+          if (replacementDetailSection && typeof replacementDetailSection.offsetTop === 'number') {
+            replacementDialog.scrollTo({
+              top: Math.max(replacementDetailSection.offsetTop - 18, 0),
+              behavior: 'smooth'
+            });
+            return;
+          }
+          replacementDialog.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+          });
+        }
+
         function closeReplacementConfirm_() {
           if (replacementConfirmModal) {
             replacementConfirmModal.style.display = 'none';
@@ -2022,10 +2040,14 @@
 
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var manageButton = ROOMS_UI.el('button', 'button secondary', 'Gestisci');
+              var isSelectedTeacher = normalizeReplacementTeacherEmail_(teacher.teacherEmail) === normalizeReplacementTeacherEmail_(replacementState.selectedTeacherEmail);
               manageButton.type = 'button';
               manageButton.disabled = isDisabled || !teacher.absent;
+              manageButton.classList.toggle('replacement-manage-button-active', isSelectedTeacher);
+              manageButton.setAttribute('aria-pressed', isSelectedTeacher ? 'true' : 'false');
               manageButton.addEventListener('click', function () {
                 loadReplacementTeacherDetail_(teacher.teacherEmail, {});
+                scrollReplacementModalToDetail_();
               });
               actions.appendChild(manageButton);
 
