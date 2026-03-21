@@ -195,16 +195,16 @@ ROOMS_APP.Replacements = {
       .concat(payload.recipients.bcc)
       .join(', ');
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var senderInfo = null;
 
     try {
-      MailApp.sendEmail({
-        to: payload.recipients.to.join(','),
-        cc: payload.recipients.cc.join(','),
-        bcc: payload.recipients.bcc.join(','),
+      senderInfo = ROOMS_APP.Mail.sendReportEmail({
+        to: payload.recipients.to,
+        cc: payload.recipients.cc,
+        bcc: payload.recipients.bcc,
         subject: payload.subject,
-        body: payload.textBody,
-        htmlBody: payload.htmlBody,
-        name: ROOMS_APP.getConfigValue('APP_NAME', 'ROOMS')
+        textBody: payload.textBody,
+        htmlBody: payload.htmlBody
       });
       this.appendReportLog_({
         ReportType: this.REPORT_TYPE_,
@@ -214,7 +214,12 @@ ROOMS_APP.Replacements = {
         Recipients: recipientList,
         Subject: payload.subject,
         Status: 'SENT',
-        Notes: ''
+        Notes: senderInfo
+          ? ('mode=' + senderInfo.senderMode +
+            '; name=' + senderInfo.fromName +
+            (senderInfo.replyTo ? '; replyTo=' + senderInfo.replyTo : '') +
+            (senderInfo.noReply ? '; noReply=true' : ''))
+          : ''
       });
     } catch (error) {
       this.appendReportLog_({

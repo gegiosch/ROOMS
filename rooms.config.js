@@ -51,7 +51,10 @@ ROOMS_APP.DEFAULT_CONFIG_ROWS = [
   { Key: 'TIMETABLE_DOCENTI_SHEET', Value: 'ORARIO_DOCENTI', Notes: 'Source sheet name for teacher timetable matrix import.' },
   { Key: 'TIMETABLE_LABORATORI_SHEET', Value: 'ORARIO_LABORATORI', Notes: 'Source sheet name for labs/spaces timetable matrix import.' },
   { Key: 'AULA_MAGNA_EVENT_DAYS_AHEAD', Value: '14', Notes: 'Future days horizon for Aula Magna upcoming events.' },
-  { Key: 'SHOW_BOOKER_NAME', Value: 'FALSE', Notes: 'Room detail visibility toggle.' }
+  { Key: 'SHOW_BOOKER_NAME', Value: 'FALSE', Notes: 'Room detail visibility toggle.' },
+  { Key: 'REPORT_FROM_NAME', Value: 'ROOMS', Notes: 'Display name used for outbound operational reports.' },
+  { Key: 'REPORT_REPLY_TO', Value: '', Notes: 'Reply-To address used when report sender mode allows replies.' },
+  { Key: 'REPORT_SENDER_MODE', Value: 'NOREPLY', Notes: 'Sender mode for reports: DEFAULT, REPLY_TO, or NOREPLY.' }
 ];
 
 ROOMS_APP.PALETTE = {

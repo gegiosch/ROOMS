@@ -2,6 +2,7 @@
   pageBg: '#f5f7fb',
   panel: '#ffffff',
   border: '#cfd6df',
+  borderSoft: '#e3e8ef',
   soft: '#eef3f8',
   softAlt: '#f9fbfd',
   title: '#143a63',
@@ -9,18 +10,19 @@
   muted: '#5b6472',
   accent: '#dbeafe',
   accentBorder: '#93c5fd',
+  accentText: '#1e40af',
   warningBg: '#fff7dd',
   warningText: '#8a5a00',
   errorBg: '#fde8e8',
   errorText: '#a61b1b'
 }; ?>
-<div style="font-family:Arial,Helvetica,sans-serif;background:<?= palette.pageBg ?>;padding:20px;color:<?= palette.text ?>;">
-  <div style="max-width:1180px;margin:0 auto;background:<?= palette.panel ?>;border:1px solid <?= palette.border ?>;box-shadow:0 14px 40px rgba(15,23,42,0.08);">
-    <div style="padding:14px 18px;border-bottom:1px solid <?= palette.accentBorder ?>;background:linear-gradient(180deg,<?= palette.accent ?>, #f8fbff);text-align:center;">
-      <div style="font-size:28px;font-weight:700;line-height:1.2;color:<?= palette.title ?>;">SOSTITUZIONI DOCENTI: <span style="font-style:italic;"><?= report.dateLabel ?></span></div>
+<div style="font-family:Arial,Helvetica,sans-serif;background:<?= palette.pageBg ?>;padding:14px;color:<?= palette.text ?>;">
+  <div style="width:100%;margin:0 auto;background:<?= palette.panel ?>;border:1px solid <?= palette.borderSoft ?>;box-shadow:0 16px 38px rgba(15,23,42,0.07);border-radius:14px;overflow:hidden;">
+    <div style="padding:16px 18px;border-bottom:1px solid <?= palette.accentBorder ?>;background:linear-gradient(180deg,<?= palette.accent ?>, #f8fbff);text-align:center;">
+      <div style="font-size:26px;font-weight:700;line-height:1.2;color:<?= palette.title ?>;letter-spacing:0.02em;">SOSTITUZIONI DOCENTI: <span style="font-style:italic;"><?= report.dateLabel ?></span></div>
     </div>
 
-    <div style="padding:16px 18px;">
+    <div style="padding:16px 16px 18px;">
       <? if (report.validationErrors && report.validationErrors.length) { ?>
         <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #f5b5b5;background:<?= palette.errorBg ?>;color:<?= palette.errorText ?>;">
           <div style="font-weight:700;margin-bottom:6px;">Validazioni bloccanti</div>
@@ -32,19 +34,29 @@
         </div>
       <? } ?>
 
-      <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+      <div style="width:100%;overflow-x:auto;">
+      <table style="width:100%;min-width:980px;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+        <colgroup>
+          <col style="width:16%;">
+          <col style="width:16%;">
+          <col style="width:14%;">
+          <? for (var colIndex = 0; colIndex < (report.periodColumns || []).length; colIndex += 1) { ?>
+            <col style="width:5.75%;">
+          <? } ?>
+          <col style="width:8%;">
+        </colgroup>
         <thead>
           <tr>
-            <th style="width:15%;padding:8px 6px;border:1px solid <?= palette.border ?>;background:#fff25a;text-align:left;">DOCENTE ASSENTE</th>
-            <th style="width:16%;padding:8px 6px;border:1px solid <?= palette.border ?>;background:#ffe15a;text-align:left;">DOCENTE DESIGNATO ALLA SOSTITUZIONE</th>
-            <th style="width:13%;padding:8px 6px;border:1px solid <?= palette.border ?>;background:#dff3d8;text-align:left;">ENTRATE/USCITE / NOTE</th>
+            <th style="padding:9px 6px;border:1px solid <?= palette.border ?>;background:#fff2a6;text-align:left;white-space:normal;word-break:break-word;line-height:1.2;">DOCENTE ASSENTE</th>
+            <th style="padding:9px 6px;border:1px solid <?= palette.border ?>;background:#ffe6a6;text-align:left;white-space:normal;word-break:break-word;line-height:1.2;">DOCENTE DESIGNATO ALLA SOSTITUZIONE</th>
+            <th style="padding:9px 6px;border:1px solid <?= palette.border ?>;background:#def3e5;text-align:left;white-space:normal;word-break:break-word;line-height:1.2;">ENTRATE/USCITE<br>NOTE</th>
             <? for (var periodIndex = 0; periodIndex < (report.periodColumns || []).length; periodIndex += 1) { var period = report.periodColumns[periodIndex]; ?>
-              <th style="width:5.5%;padding:8px 4px;border:1px solid <?= palette.border ?>;background:#d7ecff;text-align:center;">
-                <div style="font-weight:700;"><?= period ?>ª</div>
+              <th style="padding:8px 2px;border:1px solid <?= palette.border ?>;background:#d7ecff;text-align:center;white-space:normal;line-height:1.1;">
+                <div style="font-weight:700;color:<?= palette.accentText ?>;"><?= period ?>ª</div>
                 <div style="font-size:10px;color:<?= palette.muted ?>;">ORA</div>
               </th>
             <? } ?>
-            <th style="width:8%;padding:8px 6px;border:1px solid <?= palette.border ?>;background:#e6cad7;text-align:center;">PAGAMENTO</th>
+            <th style="padding:9px 6px;border:1px solid <?= palette.border ?>;background:#ead2db;text-align:center;white-space:normal;word-break:break-word;line-height:1.2;">PAGAMENTO</th>
           </tr>
         </thead>
         <tbody>
@@ -56,21 +68,22 @@
           <? for (var rowIndex = 0; rowIndex < (report.tableRows || []).length; rowIndex += 1) { var row = report.tableRows[rowIndex]; var rowBg = rowIndex % 2 === 0 ? '#ffffff' : palette.softAlt; ?>
             <tr>
               <? if (row.showAbsentTeacher) { ?>
-                <td rowspan="<?= row.absentTeacherRowSpan || 1 ?>" style="padding:8px 6px;border:1px solid <?= palette.border ?>;background:<?= rowBg ?>;vertical-align:top;font-weight:700;"><?= row.absentTeacher ?></td>
+                <td rowspan="<?= row.absentTeacherRowSpan || 1 ?>" style="padding:8px 7px;border:1px solid <?= palette.borderSoft ?>;background:<?= rowBg ?>;vertical-align:top;font-weight:700;word-break:break-word;line-height:1.25;"><?= row.absentTeacher ?></td>
               <? } ?>
-              <td style="padding:8px 6px;border:1px solid <?= palette.border ?>;background:<?= rowBg ?>;vertical-align:top;"><?!= row.designatedTeacher || '&nbsp;' ?></td>
-              <td style="padding:8px 6px;border:1px solid <?= palette.border ?>;background:<?= row.noteOnly ? palette.warningBg : rowBg ?>;color:<?= row.noteOnly ? palette.warningText : palette.text ?>;vertical-align:top;"><?!= row.noteLabel || '&nbsp;' ?></td>
+              <td style="padding:8px 7px;border:1px solid <?= palette.borderSoft ?>;background:<?= rowBg ?>;vertical-align:top;word-break:break-word;line-height:1.25;"><?!= row.designatedTeacher || '&nbsp;' ?></td>
+              <td style="padding:8px 7px;border:1px solid <?= palette.borderSoft ?>;background:<?= row.noteOnly ? palette.warningBg : rowBg ?>;color:<?= row.noteOnly ? palette.warningText : palette.text ?>;vertical-align:top;word-break:break-word;line-height:1.25;"><?!= row.noteLabel || '&nbsp;' ?></td>
               <? for (var periodCellIndex = 0; periodCellIndex < (report.periodColumns || []).length; periodCellIndex += 1) { var periodKey = report.periodColumns[periodCellIndex]; ?>
-                <td style="padding:8px 4px;border:1px solid <?= palette.border ?>;background:<?= rowBg ?>;text-align:center;vertical-align:middle;"><?!= row.periodCells && row.periodCells[periodKey] ? row.periodCells[periodKey] : '&nbsp;' ?></td>
+                <td style="padding:7px 2px;border:1px solid <?= palette.borderSoft ?>;background:<?= rowBg ?>;text-align:center;vertical-align:middle;white-space:normal;word-break:break-word;line-height:1.2;"><?!= row.periodCells && row.periodCells[periodKey] ? row.periodCells[periodKey] : '&nbsp;' ?></td>
               <? } ?>
-              <td style="padding:8px 6px;border:1px solid <?= palette.border ?>;background:<?= rowBg ?>;text-align:center;">&nbsp;</td>
+              <td style="padding:8px 4px;border:1px solid <?= palette.borderSoft ?>;background:<?= rowBg ?>;text-align:center;">&nbsp;</td>
             </tr>
           <? } ?>
         </tbody>
       </table>
+      </div>
 
       <? if (report.toAssignRows && report.toAssignRows.length) { ?>
-        <div style="margin-top:14px;padding:12px 14px;border:1px solid #efd48e;background:<?= palette.warningBg ?>;color:<?= palette.warningText ?>;">
+        <div style="margin-top:14px;padding:12px 14px;border:1px solid #efd48e;background:<?= palette.warningBg ?>;color:<?= palette.warningText ?>;border-radius:10px;">
           <div style="font-weight:700;margin-bottom:6px;">Assenze ancora da coprire</div>
           <ul style="margin:0;padding-left:18px;">
             <? for (var pendingIndex = 0; pendingIndex < report.toAssignRows.length; pendingIndex += 1) { var pending = report.toAssignRows[pendingIndex]; ?>
@@ -80,9 +93,9 @@
         </div>
       <? } ?>
 
-      <div style="margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
-        <div style="border:1px solid <?= palette.border ?>;background:#fff;">
-          <div style="padding:8px 10px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.border ?>;">ASSENTI</div>
+      <div style="margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
+        <div style="border:1px solid <?= palette.borderSoft ?>;background:#fff;border-radius:12px;overflow:hidden;">
+          <div style="padding:9px 12px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.borderSoft ?>;">ASSENTI</div>
           <div style="padding:10px 12px;min-height:84px;">
             <? if (report.absentTeachers && report.absentTeachers.length) { ?>
               <? for (var absentIndex = 0; absentIndex < report.absentTeachers.length; absentIndex += 1) { ?>
@@ -94,8 +107,8 @@
           </div>
         </div>
 
-        <div style="border:1px solid <?= palette.border ?>;background:#fff;">
-          <div style="padding:8px 10px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.border ?>;">DOCENTI ACCOMPAGNATORI</div>
+        <div style="border:1px solid <?= palette.borderSoft ?>;background:#fff;border-radius:12px;overflow:hidden;">
+          <div style="padding:9px 12px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.borderSoft ?>;">DOCENTI ACCOMPAGNATORI</div>
           <div style="padding:10px 12px;min-height:84px;">
             <? if (report.accompanists && report.accompanists.length) { ?>
               <? for (var accompIndex = 0; accompIndex < report.accompanists.length; accompIndex += 1) { var accomp = report.accompanists[accompIndex]; ?>
@@ -107,8 +120,8 @@
           </div>
         </div>
 
-        <div style="border:1px solid <?= palette.border ?>;background:#fff;">
-          <div style="padding:8px 10px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.border ?>;">CLASSI IN USCITA</div>
+        <div style="border:1px solid <?= palette.borderSoft ?>;background:#fff;border-radius:12px;overflow:hidden;">
+          <div style="padding:9px 12px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.borderSoft ?>;">CLASSI IN USCITA</div>
           <div style="padding:10px 12px;min-height:84px;">
             <? if (report.classOutList && report.classOutList.length) { ?>
               <? for (var classIndex = 0; classIndex < report.classOutList.length; classIndex += 1) { ?>
@@ -122,8 +135,8 @@
       </div>
 
       <? if (report.activeLongAssignments && report.activeLongAssignments.length) { ?>
-        <div style="margin-top:14px;border:1px solid <?= palette.border ?>;background:#fff;">
-          <div style="padding:8px 10px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.border ?>;">SUPPLENZE LUNGHE ATTIVE</div>
+        <div style="margin-top:14px;border:1px solid <?= palette.borderSoft ?>;background:#fff;border-radius:12px;overflow:hidden;">
+          <div style="padding:9px 12px;font-weight:700;background:<?= palette.soft ?>;border-bottom:1px solid <?= palette.borderSoft ?>;">SUPPLENZE LUNGHE ATTIVE</div>
           <div style="padding:10px 12px;">
             <? for (var longIndex = 0; longIndex < report.activeLongAssignments.length; longIndex += 1) { var longEntry = report.activeLongAssignments[longIndex]; ?>
               <div style="margin:0 0 4px;"><?= longEntry.originalTeacherName ?> → <?= longEntry.replacementTeacherDisplayName ?> (<?= longEntry.dateRange ?>)</div>
