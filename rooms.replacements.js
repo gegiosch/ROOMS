@@ -1141,7 +1141,8 @@ ROOMS_APP.Replacements = {
 
   buildReportPayload_: function (normalized, recipients, validationErrors) {
     var summary = this.buildSummaryFromAssignments_(normalized.assignments, normalized.classes, normalized.teachers);
-    var subject = 'Sostituzioni docenti ' + normalized.date;
+    var formattedDateLabel = ROOMS_APP.formatItalianExtendedDate(normalized.date);
+    var subject = 'Sostituzioni docenti ' + (formattedDateLabel || normalized.date);
     var reportModel = this.buildReportViewModel_(normalized, summary, validationErrors || []);
     var textBody = this.buildReportTextBody_(reportModel);
     var htmlBody = this.renderReportTemplate_(reportModel);
@@ -1162,6 +1163,7 @@ ROOMS_APP.Replacements = {
   },
 
   buildReportViewModel_: function (normalized, summary, validationErrors) {
+    var formattedDateLabel = ROOMS_APP.formatItalianExtendedDate(normalized.date);
     var periodColumns = Object.keys(ROOMS_APP.Timetable.getPeriodTimeMap()).sort(function (left, right) {
       return Number(left) - Number(right);
     });
@@ -1243,7 +1245,7 @@ ROOMS_APP.Replacements = {
     return {
       title: 'SOSTITUZIONI DOCENTI',
       date: normalized.date,
-      dateLabel: normalized.date,
+      dateLabel: formattedDateLabel || normalized.date,
       validationErrors: (validationErrors || []).slice(),
       summary: summary,
       mainRows: mainRows,

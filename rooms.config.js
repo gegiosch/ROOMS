@@ -309,6 +309,26 @@ ROOMS_APP.getWeekdayName = function (dateString) {
   return weekdayNames[ROOMS_APP.combineDateTime(dateString, '12:00').getDay()];
 };
 
+ROOMS_APP.formatItalianExtendedDate = function (dateString) {
+  if (!dateString) {
+    return '';
+  }
+
+  if (typeof dateString !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return String(dateString);
+  }
+
+  var date = ROOMS_APP.combineDateTime(dateString, '12:00');
+  if (isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  var weekdayNames = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+  var monthNames = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+
+  return weekdayNames[date.getDay()] + ' ' + date.getDate() + ' ' + monthNames[date.getMonth()] + ' ' + date.getFullYear();
+};
+
 ROOMS_APP.daysBetween = function (fromDateString, toDateString) {
   var start = ROOMS_APP.combineDateTime(fromDateString, '00:00');
   var end = ROOMS_APP.combineDateTime(toDateString, '00:00');
