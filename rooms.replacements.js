@@ -205,6 +205,7 @@ ROOMS_APP.Replacements = {
         to: payload.recipients.to,
         cc: payload.recipients.cc,
         bcc: payload.recipients.bcc,
+        replyTo: payload.recipients.replyTo,
         subject: payload.subject,
         textBody: payload.textBody,
         htmlBody: payload.htmlBody
@@ -1196,7 +1197,7 @@ ROOMS_APP.Replacements = {
     var summary = this.buildSummaryFromAssignments_(normalized.assignments, normalized.classes, normalized.teachers);
     var formattedDateLabel = ROOMS_APP.formatItalianExtendedDate(normalized.date);
     var subject = 'Sostituzioni docenti ' + (formattedDateLabel || normalized.date);
-    var reportModel = this.buildReportViewModel_(normalized, summary, validationErrors || []);
+    var reportModel = this.buildReportViewModel_(normalized, summary, validationErrors || [], recipients);
     var textBody = this.buildReportTextBody_(reportModel);
     var htmlBody = this.renderReportTemplate_(reportModel);
 
@@ -1215,8 +1216,9 @@ ROOMS_APP.Replacements = {
     };
   },
 
-  buildReportViewModel_: function (normalized, summary, validationErrors) {
+  buildReportViewModel_: function (normalized, summary, validationErrors, recipients) {
     var formattedDateLabel = ROOMS_APP.formatItalianExtendedDate(normalized.date);
+    var recipientConfig = recipients || {};
     var periodColumns = Object.keys(ROOMS_APP.Timetable.getPeriodTimeMap()).sort(function (left, right) {
       return Number(left) - Number(right);
     });
@@ -1299,6 +1301,8 @@ ROOMS_APP.Replacements = {
       title: 'SOSTITUZIONI DOCENTI',
       date: normalized.date,
       dateLabel: formattedDateLabel || normalized.date,
+      replyToConfigured: Boolean(recipientConfig.replyTo),
+      replyToEmail: recipientConfig.replyTo || '',
       validationErrors: (validationErrors || []).slice(),
       summary: summary,
       mainRows: mainRows,
@@ -1594,19 +1598,24 @@ ROOMS_APP.Replacements = {
     var output = {
       to: [],
       cc: [],
-      bcc: []
+      bcc: [],
+      replyTo: ''
     };
 
     rows.forEach(function (row) {
       var email = ROOMS_APP.normalizeEmail(row.Email);
       var type = ROOMS_APP.normalizeString(row.RecipientType).toUpperCase();
-      if (!email) {
+      if (!email || !ROOMS_APP.Replacements.isValidRecipientEmail_(email)) {
         return;
       }
       if (type === 'CC') {
         output.cc.push(email);
       } else if (type === 'BCC') {
         output.bcc.push(email);
+      } else if (type === 'REPLY') {
+        if (!output.replyTo) {
+          output.replyTo = email;
+        }
       } else {
         output.to.push(email);
       }
@@ -2020,6 +2029,10 @@ ROOMS_APP.Replacements = {
 
   normalizeTeacherEmail_: function (value) {
     return ROOMS_APP.normalizeEmail(value);
+  },
+
+  isValidRecipientEmail_: function (value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ROOMS_APP.normalizeEmail(value));
   },
 
   cloneMap_: function (value) {

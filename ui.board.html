@@ -2284,6 +2284,9 @@
           if (safeArray(preview.recipients && preview.recipients.bcc).length) {
             meta.appendChild(ROOMS_UI.el('div', '', 'BCC: ' + safeArray(preview.recipients.bcc).join(', ')));
           }
+          if (preview.recipients && preview.recipients.replyTo) {
+            meta.appendChild(ROOMS_UI.el('div', '', 'Reply-To: ' + preview.recipients.replyTo));
+          }
           replacementPreviewMount.appendChild(meta);
           if (preview.htmlBody) {
             var htmlWrap = ROOMS_UI.el('div', 'replacement-preview-html');

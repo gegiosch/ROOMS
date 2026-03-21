@@ -17,6 +17,7 @@ ROOMS_APP.Mail = {
   },
 
   buildMailAppPayload_: function (message, senderConfig) {
+    var explicitReplyTo = ROOMS_APP.normalizeString(message && message.replyTo);
     var payload = {
       to: (message.to || []).join(','),
       cc: (message.cc || []).join(','),
@@ -27,7 +28,9 @@ ROOMS_APP.Mail = {
       name: senderConfig.fromName
     };
 
-    if (senderConfig.mode === 'NOREPLY') {
+    if (explicitReplyTo) {
+      payload.replyTo = explicitReplyTo;
+    } else if (senderConfig.mode === 'NOREPLY') {
       payload.noReply = true;
     } else if (senderConfig.mode === 'REPLY_TO' && senderConfig.replyTo) {
       payload.replyTo = senderConfig.replyTo;
@@ -39,12 +42,13 @@ ROOMS_APP.Mail = {
   sendReportEmail: function (message) {
     var senderConfig = this.getReportSenderConfig_();
     var payload = this.buildMailAppPayload_(message, senderConfig);
+    var explicitReplyTo = ROOMS_APP.normalizeString(message && message.replyTo);
     MailApp.sendEmail(payload);
     return {
-      senderMode: senderConfig.mode,
+      senderMode: explicitReplyTo ? 'TABLE_REPLY_TO' : senderConfig.mode,
       fromName: senderConfig.fromName,
-      replyTo: senderConfig.mode === 'REPLY_TO' ? senderConfig.replyTo : '',
-      noReply: Boolean(senderConfig.mode === 'NOREPLY')
+      replyTo: explicitReplyTo || (senderConfig.mode === 'REPLY_TO' ? senderConfig.replyTo : ''),
+      noReply: Boolean(!explicitReplyTo && senderConfig.mode === 'NOREPLY')
     };
   }
 };

@@ -144,6 +144,12 @@
           </div>
         </div>
       <? } ?>
+
+      <? if (!report.replyToConfigured) { ?>
+        <div style="margin-top:18px;padding-top:12px;border-top:1px solid <?= palette.borderSoft ?>;font-size:11px;line-height:1.4;color:<?= palette.muted ?>;">
+          Report generato automaticamente – non rispondere a questa email.
+        </div>
+      <? } ?>
     </div>
   </div>
 </div>
