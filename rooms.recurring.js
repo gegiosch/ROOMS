@@ -4,7 +4,10 @@ ROOMS_APP.Recurring = {
   previewWeekly: function (payload) {
     var actor = ROOMS_APP.Auth.getUserContext();
     ROOMS_APP.Auth.assertAllowedDomain(actor.email);
-    if (!ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true) && !actor.isAdmin) {
+    if (!actor.canBook) {
+      throw new Error('Booking permission required.');
+    }
+    if (!ROOMS_APP.getBooleanConfig('ALLOW_RECURRING', true) && !actor.canAccessAdmin) {
       throw new Error('Recurring bookings are disabled.');
     }
 
@@ -13,11 +16,11 @@ ROOMS_APP.Recurring = {
     var weekday = ROOMS_APP.normalizeString(payload.weekday) || ROOMS_APP.getWeekdayName(startDate);
     var maxOccurrences = ROOMS_APP.getNumberConfig('RECURRING_MAX_OCCURRENCES', 20);
     var maxWeeks = ROOMS_APP.getNumberConfig('RECURRING_MAX_WEEKS', 12);
-    var dates = this.listMatchingDates_(startDate, endDate, weekday, actor.isAdmin ? 366 : maxWeeks * 7);
+    var dates = this.listMatchingDates_(startDate, endDate, weekday, actor.canAccessAdmin ? 366 : maxWeeks * 7);
     var results = [];
 
     dates.forEach(function (dateString) {
-      if (!actor.isAdmin && results.length >= maxOccurrences) {
+      if (!actor.canAccessAdmin && results.length >= maxOccurrences) {
         return;
       }
 

@@ -39,6 +39,9 @@ ROOMS_APP.Booking = {
     payload = payload || {};
     var actor = (options && options.actor) || ROOMS_APP.Auth.getUserContext();
     ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+    if (!actor.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var validation = ROOMS_APP.Policy.validateBookingRequest(payload, actor);
     if (!validation.ok) {
       this.writeAudit_('CREATE_BOOKING', payload.bookingId || '', payload.seriesId || '', payload.resourceId || '', actor.email, 'ERROR', {
@@ -84,12 +87,15 @@ ROOMS_APP.Booking = {
     payload = payload || {};
     var actor = ROOMS_APP.Auth.getUserContext();
     ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+    if (!actor.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var existing = this.findBookingById_(bookingId);
     if (!existing) {
       throw new Error('Booking not found.');
     }
     if (!ROOMS_APP.Auth.canManageBooking(existing, actor)) {
-      throw new Error('Only the creator or an admin can modify this booking.');
+      throw new Error('Only the creator or an authorized manager can modify this booking.');
     }
 
     var request = {
@@ -120,7 +126,7 @@ ROOMS_APP.Booking = {
         throw new Error('Booking not found.');
       }
       if (!ROOMS_APP.Auth.canManageBooking(lockedExisting, actor)) {
-        throw new Error('Only the creator or an admin can modify this booking.');
+        throw new Error('Only the creator or an authorized manager can modify this booking.');
       }
 
       var lockedValidation = ROOMS_APP.Policy.validateBookingRequest(request, actor);
@@ -151,6 +157,9 @@ ROOMS_APP.Booking = {
   cancelBooking: function (bookingId, notes) {
     var actor = ROOMS_APP.Auth.getUserContext();
     ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+    if (!actor.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var self = this;
     var booking = this.withBookingLock_(function () {
       var existing = self.findBookingById_(bookingId);
@@ -159,7 +168,7 @@ ROOMS_APP.Booking = {
       }
 
       if (!ROOMS_APP.Auth.canManageBooking(existing, actor)) {
-        throw new Error('Only the creator or an admin can cancel this booking.');
+        throw new Error('Only the creator or an authorized manager can cancel this booking.');
       }
 
       if (existing.Status === 'CANCELLED') {
@@ -189,6 +198,12 @@ ROOMS_APP.Booking = {
     }
 
     var normalizedChanges = this.normalizeBatchChanges_(changes);
+    if ((normalizedChanges.creates.length || normalizedChanges.updates.length || normalizedChanges.deletes.length) && !actor.canBook) {
+      throw new Error('Booking permission required.');
+    }
+    if ((normalizedChanges.timetableDeletes.length || normalizedChanges.timetableUpdates.length) && !actor.canManageReplacement) {
+      throw new Error('Replacement management permission required.');
+    }
     if (
       !normalizedChanges.creates.length &&
       !normalizedChanges.updates.length &&
@@ -212,8 +227,8 @@ ROOMS_APP.Booking = {
         var ignoredTimetableBookingIds = {};
 
         function disableTimetableBooking_(bookingId, notes) {
-          if (!actor.isAdmin) {
-            throw new Error('Le occupazioni da orario sono gestibili solo da admin.');
+          if (!actor.canManageReplacement) {
+            throw new Error('Le occupazioni da orario sono gestibili solo da utenti autorizzati.');
           }
           var occurrence = self.resolveTimetableOccurrenceByBookingId_(targetResourceId, targetDate, bookingId);
           if (!occurrence) {
@@ -277,7 +292,7 @@ ROOMS_APP.Booking = {
             throw new Error('Cannot modify bookings for a different room.');
           }
           if (!ROOMS_APP.Auth.canManageBooking(existing, actor)) {
-            throw new Error('Only the creator or an admin can cancel this booking.');
+            throw new Error('Only the creator or an authorized manager can cancel this booking.');
           }
           if (existing.Status === 'CANCELLED') {
             return;
@@ -310,7 +325,7 @@ ROOMS_APP.Booking = {
             throw new Error('Cannot modify bookings for a different room.');
           }
           if (!ROOMS_APP.Auth.canManageBooking(existing, actor)) {
-            throw new Error('Only the creator or an admin can modify this booking.');
+            throw new Error('Only the creator or an authorized manager can modify this booking.');
           }
 
           var payload = entry.payload || {};
@@ -716,7 +731,7 @@ ROOMS_APP.Booking = {
   },
 
   getAulaMagnaEditorModel: function (resourceId, dateString) {
-    var actor = ROOMS_APP.Auth.requireAdmin();
+    var actor = ROOMS_APP.Auth.requireCanManageAulaMagna();
     var requestedResourceId = ROOMS_APP.normalizeString(resourceId || this.AULA_MAGNA_RESOURCE_ID_);
     var baseModel = this.getRoomViewModel(requestedResourceId, dateString || ROOMS_APP.toIsoDate(new Date()));
     var allRows = ROOMS_APP.sortBy(
@@ -743,8 +758,9 @@ ROOMS_APP.Booking = {
     return {
       resourceId: baseModel && baseModel.resource ? baseModel.resource.ResourceId : requestedResourceId,
       displayName: baseModel && baseModel.resource ? baseModel.resource.DisplayName : 'AULA MAGNA',
-      isAdmin: Boolean(actor.isAdmin),
+      isAdmin: Boolean(actor.canAccessAdmin),
       isSuperAdmin: Boolean(actor.isSuperAdmin),
+      canManageAulaMagna: Boolean(actor.canManageAulaMagna),
       events: safeCopy_(allRows)
     };
 
@@ -760,7 +776,7 @@ ROOMS_APP.Booking = {
   },
 
   applyAulaMagnaEventChanges: function (resourceId, changes) {
-    var actor = ROOMS_APP.Auth.requireAdmin();
+    var actor = ROOMS_APP.Auth.requireCanManageAulaMagna();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var targetResourceId = ROOMS_APP.normalizeString(resourceId || this.AULA_MAGNA_RESOURCE_ID_);
     var replaceRows = changes && Array.isArray(changes.replaceRows) ? changes.replaceRows : null;

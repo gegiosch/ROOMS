@@ -194,7 +194,7 @@ ROOMS_APP.Policy = {
     if (!normalized.bookerSurname && emailIdentity.surname) {
       normalized.bookerSurname = emailIdentity.surname;
     }
-    if (!user.isAdmin) {
+    if (!user.canAccessAdmin) {
       normalized.bookerName = emailIdentity.firstName || normalized.bookerName;
       normalized.bookerSurname = emailIdentity.surname || normalized.bookerSurname;
     }
@@ -207,7 +207,11 @@ ROOMS_APP.Policy = {
       errors.push('Operazione consentita solo con account ' + ROOMS_APP.getAllowedDomain() + '.');
     }
 
-    if (!ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true) && !user.isAdmin) {
+    if (!user.canBook) {
+      errors.push('Booking permission required.');
+    }
+
+    if (!ROOMS_APP.getBooleanConfig('BOOKING_ENABLED', true) && !user.canAccessAdmin) {
       errors.push('Booking is currently disabled.');
     }
 
@@ -247,12 +251,12 @@ ROOMS_APP.Policy = {
 
     var durationMin = ROOMS_APP.minutesBetween(normalized.startTime, normalized.endTime);
     var maxDuration = ROOMS_APP.getNumberConfig('MAX_DURATION_MIN', 180);
-    if (!user.isAdmin && durationMin > maxDuration) {
+    if (!user.canAccessAdmin && durationMin > maxDuration) {
       errors.push('Booking exceeds the maximum allowed duration.');
     }
 
     var today = ROOMS_APP.toIsoDate(new Date());
-    if (!user.isAdmin && ROOMS_APP.daysBetween(today, normalized.bookingDate) > ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)) {
+    if (!user.canAccessAdmin && ROOMS_APP.daysBetween(today, normalized.bookingDate) > ROOMS_APP.getNumberConfig('MAX_DAYS_AHEAD', 30)) {
       errors.push('Booking exceeds the maximum advance window.');
     }
 

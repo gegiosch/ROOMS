@@ -123,9 +123,15 @@ ROOMS_APP.Board = {
       schoolName: ROOMS_APP.getConfigValue('SCHOOL_NAME', 'IIS Alessandrini'),
       user: {
         email: user.email,
-        isAdmin: user.isAdmin,
+        orgUnitPath: user.orgUnitPath || '',
+        isAdmin: Boolean(user.canAccessAdmin),
         role: user.role || 'USER',
         isSuperAdmin: Boolean(user.isSuperAdmin),
+        canBook: Boolean(user.canBook),
+        canManageReplacement: Boolean(user.canManageReplacement),
+        canManageAulaMagna: Boolean(user.canManageAulaMagna),
+        canUseSimulation: Boolean(user.canUseSimulation),
+        canAccessAdmin: Boolean(user.canAccessAdmin),
         simulationActive: Boolean(simulation.active),
         simulatedNowISO: simulation.iso || ''
       },

@@ -2,19 +2,28 @@ var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Auth = {
   SIMULATION_INPUT_PATTERN_: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
+  USER_CONTEXT_CACHE_TTL_: 3600,
+  USER_CONTEXT_CACHE_VERSION_KEY_: 'rooms:user-context-cache-version',
 
   getUserContext: function () {
     var email = ROOMS_APP.getCurrentUserEmail();
     var identity = ROOMS_APP.extractIdentityFromEmail(email);
-    var adminEntry = this.getAdminEntry_(email);
-    var role = adminEntry ? ROOMS_APP.normalizeString(adminEntry.Role || 'ADMIN').toUpperCase() : '';
+    var resolved = this.resolveCachedUserContext_(email);
+    var permissions = resolved && resolved.permissions ? resolved.permissions : this.buildFallbackPermissions_();
+    var role = ROOMS_APP.normalizeString(permissions.role || 'USER').toUpperCase() || 'USER';
 
     return {
       email: email,
+      orgUnitPath: ROOMS_APP.normalizeString(resolved && resolved.orgUnitPath),
       isAuthenticated: Boolean(email),
-      isAdmin: Boolean(adminEntry),
-      role: role || 'USER',
+      isAdmin: Boolean(permissions.canAccessAdmin),
+      role: role,
       isSuperAdmin: role === 'SUPERADMIN',
+      canBook: Boolean(permissions.canBook),
+      canManageReplacement: Boolean(permissions.canManageReplacement),
+      canManageAulaMagna: Boolean(permissions.canManageAulaMagna),
+      canUseSimulation: Boolean(permissions.canUseSimulation),
+      canAccessAdmin: Boolean(permissions.canAccessAdmin),
       allowedDomain: ROOMS_APP.getAllowedDomain(),
       isAllowedDomain: ROOMS_APP.isEmailInDomain(email, ROOMS_APP.getAllowedDomain()),
       firstName: identity.firstName,
@@ -24,21 +33,41 @@ ROOMS_APP.Auth = {
   },
 
   isAdmin: function (email) {
-    return Boolean(this.getAdminEntry_(email || ROOMS_APP.getCurrentUserEmail()));
+    return Boolean(this.getUserContextForEmail_(email || ROOMS_APP.getCurrentUserEmail()).canAccessAdmin);
   },
 
   isSuperAdmin: function (email) {
-    var entry = this.getAdminEntry_(email || ROOMS_APP.getCurrentUserEmail());
-    if (!entry) {
-      return false;
-    }
-    return ROOMS_APP.normalizeString(entry.Role || '').toUpperCase() === 'SUPERADMIN';
+    return Boolean(this.getUserContextForEmail_(email || ROOMS_APP.getCurrentUserEmail()).isSuperAdmin);
   },
 
   requireAdmin: function () {
     var user = this.getUserContext();
-    if (!user.isAdmin) {
+    if (!user.canAccessAdmin) {
       throw new Error('Admin access required.');
+    }
+    return user;
+  },
+
+  requireCanBook: function () {
+    var user = this.getUserContext();
+    if (!user.canBook) {
+      throw new Error('Booking permission required.');
+    }
+    return user;
+  },
+
+  requireCanManageReplacement: function () {
+    var user = this.getUserContext();
+    if (!user.canManageReplacement) {
+      throw new Error('Replacement management permission required.');
+    }
+    return user;
+  },
+
+  requireCanManageAulaMagna: function () {
+    var user = this.getUserContext();
+    if (!user.canManageAulaMagna) {
+      throw new Error('Aula Magna management permission required.');
     }
     return user;
   },
@@ -64,7 +93,13 @@ ROOMS_APP.Auth = {
     var user = actor || this.getUserContext();
     return Boolean(
       booking &&
-      (user.isAdmin || ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail(user.email))
+      (
+        user.canManageReplacement ||
+        (
+          user.canBook &&
+          ROOMS_APP.normalizeEmail(booking.BookerEmail) === ROOMS_APP.normalizeEmail(user.email)
+        )
+      )
     );
   },
 
@@ -92,7 +127,7 @@ ROOMS_APP.Auth = {
 
     var parsed = this.parseSimulationDateTime_(candidate);
     return {
-      active: Boolean(user && user.isSuperAdmin && parsed),
+      active: Boolean(user && user.canUseSimulation && parsed),
       iso: parsed ? parsed.iso : '',
       dateIso: parsed ? parsed.dateIso : '',
       time: parsed ? parsed.time : '',
@@ -157,27 +192,250 @@ ROOMS_APP.Auth = {
 
   getAdminEntry_: function (email) {
     var normalized = ROOMS_APP.normalizeEmail(email || ROOMS_APP.getCurrentUserEmail());
-    if (!normalized) {
-      return null;
-    }
-
-    return this.getAdminEntries_().filter(function (entry) {
-      return entry.Email === normalized;
-    })[0] || null;
+    return this.resolvePermissionEntry_(normalized, '');
   },
 
   getAdminEntries_: function () {
     return ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.ADMINS)
       .filter(function (row) {
-        return ROOMS_APP.normalizeEmail(row.Email) && ROOMS_APP.asBoolean(row.Enabled);
+        return ROOMS_APP.asBoolean(row.Enabled) &&
+          (ROOMS_APP.normalizeEmail(row.Email) || ROOMS_APP.Auth.normalizeOrgUnitPath_(row.OrgUnitPath));
       })
       .map(function (row) {
         return {
           Email: ROOMS_APP.normalizeEmail(row.Email),
+          OrgUnitPath: ROOMS_APP.Auth.normalizeOrgUnitPath_(row.OrgUnitPath),
           Role: ROOMS_APP.normalizeString(row.Role || 'ADMIN'),
           Enabled: 'TRUE',
+          CanBook: row.CanBook,
+          CanManageReplacement: row.CanManageReplacement,
+          CanManageAulaMagna: row.CanManageAulaMagna,
+          CanUseSimulation: row.CanUseSimulation,
+          CanAccessAdmin: row.CanAccessAdmin,
           Notes: ROOMS_APP.normalizeString(row.Notes)
         };
       });
+  },
+
+  getUserContextForEmail_: function (email) {
+    var normalized = ROOMS_APP.normalizeEmail(email);
+    if (!normalized || normalized === ROOMS_APP.getCurrentUserEmail()) {
+      return this.getUserContext();
+    }
+
+    var identity = ROOMS_APP.extractIdentityFromEmail(normalized);
+    var resolved = this.resolveCachedUserContext_(normalized);
+    var permissions = resolved && resolved.permissions ? resolved.permissions : this.buildFallbackPermissions_();
+    var role = ROOMS_APP.normalizeString(permissions.role || 'USER').toUpperCase() || 'USER';
+    return {
+      email: normalized,
+      orgUnitPath: ROOMS_APP.normalizeString(resolved && resolved.orgUnitPath),
+      isAuthenticated: Boolean(normalized),
+      isAdmin: Boolean(permissions.canAccessAdmin),
+      role: role,
+      isSuperAdmin: role === 'SUPERADMIN',
+      canBook: Boolean(permissions.canBook),
+      canManageReplacement: Boolean(permissions.canManageReplacement),
+      canManageAulaMagna: Boolean(permissions.canManageAulaMagna),
+      canUseSimulation: Boolean(permissions.canUseSimulation),
+      canAccessAdmin: Boolean(permissions.canAccessAdmin),
+      allowedDomain: ROOMS_APP.getAllowedDomain(),
+      isAllowedDomain: ROOMS_APP.isEmailInDomain(normalized, ROOMS_APP.getAllowedDomain()),
+      firstName: identity.firstName,
+      surname: identity.surname,
+      displayName: identity.displayName
+    };
+  },
+
+  resolveCachedUserContext_: function (email) {
+    var normalized = ROOMS_APP.normalizeEmail(email);
+    if (!normalized) {
+      return {
+        email: '',
+        orgUnitPath: '',
+        permissions: this.buildFallbackPermissions_()
+      };
+    }
+
+    var cached = this.getCachedUserContext_(normalized);
+    if (cached) {
+      return cached;
+    }
+
+    var orgUnitPath = this.getDirectoryOrgUnitPath_(normalized);
+    var permissions = this.resolvePermissions_(normalized, orgUnitPath);
+    var payload = {
+      email: normalized,
+      orgUnitPath: orgUnitPath,
+      permissions: permissions
+    };
+    this.putCachedUserContext_(normalized, payload);
+    return payload;
+  },
+
+  getCachedUserContext_: function (email) {
+    var cached = CacheService.getScriptCache().get(this.getUserContextCacheKey_(email));
+    var payload = cached ? ROOMS_APP.parseJson(cached, null) : null;
+    if (!payload || !payload.permissions || String(payload.version || '0') !== this.getUserContextCacheVersion_()) {
+      return null;
+    }
+    return {
+      email: ROOMS_APP.normalizeEmail(payload.email || email),
+      orgUnitPath: this.normalizeOrgUnitPath_(payload.orgUnitPath),
+      permissions: this.normalizePermissionPayload_(payload.permissions)
+    };
+  },
+
+  putCachedUserContext_: function (email, payload) {
+    CacheService.getScriptCache().put(
+      this.getUserContextCacheKey_(email),
+      JSON.stringify({
+        version: this.getUserContextCacheVersion_(),
+        email: ROOMS_APP.normalizeEmail(payload && payload.email),
+        orgUnitPath: this.normalizeOrgUnitPath_(payload && payload.orgUnitPath),
+        permissions: this.normalizePermissionPayload_(payload && payload.permissions)
+      }),
+      this.USER_CONTEXT_CACHE_TTL_
+    );
+  },
+
+  getUserContextCacheKey_: function (email) {
+    return 'rooms:user:' + ROOMS_APP.normalizeEmail(email);
+  },
+
+  getUserContextCacheVersion_: function () {
+    return String(
+      PropertiesService.getScriptProperties().getProperty(this.USER_CONTEXT_CACHE_VERSION_KEY_) || '0'
+    );
+  },
+
+  bumpUserContextCacheVersion_: function () {
+    PropertiesService.getScriptProperties().setProperty(
+      this.USER_CONTEXT_CACHE_VERSION_KEY_,
+      String(Date.now())
+    );
+  },
+
+  getDirectoryOrgUnitPath_: function (email) {
+    var normalized = ROOMS_APP.normalizeEmail(email);
+    if (!normalized) {
+      return '';
+    }
+    if (typeof AdminDirectory === 'undefined' || !AdminDirectory.Users || typeof AdminDirectory.Users.get !== 'function') {
+      return '';
+    }
+
+    try {
+      var user = AdminDirectory.Users.get(normalized);
+      return this.normalizeOrgUnitPath_(user && user.orgUnitPath);
+    } catch (error) {
+      Logger.log(
+        '[WARN] Auth.getDirectoryOrgUnitPath_ email=%s error=%s',
+        normalized,
+        String(error && error.message ? error.message : error)
+      );
+      return '';
+    }
+  },
+
+  resolvePermissions_: function (email, orgUnitPath) {
+    var entry = this.resolvePermissionEntry_(email, orgUnitPath);
+    if (!entry) {
+      return this.buildFallbackPermissions_();
+    }
+    return this.buildPermissionsFromEntry_(entry);
+  },
+
+  resolvePermissionEntry_: function (email, orgUnitPath) {
+    var normalizedEmail = ROOMS_APP.normalizeEmail(email);
+    var normalizedOrgUnitPath = this.normalizeOrgUnitPath_(orgUnitPath);
+    var entries = this.getAdminEntries_();
+    var index;
+
+    for (index = 0; index < entries.length; index += 1) {
+      if (entries[index].Email && entries[index].Email === normalizedEmail) {
+        return entries[index];
+      }
+    }
+
+    for (index = 0; index < entries.length; index += 1) {
+      if (!entries[index].OrgUnitPath || !normalizedOrgUnitPath) {
+        continue;
+      }
+      if (normalizedOrgUnitPath.indexOf(entries[index].OrgUnitPath) === 0) {
+        return entries[index];
+      }
+    }
+
+    return null;
+  },
+
+  buildPermissionsFromEntry_: function (entry) {
+    var role = ROOMS_APP.normalizeString(entry && entry.Role || 'USER').toUpperCase() || 'USER';
+    if (role === 'SUPERADMIN') {
+      return {
+        role: 'SUPERADMIN',
+        canBook: true,
+        canManageReplacement: true,
+        canManageAulaMagna: true,
+        canUseSimulation: true,
+        canAccessAdmin: true
+      };
+    }
+
+    return {
+      role: role,
+      canBook: this.readPermissionValue_(entry && entry.CanBook, false),
+      canManageReplacement: this.readPermissionValue_(entry && entry.CanManageReplacement, false),
+      canManageAulaMagna: this.readPermissionValue_(entry && entry.CanManageAulaMagna, false),
+      canUseSimulation: this.readPermissionValue_(entry && entry.CanUseSimulation, false),
+      canAccessAdmin: this.readPermissionValue_(entry && entry.CanAccessAdmin, role === 'ADMIN')
+    };
+  },
+
+  buildFallbackPermissions_: function () {
+    return {
+      role: 'USER',
+      canBook: false,
+      canManageReplacement: false,
+      canManageAulaMagna: false,
+      canUseSimulation: false,
+      canAccessAdmin: false
+    };
+  },
+
+  normalizePermissionPayload_: function (permissions) {
+    var source = permissions || {};
+    var role = ROOMS_APP.normalizeString(source.role || source.Role || 'USER').toUpperCase() || 'USER';
+    if (role === 'SUPERADMIN') {
+      return this.buildPermissionsFromEntry_({ Role: role });
+    }
+    return {
+      role: role,
+      canBook: this.readPermissionValue_(source.canBook, false),
+      canManageReplacement: this.readPermissionValue_(source.canManageReplacement, false),
+      canManageAulaMagna: this.readPermissionValue_(source.canManageAulaMagna, false),
+      canUseSimulation: this.readPermissionValue_(source.canUseSimulation, false),
+      canAccessAdmin: this.readPermissionValue_(source.canAccessAdmin, false)
+    };
+  },
+
+  readPermissionValue_: function (value, fallback) {
+    if (value === '' || value == null) {
+      return Boolean(fallback);
+    }
+    return ROOMS_APP.asBoolean(value);
+  },
+
+  normalizeOrgUnitPath_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value);
+    if (!normalized) {
+      return '';
+    }
+    if (normalized.charAt(0) !== '/') {
+      normalized = '/' + normalized;
+    }
+    normalized = normalized.replace(/\/+$/, '');
+    return normalized || '/';
   }
 };

@@ -87,6 +87,7 @@ function getRedirectTargetForHost(host) {
 function runSetup() {
   var actor = ROOMS_APP.Auth.requireAdmin();
   ROOMS_APP.Schema.ensureAll();
+  ROOMS_APP.Auth.bumpUserContextCacheVersion_();
   ROOMS_APP.invalidateConfigCache();
   return {
     ok: true,
@@ -234,6 +235,7 @@ function rebuildTimetableOccupancyFromSheets() {
 
 function getAdminBootstrap() {
   var user = ROOMS_APP.Auth.requireAdmin();
+  ROOMS_APP.Schema.ensureAdmins();
   var tableNames = [
     ROOMS_APP.SHEET_NAMES.CONFIG,
     ROOMS_APP.SHEET_NAMES.ADMINS,
@@ -280,9 +282,15 @@ function adminReplaceTable(tableName, rows) {
     throw new Error('Table is not editable: ' + tableName);
   }
 
+  if (tableName === ROOMS_APP.SHEET_NAMES.ADMINS) {
+    ROOMS_APP.Schema.ensureAdmins();
+  }
   ROOMS_APP.DB.replaceRows(tableName, ROOMS_APP.DB.getHeaders(tableName), rows || []);
   if (tableName === ROOMS_APP.SHEET_NAMES.CONFIG) {
     ROOMS_APP.invalidateConfigCache();
+  }
+  if (tableName === ROOMS_APP.SHEET_NAMES.ADMINS) {
+    ROOMS_APP.Auth.bumpUserContextCacheVersion_();
   }
   ROOMS_APP.Booking.writeAudit_('ADMIN_REPLACE_TABLE', '', '', tableName, ROOMS_APP.getCurrentUserEmail(), 'OK', {
     rowCount: (rows || []).length
@@ -405,9 +413,15 @@ function renderBoardPage_(params) {
     schoolName: '',
     user: {
       email: '',
+      orgUnitPath: '',
       isAdmin: false,
       role: 'USER',
       isSuperAdmin: false,
+      canBook: false,
+      canManageReplacement: false,
+      canManageAulaMagna: false,
+      canUseSimulation: false,
+      canAccessAdmin: false,
       simulationActive: false,
       simulatedNowISO: ''
     },
@@ -450,7 +464,9 @@ function withRuntimeContext_(requestContext, callback) {
     simulatedNow: simulation.active ? simulation.iso : '',
     actorEmail: actor.email,
     role: actor.role || 'USER',
-    isSuperAdmin: Boolean(actor.isSuperAdmin)
+    isSuperAdmin: Boolean(actor.isSuperAdmin),
+    canUseSimulation: Boolean(actor.canUseSimulation),
+    canAccessAdmin: Boolean(actor.canAccessAdmin)
   };
 
   try {

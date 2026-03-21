@@ -190,7 +190,7 @@
       <div id="aula-magna-editor-modal" class="room-panel-unsaved-confirm" style="display:none;">
         <div class="room-panel-unsaved-dialog aula-magna-editor-dialog">
           <h3>Editor Eventi Aula Magna</h3>
-          <p class="muted">Solo ADMIN/SUPERADMIN.</p>
+          <p class="muted">Solo utenti autorizzati.</p>
           <div class="grid grid-2">
             <input class="input" type="date" id="aula-editor-date">
             <input class="input" type="text" id="aula-editor-name" placeholder="Nome evento" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
@@ -402,12 +402,24 @@
           return model.branchLabels && model.branchLabels[branchKey] ? model.branchLabels[branchKey] : branchKey;
         }
 
-        function isSuperAdminUser_(model) {
-          return Boolean(model && model.user && model.user.isSuperAdmin);
+        function canUseSimulationUser_(model) {
+          return Boolean(model && model.user && model.user.canUseSimulation);
         }
 
-        function isAdminUser_(model) {
-          return Boolean(model && model.user && model.user.isAdmin);
+        function canAccessAdminUser_(model) {
+          return Boolean(model && model.user && model.user.canAccessAdmin);
+        }
+
+        function canBookUser_(model) {
+          return Boolean(model && model.user && model.user.canBook);
+        }
+
+        function canManageReplacementUser_(model) {
+          return Boolean(model && model.user && model.user.canManageReplacement);
+        }
+
+        function canManageAulaMagnaUser_(model) {
+          return Boolean(model && model.user && model.user.canManageAulaMagna);
         }
 
         function parseSimulationDateTime_(value) {
@@ -437,7 +449,7 @@
         }
 
         function getSimulationIsoFromClient_() {
-          if (!isSuperAdminUser_(state)) {
+          if (!canUseSimulationUser_(state)) {
             return '';
           }
           return ROOMS_UI.getSimulatedNow_();
@@ -672,7 +684,7 @@
           setText('board-updated-at', 'Aggiornato: ' + (state.generatedAtISO || ''));
           setText('board-page-indicator', 'Pagina ' + ((visiblePages.length ? (pageIndex % visiblePages.length) : 0) + 1) + '/' + Math.max(visiblePages.length, 1));
           if (adminButton) {
-            adminButton.style.display = !isMonitorModeEffective_(state) && state.user && state.user.isAdmin ? 'inline-flex' : 'none';
+            adminButton.style.display = !isMonitorModeEffective_(state) && canAccessAdminUser_(state) ? 'inline-flex' : 'none';
           }
           updateSimulationUi_(state);
 
@@ -731,7 +743,7 @@
         }
 
         function openSimulationModal_() {
-          if (!simulationModal || !isSuperAdminUser_(state)) {
+          if (!simulationModal || !canUseSimulationUser_(state)) {
             return;
           }
           var sourceIso = (state && state.user && state.user.simulatedNowISO) || getSimulationIsoFromClient_();
@@ -746,17 +758,17 @@
         }
 
         function updateSimulationUi_(model) {
-          var isSuperAdmin = isSuperAdminUser_(model);
+          var canUseSimulation = canUseSimulationUser_(model);
           var isMonitorMode = isMonitorModeEffective_(model);
           var simulatedNowIso = (model && model.user && model.user.simulationActive) ? String(model.user.simulatedNowISO || '') : '';
           var fallbackIso = getSimulationIsoFromClient_();
           var effectiveSimulation = parseSimulationDateTime_(simulatedNowIso) || parseSimulationDateTime_(fallbackIso);
 
           if (simulationButton) {
-            simulationButton.style.display = !isMonitorMode && isSuperAdmin ? 'inline-flex' : 'none';
+            simulationButton.style.display = !isMonitorMode && canUseSimulation ? 'inline-flex' : 'none';
           }
           if (simulationIndicator) {
-            if (!isMonitorMode && isSuperAdmin && effectiveSimulation) {
+            if (!isMonitorMode && canUseSimulation && effectiveSimulation) {
               simulationIndicator.style.display = 'inline-flex';
               simulationIndicator.textContent = 'Simulazione attiva: ' + formatSimulationIndicator_(effectiveSimulation);
             } else {
@@ -764,7 +776,7 @@
               simulationIndicator.textContent = '';
             }
           }
-          if (!isSuperAdmin) {
+          if (!canUseSimulation) {
             closeSimulationModal_();
           }
         }
@@ -900,13 +912,38 @@
           return hasPendingDraftChanges_() || hasPendingSlotSelections_();
         }
 
+        function hasBookingDraftChanges_() {
+          return Boolean(
+            Object.keys(panelState.draft.creates || {}).length ||
+            Object.keys(panelState.draft.updates || {}).length ||
+            Object.keys(panelState.draft.deletes || {}).length
+          );
+        }
+
+        function hasReplacementDraftChanges_() {
+          return Boolean(
+            Object.keys(panelState.draft.timetableDeletes || {}).length ||
+            Object.keys(panelState.draft.timetableUpdates || {}).length
+          );
+        }
+
+        function canSaveDraftChanges_() {
+          if (hasBookingDraftChanges_() && !canBookUser_(panelState.model)) {
+            return false;
+          }
+          if (hasReplacementDraftChanges_() && !canManageReplacementUser_(panelState.model)) {
+            return false;
+          }
+          return true;
+        }
+
         function updateDraftUiState_() {
           var dirty = hasPendingDraftChanges_();
           if (panelDirtyFlag) {
             panelDirtyFlag.style.display = dirty ? 'inline-flex' : 'none';
           }
           panelSaveAllButtons.forEach(function (button) {
-            button.disabled = !dirty;
+            button.disabled = !dirty || !canSaveDraftChanges_();
           });
         }
 
@@ -1115,7 +1152,7 @@
         }
 
         function ensureDraftCreateForSlot_(slot) {
-          if (!slot || !slot.startTime || !slot.endTime) {
+          if (!slot || !slot.startTime || !slot.endTime || !canBookUser_(panelState.model)) {
             return;
           }
           var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
@@ -1228,7 +1265,7 @@
         }
 
         function openOccupantEditor_(booking, mode, meta) {
-          if (!isAdminUser_(panelState.model) || !occupantEditorModal) {
+          if (!canManageReplacementUser_(panelState.model) || !occupantEditorModal) {
             return;
           }
           var occupant = getEditableOccupantPair_(booking);
@@ -1320,13 +1357,13 @@
             return wrap;
           }
 
-          var isAdmin = isAdminUser_(panelState.model);
+          var canManageReplacement = canManageReplacementUser_(panelState.model);
           var isTimetableRow = booking.SourceKind === 'TIMETABLE' || booking._draftAction === 'TIMETABLE_UPDATE';
           var isDraftCreate = booking._draftAction === 'CREATE' && String(booking.BookingId || '').indexOf('DRAFT_CREATE_') === 0;
           var slotKey = isDraftCreate ? String(booking.BookingId || '').replace('DRAFT_CREATE_', '') : '';
 
           if (isDraftCreate) {
-            if (isAdmin) {
+            if (canManageReplacement) {
               var editDraftButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
               editDraftButton.type = 'button';
               editDraftButton.addEventListener('click', function () {
@@ -1346,17 +1383,17 @@
             return wrap;
           }
 
-          if (isTimetableRow && !isAdmin) {
+          if (isTimetableRow && !canManageReplacement) {
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Sola lettura'));
             return wrap;
           }
 
-          if (!booking.CanManage && !isAdmin) {
-            wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Solo proprietario/Admin'));
+          if (!booking.CanManage && !canManageReplacement) {
+            wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Solo proprietario/Autorizzato'));
             return wrap;
           }
 
-          if (isAdmin) {
+          if (canManageReplacement) {
             var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
             editButton.type = 'button';
             editButton.addEventListener('click', function () {
@@ -1397,6 +1434,10 @@
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Occupato'));
             return wrap;
           }
+          if (!canBookUser_(panelState.model)) {
+            wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Non autorizzato'));
+            return wrap;
+          }
           var key = normalizeSlotKey_(slot.startTime, slot.endTime);
           var checkbox = document.createElement('input');
           checkbox.type = 'checkbox';
@@ -1434,7 +1475,7 @@
 
           sectionNode.style.display = 'block';
           if (panelEventsManage) {
-            panelEventsManage.style.display = isAdminUser_(model) ? 'inline-flex' : 'none';
+            panelEventsManage.style.display = canManageAulaMagnaUser_(model) ? 'inline-flex' : 'none';
           }
           var events = safeArray(model.upcomingEvents);
           renderTable(
@@ -1696,7 +1737,7 @@
           var toDate = (panelIntervalTo && panelIntervalTo.value) || selectedDate;
           var intervalDates = buildIntervalDates_(fromDate, toDate);
           var identity = getUserIdentity_(model);
-          var isAdmin = isAdminUser_(model);
+          var canManageReplacement = canManageReplacementUser_(model);
           var draftCreates = panelState.draft.creates || {};
 
           var creates = [];
@@ -1716,8 +1757,8 @@
                 endTime: slot.endTime,
                 title: slot.title || '',
                 notes: slot.notes || '',
-                bookerName: isAdmin ? (slot.bookerName || identity.firstName) : identity.firstName,
-                bookerSurname: isAdmin ? (slot.bookerSurname || identity.surname) : identity.surname
+                bookerName: canManageReplacement ? (slot.bookerName || identity.firstName) : identity.firstName,
+                bookerSurname: canManageReplacement ? (slot.bookerSurname || identity.surname) : identity.surname
               });
             });
           });
@@ -1756,6 +1797,10 @@
           }
           if (!hasPendingDraftChanges_()) {
             return Promise.resolve();
+          }
+          if (!canSaveDraftChanges_()) {
+            ROOMS_UI.setNotice(panelNotice, 'Permessi insufficienti per salvare queste modifiche.', 'error');
+            return Promise.reject(new Error('Insufficient permissions.'));
           }
           var payload;
           try {
@@ -1854,7 +1899,7 @@
         }
 
         function openAulaEditorModal_() {
-          if (!panelState.model || !panelState.model.isAulaMagna || !isAdminUser_(panelState.model)) {
+          if (!panelState.model || !panelState.model.isAulaMagna || !canManageAulaMagnaUser_(panelState.model)) {
             return;
           }
           showRoomPanelLoading('Caricamento eventi Aula Magna...');
@@ -1960,7 +2005,7 @@
         }
 
         function applySimulationDateTime_() {
-          if (!isSuperAdminUser_(state)) {
+          if (!canUseSimulationUser_(state)) {
             return;
           }
           var dateValue = simulationDateInput ? simulationDateInput.value : '';

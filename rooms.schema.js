@@ -1,6 +1,19 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Schema = {
+  ADMIN_HEADERS_: [
+    'Email',
+    'OrgUnitPath',
+    'Role',
+    'Enabled',
+    'CanBook',
+    'CanManageReplacement',
+    'CanManageAulaMagna',
+    'CanUseSimulation',
+    'CanAccessAdmin',
+    'Notes'
+  ],
+
   PLAIN_TEXT_SHEETS_: (function () {
     var sheets = {};
     sheets[ROOMS_APP.SHEET_NAMES.CONFIG] = true;
@@ -44,9 +57,8 @@ ROOMS_APP.Schema = {
   },
 
   ensureAdmins: function () {
-    var headers = ['Email', 'Role', 'Enabled', 'Notes'];
-    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.ADMINS, headers);
-    this.seedAdminsFromLegacyConfig_(headers);
+    this.ensureOrderedSheetStructure_(ROOMS_APP.SHEET_NAMES.ADMINS, this.ADMIN_HEADERS_);
+    this.seedAdminsFromLegacyConfig_(this.ADMIN_HEADERS_);
   },
 
   ensureResources: function () {
@@ -239,6 +251,54 @@ ROOMS_APP.Schema = {
       .setBackground('#dbeafe')
       .setWrap(true);
     sheet.autoResizeColumns(1, headers.length);
+    ROOMS_APP.DB.invalidateSheetCache_(sheetName);
+  },
+
+  ensureOrderedSheetStructure_: function (sheetName, headers) {
+    var sheet = ROOMS_APP.DB.getOrCreateSheet(sheetName);
+    var hasHeaderRow = sheet.getLastRow() >= 1;
+    var existingHeaders = hasHeaderRow && sheet.getLastColumn() > 0
+      ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+      : [];
+    var currentHeaders = existingHeaders.slice();
+    var changed = false;
+    var index;
+
+    if (!currentHeaders.length) {
+      if (sheet.getMaxColumns() < headers.length) {
+        sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+      }
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      currentHeaders = headers.slice();
+      changed = true;
+    } else {
+      for (index = 0; index < headers.length; index += 1) {
+        if (currentHeaders[index] === headers[index]) {
+          continue;
+        }
+        if (currentHeaders.indexOf(headers[index]) >= 0) {
+          continue;
+        }
+
+        sheet.insertColumnBefore(index + 1);
+        sheet.getRange(1, index + 1).setValue(headers[index]);
+        currentHeaders.splice(index, 0, headers[index]);
+        changed = true;
+      }
+    }
+
+    this.setPlainTextSheet_(sheet, sheetName);
+    sheet.setFrozenRows(1);
+    if (currentHeaders.length) {
+      sheet.getRange(1, 1, 1, currentHeaders.length)
+        .setFontWeight('bold')
+        .setBackground('#dbeafe')
+        .setWrap(true);
+      sheet.autoResizeColumns(1, currentHeaders.length);
+    }
+    if (changed) {
+      ROOMS_APP.DB.invalidateSheetCache_(sheetName);
+    }
   },
 
   seedMissingRows_: function (sheetName, keyField, rows) {
