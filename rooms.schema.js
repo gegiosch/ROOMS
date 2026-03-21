@@ -28,8 +28,15 @@ ROOMS_APP.Schema = {
     SentBy: 150,
     ReportType: 120,
     TeacherEmail: 180,
+    TeacherName: 180,
     OriginalTeacherEmail: 180,
+    OriginalTeacherName: 190,
     ReplacementTeacherEmail: 180,
+    ReplacementTeacherSurname: 190,
+    ReplacementTeacherName: 180,
+    ReplacementTeacherDisplayName: 220,
+    StartDate: 120,
+    EndDate: 120,
     ReplyTo: 180
   },
 
@@ -425,7 +432,10 @@ ROOMS_APP.Schema = {
   },
 
   applyMinimumColumnWidth_: function (sheet, columnIndex, headerLabel) {
-    var minimumWidth = this.HEADER_MIN_WIDTHS_[ROOMS_APP.normalizeString(headerLabel)] || 0;
+    var normalizedHeader = ROOMS_APP.normalizeString(headerLabel);
+    var explicitMinimum = this.HEADER_MIN_WIDTHS_[normalizedHeader] || 0;
+    var computedMinimum = this.computeHeaderDrivenMinWidth_(normalizedHeader);
+    var minimumWidth = Math.max(explicitMinimum, computedMinimum);
     var currentWidth;
     if (!minimumWidth) {
       return;
@@ -434,6 +444,18 @@ ROOMS_APP.Schema = {
     if (currentWidth < minimumWidth) {
       sheet.setColumnWidth(columnIndex, minimumWidth);
     }
+  },
+
+  computeHeaderDrivenMinWidth_: function (headerLabel) {
+    var normalized = ROOMS_APP.normalizeString(headerLabel);
+    var computed;
+    if (!normalized) {
+      return 0;
+    }
+    computed = (normalized.length * 7) + 34;
+    computed = Math.max(computed, 110);
+    computed = Math.min(computed, 240);
+    return computed;
   },
 
   seedMissingRows_: function (sheetName, keyField, rows) {
