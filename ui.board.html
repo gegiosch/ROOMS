@@ -2036,7 +2036,8 @@
                 actions
               ];
             }),
-            isReplacementDateValid_() ? 'Nessun docente disponibile per il giorno selezionato.' : 'Data non valida. Correggere la data per proseguire.'
+            isReplacementDateValid_() ? 'Nessun docente disponibile per il giorno selezionato.' : 'Data non valida. Correggere la data per proseguire.',
+            'replacement-teachers-layout'
           );
         }
 
@@ -3193,7 +3194,7 @@
           renderRoomPanel(panelState.model);
         }
 
-        function renderTable(mountId, headers, rows, emptyText) {
+        function renderTable(mountId, headers, rows, emptyText, tableClassName) {
           var mount = document.getElementById(mountId);
           if (!mount) {
             return;
@@ -3205,6 +3206,9 @@
           }
           var wrap = ROOMS_UI.el('div', 'table-wrap');
           var table = document.createElement('table');
+          if (tableClassName) {
+            table.className = tableClassName;
+          }
           var thead = document.createElement('thead');
           var headerRow = document.createElement('tr');
           headers.forEach(function (header) {
