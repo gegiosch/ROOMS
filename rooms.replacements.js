@@ -87,7 +87,7 @@ ROOMS_APP.Replacements = {
 
     var context = this.buildDayContext_(dateState.selectedDate);
     var normalized = this.normalizeDraft_(dateState.selectedDate, draft, context);
-    return this.buildReportPayload_(normalized, context.recipients);
+    return this.buildReportPayload_(normalized, context.recipients, this.validateDraft_(normalized));
   },
 
   saveDay: function (dateString, draft) {
@@ -101,6 +101,10 @@ ROOMS_APP.Replacements = {
     var targetDate = dateState.selectedDate;
     var context = this.buildDayContext_(targetDate);
     var normalized = this.normalizeDraft_(targetDate, draft, context);
+    var validationErrors = this.validateDraft_(normalized);
+    if (validationErrors.length) {
+      throw new Error(validationErrors.join(' '));
+    }
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var updatedBy = actor.email;
 
@@ -173,7 +177,11 @@ ROOMS_APP.Replacements = {
     }
 
     var normalized = this.normalizeDraft_(targetDate, context.savedDraft, context);
-    var payload = this.buildReportPayload_(normalized, recipients);
+    var validationErrors = this.validateDraft_(normalized);
+    if (validationErrors.length) {
+      throw new Error(validationErrors.join(' '));
+    }
+    var payload = this.buildReportPayload_(normalized, recipients, validationErrors);
     var recipientList = []
       .concat(payload.recipients.to)
       .concat(payload.recipients.cc)
@@ -1058,9 +1066,29 @@ ROOMS_APP.Replacements = {
     return byPeriod;
   },
 
-  buildReportPayload_: function (normalized, recipients) {
+  buildReportPayload_: function (normalized, recipients, validationErrors) {
     var summary = this.buildSummaryFromAssignments_(normalized.assignments, normalized.classes, normalized.teachers);
     var subject = 'Sostituzioni docenti ' + normalized.date;
+    var reportModel = this.buildReportViewModel_(normalized, summary, validationErrors || []);
+    var textBody = this.buildReportTextBody_(reportModel);
+    var htmlBody = this.renderReportTemplate_(reportModel);
+
+    return {
+      date: normalized.date,
+      subject: subject,
+      recipients: recipients,
+      summary: summary,
+      validationErrors: reportModel.validationErrors,
+      textBody: textBody,
+      htmlBody: htmlBody,
+      reportModel: reportModel,
+      lines: reportModel.mainRows.map(function (entry) {
+        return entry.absentTeacher + ' -> ' + entry.designatedTeacher + ' (' + entry.periodClass + ')';
+      })
+    };
+  },
+
+  buildReportViewModel_: function (normalized, summary, validationErrors) {
     var classOutList = normalized.classes.filter(function (entry) {
       return entry.isOut;
     }).map(function (entry) {
@@ -1074,63 +1102,129 @@ ROOMS_APP.Replacements = {
     var accompanists = normalized.teachers.filter(function (entry) {
       return entry.accompanist;
     }).map(function (entry) {
-      return entry.teacherName + (entry.accompaniedClasses.length ? ' [' + entry.accompaniedClasses.join(', ') + ']' : '');
+      return {
+        teacherName: entry.teacherName,
+        classes: entry.accompaniedClasses.slice()
+      };
     });
-    var activeLongLines = (normalized.activeLongAssignments || []).map(function (entry) {
-      return entry.originalTeacherName + ' -> ' + entry.replacementTeacherDisplayName + ' (' + entry.startDate + ' / ' + entry.endDate + ')';
+    var activeLongAssignments = (normalized.activeLongAssignments || []).map(function (entry) {
+      return {
+        originalTeacherName: entry.originalTeacherName,
+        replacementTeacherDisplayName: entry.replacementTeacherDisplayName,
+        dateRange: entry.startDate + ' - ' + entry.endDate
+      };
     });
-    var assignmentLines = normalized.assignments.map(function (entry) {
-      var prefix = entry.period + 'a ora - ' + entry.classCode + ' - ' + entry.originalTeacherName + ': ';
+    var mainRows = normalized.assignments.map(function (entry) {
+      var designatedTeacher = 'DA SOSTITUIRE';
+      var typeLabel = 'Da assegnare';
       if (entry.replacementStatus === 'IN_USCITA') {
-        return prefix + 'IN USCITA';
+        designatedTeacher = 'IN USCITA';
+        typeLabel = 'Classe in uscita';
+      } else if (entry.replacementStatus === 'ASSIGNED') {
+        designatedTeacher = entry.replacementTeacherName;
+        typeLabel = entry.replacementSource || 'ASSIGNED';
       }
-      if (entry.replacementStatus === 'ASSIGNED') {
-        return prefix + entry.replacementTeacherName + ' (' + entry.replacementSource + ')';
-      }
-      return prefix + 'DA SOSTITUIRE';
+      return {
+        absentTeacher: entry.originalTeacherName,
+        designatedTeacher: designatedTeacher,
+        typeLabel: typeLabel,
+        periodClass: entry.period + 'a ora - ' + entry.classCode,
+        notes: ROOMS_APP.normalizeString(entry.notes),
+        status: entry.replacementStatus
+      };
     });
-
-    var textBody = [
-      'Gestione sostituzioni - ' + normalized.date,
-      '',
-      'Classi in uscita: ' + (classOutList.length ? classOutList.join(', ') : 'Nessuna'),
-      'Docenti assenti: ' + (absentTeachers.length ? absentTeachers.join(', ') : 'Nessuno'),
-      'Docenti accompagnatori: ' + (accompanists.length ? accompanists.join(', ') : 'Nessuno'),
-      'Supplenze lunghe attive: ' + (activeLongLines.length ? activeLongLines.join('; ') : 'Nessuna'),
-      '',
-      'Dettaglio sostituzioni:',
-      assignmentLines.length ? assignmentLines.join('\n') : 'Nessuna sostituzione richiesta.',
-      '',
-      'Riepilogo:',
-      'Assegnate: ' + summary.assignedCount,
-      'Da assegnare: ' + summary.toAssignCount,
-      'In uscita: ' + summary.inUscitaCount
-    ].join('\n');
-
-    var htmlBody = [
-      '<div style="font-family:Arial,sans-serif;">',
-      '<h2>Gestione sostituzioni - ' + normalized.date + '</h2>',
-      '<p><strong>Classi in uscita:</strong> ' + this.escapeHtml_(classOutList.length ? classOutList.join(', ') : 'Nessuna') + '</p>',
-      '<p><strong>Docenti assenti:</strong> ' + this.escapeHtml_(absentTeachers.length ? absentTeachers.join(', ') : 'Nessuno') + '</p>',
-      '<p><strong>Docenti accompagnatori:</strong> ' + this.escapeHtml_(accompanists.length ? accompanists.join(', ') : 'Nessuno') + '</p>',
-      '<p><strong>Supplenze lunghe attive:</strong> ' + this.escapeHtml_(activeLongLines.length ? activeLongLines.join('; ') : 'Nessuna') + '</p>',
-      '<h3>Dettaglio sostituzioni</h3>',
-      '<ul>' + assignmentLines.map(function (line) {
-        return '<li>' + ROOMS_APP.Replacements.escapeHtml_(line) + '</li>';
-      }).join('') + '</ul>',
-      '<p><strong>Assegnate:</strong> ' + summary.assignedCount + ' | <strong>Da assegnare:</strong> ' + summary.toAssignCount + ' | <strong>In uscita:</strong> ' + summary.inUscitaCount + '</p>',
-      '</div>'
-    ].join('');
 
     return {
+      title: 'SOSTITUZIONI DOCENTI',
       date: normalized.date,
-      subject: subject,
-      recipients: recipients,
+      dateLabel: normalized.date,
+      validationErrors: (validationErrors || []).slice(),
       summary: summary,
-      textBody: textBody,
-      htmlBody: htmlBody,
-      lines: assignmentLines
+      mainRows: mainRows,
+      toAssignRows: mainRows.filter(function (entry) {
+        return entry.status === 'TO_ASSIGN';
+      }),
+      classOutList: classOutList,
+      absentTeachers: absentTeachers,
+      accompanists: accompanists,
+      activeLongAssignments: activeLongAssignments
     };
+  },
+
+  buildReportTextBody_: function (reportModel) {
+    var lines = [
+      reportModel.title + ' - ' + reportModel.dateLabel,
+      ''
+    ];
+    if (reportModel.validationErrors.length) {
+      lines.push('VALIDAZIONI:');
+      reportModel.validationErrors.forEach(function (entry) {
+        lines.push('- ' + entry);
+      });
+      lines.push('');
+    }
+    lines.push('SOSTITUZIONI:');
+    if (!reportModel.mainRows.length) {
+      lines.push('Nessuna sostituzione richiesta.');
+    } else {
+      reportModel.mainRows.forEach(function (entry) {
+        lines.push('- ' + entry.absentTeacher + ' -> ' + entry.designatedTeacher + ' | ' + entry.typeLabel + ' | ' + entry.periodClass + (entry.notes ? ' | ' + entry.notes : ''));
+      });
+    }
+    lines.push('');
+    lines.push('ASSENTI: ' + (reportModel.absentTeachers.length ? reportModel.absentTeachers.join(', ') : 'Nessuno'));
+    lines.push('DOCENTI ACCOMPAGNATORI: ' + (reportModel.accompanists.length ? reportModel.accompanists.map(function (entry) {
+      return entry.teacherName + ' [' + (entry.classes.length ? entry.classes.join(', ') : '-') + ']';
+    }).join('; ') : 'Nessuno'));
+    lines.push('CLASSI IN USCITA: ' + (reportModel.classOutList.length ? reportModel.classOutList.join(', ') : 'Nessuna'));
+    if (reportModel.activeLongAssignments.length) {
+      lines.push('SUPPLENZE LUNGHE ATTIVE: ' + reportModel.activeLongAssignments.map(function (entry) {
+        return entry.originalTeacherName + ' -> ' + entry.replacementTeacherDisplayName + ' (' + entry.dateRange + ')';
+      }).join('; '));
+    }
+    return lines.join('\n');
+  },
+
+  renderReportTemplate_: function (reportModel) {
+    var template = HtmlService.createTemplateFromFile('ui.report.replacements');
+    template.report = reportModel;
+    return template.evaluate().getContent();
+  },
+
+  validateDraft_: function (normalized) {
+    var errors = [];
+    var accompanimentByClass = {};
+
+    (normalized && normalized.teachers || []).forEach(function (teacher) {
+      if (!teacher || !teacher.accompanist) {
+        return;
+      }
+      (teacher.accompaniedClasses || []).forEach(function (classCode) {
+        var normalizedClassCode = ROOMS_APP.normalizeString(classCode).toUpperCase();
+        if (!normalizedClassCode) {
+          return;
+        }
+        accompanimentByClass[normalizedClassCode] = accompanimentByClass[normalizedClassCode] || [];
+        accompanimentByClass[normalizedClassCode].push(
+          ROOMS_APP.normalizeString(teacher.teacherName) || ROOMS_APP.normalizeString(teacher.teacherEmail)
+        );
+      });
+    });
+
+    (normalized && normalized.classes || []).forEach(function (entry) {
+      if (!entry || !entry.isOut) {
+        return;
+      }
+      var classCode = ROOMS_APP.normalizeString(entry.classCode).toUpperCase();
+      if (!classCode) {
+        return;
+      }
+      if (!accompanimentByClass[classCode] || !accompanimentByClass[classCode].length) {
+        errors.push('La classe ' + classCode + ' è in uscita ma non ha alcun docente accompagnatore associato.');
+      }
+    });
+
+    return errors;
   },
 
   buildSummaryFromAssignments_: function (assignments, classes, teachers) {

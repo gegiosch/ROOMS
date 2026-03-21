@@ -686,6 +686,15 @@ body.board-monitor #board-root {
   gap: 14px;
 }
 
+.replacement-dialog.is-loading {
+  cursor: wait;
+}
+
+.replacement-dialog.is-loading > :not(.replacement-loading) {
+  pointer-events: none;
+  user-select: none;
+}
+
 .replacement-loading {
   position: absolute;
   inset: 0;
@@ -696,6 +705,8 @@ body.board-monitor #board-root {
   flex-direction: column;
   gap: 10px;
   background: rgba(2, 6, 23, 0.78);
+  cursor: wait;
+  pointer-events: all;
 }
 
 .replacement-header {
@@ -816,6 +827,10 @@ body.board-monitor #board-root {
   font-size: 12px;
 }
 
+.replacement-accompanied-list.hidden {
+  min-height: 20px;
+}
+
 .replacement-detail-actions {
   align-items: center;
 }
@@ -868,6 +883,13 @@ body.board-monitor #board-root {
   background: rgba(15, 23, 42, 0.72);
   font-size: 13px;
   line-height: 1.35;
+}
+
+.replacement-preview-html {
+  border-radius: 16px;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .room-panel-overlay {
