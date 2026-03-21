@@ -18,6 +18,9 @@
             <span class="legend-pill"><span class="dot occupied"></span> Occupata</span>
             <span class="legend-pill"><span class="dot next"></span> Prossima prenotazione</span>
           </div>
+          <div class="chip-row">
+            <button id="board-replacements-button" class="button secondary" type="button" style="display:none;">Gestisci sostituzioni</button>
+          </div>
           <span class="status-pill simulation-indicator" id="board-simulation-indicator" style="display:none;"></span>
           <span class="status-pill" id="board-page-indicator">Pagina 1/1</span>
           <span class="status-pill" id="board-updated-at">Aggiornamento in corso...</span>
@@ -46,6 +49,105 @@
           <button id="simulation-apply" class="button" type="button">Applica</button>
           <button id="simulation-reset" class="button secondary" type="button">Reset</button>
           <button id="simulation-cancel" class="button secondary" type="button">Chiudi</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="replacement-modal" class="replacement-modal" style="display:none;">
+      <div class="replacement-dialog panel" role="dialog" aria-modal="true" aria-label="Gestione sostituzioni">
+        <div id="replacement-loading" class="replacement-loading" style="display:none;" aria-live="polite" aria-busy="true">
+          <div class="room-panel-spinner"></div>
+          <div class="room-panel-loading-text" id="replacement-loading-text">Caricamento sostituzioni...</div>
+        </div>
+
+        <div class="replacement-header">
+          <div>
+            <div class="eyebrow">Workflow giornaliero</div>
+            <h2>Gestione sostituzioni</h2>
+            <p class="subtitle">Data selezionata: <span id="replacement-selected-date">-</span></p>
+          </div>
+          <div class="replacement-header-actions">
+            <span id="replacement-status-pill" class="status-pill">Bozza non salvata</span>
+            <span id="replacement-report-pill" class="status-pill" style="display:none;"></span>
+            <div class="toolbar replacement-toolbar replacement-toolbar-top">
+              <button class="button secondary replacement-action-button" data-replacement-action="preview" type="button">Anteprima report</button>
+              <button class="button secondary replacement-action-button" data-replacement-action="send" type="button" disabled>Invia report</button>
+              <button class="button replacement-action-button" data-replacement-action="save" type="button" disabled>Salva</button>
+              <button id="replacement-close-button" class="button secondary" type="button">Chiudi</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="notice replacement-instructions">
+          1. Seleziona prima le classi in uscita. 2. Imposta docenti assenti o accompagnatori. 3. Apri Gestisci per assegnare le sostituzioni.
+        </div>
+        <div id="replacement-notice" class="notice" style="display:none;"></div>
+        <div id="replacement-date-state" class="notice" style="display:none;"></div>
+
+        <div class="replacement-layout">
+          <div class="replacement-column replacement-column-left">
+            <section class="panel form-card replacement-section">
+              <h3>Data</h3>
+              <div class="grid grid-2 replacement-date-grid">
+                <div>
+                  <label for="replacement-date-input">Giorno</label>
+                  <input id="replacement-date-input" class="input" type="date">
+                </div>
+                <div class="replacement-quick-summary" id="replacement-quick-summary"></div>
+              </div>
+            </section>
+
+            <section class="panel table-card replacement-section">
+              <h3>Classi in uscita</h3>
+              <div id="replacement-classes-table"></div>
+            </section>
+
+            <section class="panel table-card replacement-section">
+              <h3>Docenti</h3>
+              <div id="replacement-teachers-table"></div>
+            </section>
+          </div>
+
+          <div class="replacement-column replacement-column-right">
+            <section class="panel table-card replacement-section replacement-detail-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3 id="replacement-detail-title">Dettaglio docente</h3>
+                  <p id="replacement-detail-meta" class="subtitle">Seleziona un docente assente per gestire le sostituzioni.</p>
+                </div>
+                <span id="replacement-detail-loading" class="status-pill" style="display:none;">Aggiornamento...</span>
+              </div>
+              <div id="replacement-detail-table"></div>
+            </section>
+
+            <section class="panel table-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3>Anteprima report</h3>
+                  <p class="subtitle">Generata solo su richiesta. L'invio usa sempre i dati salvati.</p>
+                </div>
+              </div>
+              <div id="replacement-report-preview"></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="toolbar replacement-toolbar replacement-toolbar-bottom">
+          <button class="button secondary replacement-action-button" data-replacement-action="preview" type="button">Anteprima report</button>
+          <button class="button secondary replacement-action-button" data-replacement-action="send" type="button" disabled>Invia report</button>
+          <button class="button replacement-action-button" data-replacement-action="save" type="button" disabled>Salva</button>
+          <button class="button secondary" id="replacement-close-button-bottom" type="button">Chiudi</button>
+        </div>
+
+        <div id="replacement-confirm-modal" class="room-panel-unsaved-confirm" style="display:none;">
+          <div class="room-panel-unsaved-dialog">
+            <h3 id="replacement-confirm-title">Modifiche non salvate</h3>
+            <p id="replacement-confirm-message">Sono presenti modifiche non salvate. Chiudere senza salvare?</p>
+            <div class="toolbar">
+              <button id="replacement-confirm-yes" class="button warn" type="button">Conferma</button>
+              <button id="replacement-confirm-no" class="button secondary" type="button">Annulla</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -224,6 +326,7 @@
         var boardShell = document.getElementById('board-shell');
         var fullscreenButton = document.getElementById('board-fullscreen-toggle');
         var adminButton = document.getElementById('board-admin-button');
+        var replacementsButton = document.getElementById('board-replacements-button');
         var simulationButton = document.getElementById('board-simulation-toggle');
         var simulationIndicator = document.getElementById('board-simulation-indicator');
         var simulationModal = document.getElementById('board-simulation-modal');
@@ -232,6 +335,31 @@
         var simulationApplyButton = document.getElementById('simulation-apply');
         var simulationResetButton = document.getElementById('simulation-reset');
         var simulationCancelButton = document.getElementById('simulation-cancel');
+        var replacementModal = document.getElementById('replacement-modal');
+        var replacementLoading = document.getElementById('replacement-loading');
+        var replacementLoadingText = document.getElementById('replacement-loading-text');
+        var replacementNotice = document.getElementById('replacement-notice');
+        var replacementDateState = document.getElementById('replacement-date-state');
+        var replacementSelectedDate = document.getElementById('replacement-selected-date');
+        var replacementDateInput = document.getElementById('replacement-date-input');
+        var replacementQuickSummary = document.getElementById('replacement-quick-summary');
+        var replacementClassesTable = document.getElementById('replacement-classes-table');
+        var replacementTeachersTable = document.getElementById('replacement-teachers-table');
+        var replacementDetailTitle = document.getElementById('replacement-detail-title');
+        var replacementDetailMeta = document.getElementById('replacement-detail-meta');
+        var replacementDetailTable = document.getElementById('replacement-detail-table');
+        var replacementDetailLoading = document.getElementById('replacement-detail-loading');
+        var replacementPreviewMount = document.getElementById('replacement-report-preview');
+        var replacementStatusPill = document.getElementById('replacement-status-pill');
+        var replacementReportPill = document.getElementById('replacement-report-pill');
+        var replacementCloseButton = document.getElementById('replacement-close-button');
+        var replacementCloseButtonBottom = document.getElementById('replacement-close-button-bottom');
+        var replacementActionButtons = Array.prototype.slice.call(document.querySelectorAll('.replacement-action-button'));
+        var replacementConfirmModal = document.getElementById('replacement-confirm-modal');
+        var replacementConfirmTitle = document.getElementById('replacement-confirm-title');
+        var replacementConfirmMessage = document.getElementById('replacement-confirm-message');
+        var replacementConfirmYes = document.getElementById('replacement-confirm-yes');
+        var replacementConfirmNo = document.getElementById('replacement-confirm-no');
 
         var panelOverlay = document.getElementById('room-panel-overlay');
         var panelCloseButtons = Array.prototype.slice.call(document.querySelectorAll('.room-panel-close'));
@@ -302,6 +430,20 @@
             onConfirm: null,
             onCancel: null
           }
+        };
+        var replacementState = {
+          isOpen: false,
+          model: null,
+          draft: null,
+          date: '',
+          dirty: false,
+          loadingRequestSeq: 0,
+          detailRequestSeq: 0,
+          selectedTeacherEmail: '',
+          teacherDetail: null,
+          preview: null,
+          pendingManualAssignmentKeys: {},
+          confirmAction: null
         };
         var pendingDiscardAction = null;
         var pendingDiscardRollbackDate = '';
@@ -677,6 +819,9 @@
           if (shouldBlockRoomPanel_() && isPanelOpen()) {
             closeRoomPanelImmediate_();
           }
+          if ((!canOpenReplacementModal_() || isMonitorModeEffective_(state)) && replacementState.isOpen) {
+            closeReplacementModalImmediate_();
+          }
           applyFullscreenCompactMode(state);
           visiblePages = resolveVisiblePages_(state);
           setText('board-app-name', state.appName || 'ROOMS');
@@ -685,6 +830,9 @@
           setText('board-page-indicator', 'Pagina ' + ((visiblePages.length ? (pageIndex % visiblePages.length) : 0) + 1) + '/' + Math.max(visiblePages.length, 1));
           if (adminButton) {
             adminButton.style.display = !isMonitorModeEffective_(state) && canAccessAdminUser_(state) ? 'inline-flex' : 'none';
+          }
+          if (replacementsButton) {
+            replacementsButton.style.display = !isMonitorModeEffective_(state) && canManageReplacementUser_(state) ? 'inline-flex' : 'none';
           }
           updateSimulationUi_(state);
 
@@ -779,6 +927,929 @@
           if (!canUseSimulation) {
             closeSimulationModal_();
           }
+        }
+
+        function cloneReplacementData_(value) {
+          if (value == null) {
+            return null;
+          }
+          try {
+            return JSON.parse(JSON.stringify(value));
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function formatReplacementDate_(isoDate) {
+          var dateObj = toDateObject_(isoDate);
+          if (!dateObj) {
+            return String(isoDate || '-');
+          }
+          return ('0' + dateObj.getDate()).slice(-2) + '/' + ('0' + (dateObj.getMonth() + 1)).slice(-2) + '/' + dateObj.getFullYear();
+        }
+
+        function formatReplacementDateTime_(isoValue) {
+          var normalized = String(isoValue || '').trim();
+          if (!normalized) {
+            return '';
+          }
+          var parsed = parseSimulationDateTime_(normalized);
+          if (parsed) {
+            return formatReplacementDate_(toIsoDate_(parsed)) + ' ' + ('0' + parsed.getHours()).slice(-2) + ':' + ('0' + parsed.getMinutes()).slice(-2);
+          }
+          return normalized.replace('T', ' ').slice(0, 16);
+        }
+
+        function normalizeReplacementTeacherEmail_(value) {
+          return normalizeEmail_(value);
+        }
+
+        function buildReplacementAssignmentKey_(period, classCode, teacherEmail) {
+          return [
+            String(period || ''),
+            String(classCode || '').trim().toUpperCase(),
+            normalizeReplacementTeacherEmail_(teacherEmail)
+          ].join('|');
+        }
+
+        function buildReplacementDraftFromModel_(model) {
+          var effectiveModel = model || {};
+          return {
+            classOut: safeArray(effectiveModel.classes).map(function (entry) {
+              return {
+                classCode: entry.classCode || '',
+                isOut: Boolean(entry.isOut),
+                notes: entry.notes || ''
+              };
+            }),
+            teachers: safeArray(effectiveModel.teachers).map(function (entry) {
+              return {
+                teacherEmail: entry.teacherEmail || '',
+                teacherName: entry.teacherName || '',
+                absent: Boolean(entry.absent),
+                accompanist: Boolean(entry.accompanist),
+                accompaniedClasses: safeArray(entry.accompaniedClasses),
+                notes: entry.notes || ''
+              };
+            }),
+            assignments: safeArray(effectiveModel.assignments).map(function (entry) {
+              return {
+                period: entry.period || '',
+                classCode: entry.classCode || '',
+                originalTeacherEmail: entry.originalTeacherEmail || '',
+                originalTeacherName: entry.originalTeacherName || '',
+                originalStatus: entry.originalStatus || '',
+                replacementTeacherEmail: entry.replacementTeacherEmail || '',
+                replacementTeacherName: entry.replacementTeacherName || '',
+                replacementSource: entry.replacementSource || '',
+                replacementStatus: entry.replacementStatus || '',
+                notes: entry.notes || ''
+              };
+            })
+          };
+        }
+
+        function getReplacementSavedAt_() {
+          return replacementState.model && replacementState.model.savedAtISO ? String(replacementState.model.savedAtISO) : '';
+        }
+
+        function getReplacementReportStatus_() {
+          return replacementState.model && replacementState.model.report ? replacementState.model.report : {};
+        }
+
+        function canOpenReplacementModal_() {
+          return !isMonitorModeEffective_(state) && canManageReplacementUser_(state);
+        }
+
+        function isReplacementDateValid_() {
+          return Boolean(replacementState.model && replacementState.model.dateState && replacementState.model.dateState.isValid);
+        }
+
+        function canSendReplacementReport_() {
+          return Boolean(
+            replacementState.isOpen &&
+            isReplacementDateValid_() &&
+            !replacementState.dirty &&
+            getReplacementSavedAt_() &&
+            replacementState.model &&
+            replacementState.model.recipientsConfigured
+          );
+        }
+
+        function setReplacementNotice_(message, kind) {
+          if (!replacementNotice) {
+            return;
+          }
+          if (!message) {
+            replacementNotice.style.display = 'none';
+            replacementNotice.textContent = '';
+            replacementNotice.className = 'notice';
+            return;
+          }
+          replacementNotice.style.display = 'block';
+          ROOMS_UI.setNotice(replacementNotice, message, kind || '');
+        }
+
+        function setReplacementDateStateMessage_(message, kind) {
+          if (!replacementDateState) {
+            return;
+          }
+          if (!message) {
+            replacementDateState.style.display = 'none';
+            replacementDateState.textContent = '';
+            replacementDateState.className = 'notice';
+            return;
+          }
+          replacementDateState.style.display = 'block';
+          ROOMS_UI.setNotice(replacementDateState, message, kind || '');
+        }
+
+        function setReplacementLoading_(isVisible, message) {
+          if (!replacementLoading) {
+            return;
+          }
+          replacementLoading.style.display = isVisible ? 'flex' : 'none';
+          if (replacementLoadingText) {
+            replacementLoadingText.textContent = message || 'Caricamento sostituzioni...';
+          }
+        }
+
+        function setReplacementDetailLoading_(isVisible) {
+          if (replacementDetailLoading) {
+            replacementDetailLoading.style.display = isVisible ? 'inline-flex' : 'none';
+          }
+        }
+
+        function closeReplacementConfirm_() {
+          if (replacementConfirmModal) {
+            replacementConfirmModal.style.display = 'none';
+          }
+          replacementState.confirmAction = null;
+        }
+
+        function openReplacementConfirm_(title, message, onConfirm) {
+          if (!replacementConfirmModal) {
+            if (typeof onConfirm === 'function') {
+              onConfirm();
+            }
+            return;
+          }
+          if (replacementConfirmTitle) {
+            replacementConfirmTitle.textContent = title || 'Conferma';
+          }
+          if (replacementConfirmMessage) {
+            replacementConfirmMessage.textContent = message || '';
+          }
+          replacementState.confirmAction = typeof onConfirm === 'function' ? onConfirm : null;
+          replacementConfirmModal.style.display = 'flex';
+        }
+
+        function ensureCanDiscardReplacementDraft_(onDiscard, title, message) {
+          if (!replacementState.dirty) {
+            onDiscard();
+            return;
+          }
+          openReplacementConfirm_(
+            title || 'Modifiche non salvate',
+            message || 'Sono presenti modifiche non salvate. Continuare senza salvare?',
+            onDiscard
+          );
+        }
+
+        function getReplacementTeacher_(teacherEmail) {
+          var targetEmail = normalizeReplacementTeacherEmail_(teacherEmail);
+          return safeArray(replacementState.draft && replacementState.draft.teachers).filter(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry.teacherEmail) === targetEmail;
+          })[0] || null;
+        }
+
+        function getReplacementAssignmentEntry_(assignmentKey) {
+          return safeArray(replacementState.draft && replacementState.draft.assignments).filter(function (entry) {
+            return buildReplacementAssignmentKey_(entry.period, entry.classCode, entry.originalTeacherEmail) === assignmentKey;
+          })[0] || null;
+        }
+
+        function upsertReplacementAssignment_(assignment, patch) {
+          var draft = replacementState.draft || buildReplacementDraftFromModel_(replacementState.model || {});
+          var assignments = safeArray(draft.assignments);
+          var assignmentKey = buildReplacementAssignmentKey_(assignment.period, assignment.classCode, assignment.originalTeacherEmail);
+          var nextEntry = Object.assign({}, assignment || {}, patch || {});
+          nextEntry.period = assignment.period || nextEntry.period || '';
+          nextEntry.classCode = assignment.classCode || nextEntry.classCode || '';
+          nextEntry.originalTeacherEmail = assignment.originalTeacherEmail || nextEntry.originalTeacherEmail || '';
+          nextEntry.originalTeacherName = assignment.originalTeacherName || nextEntry.originalTeacherName || '';
+          nextEntry.originalStatus = assignment.originalStatus || nextEntry.originalStatus || '';
+          nextEntry.notes = nextEntry.notes || '';
+          var replaced = false;
+          draft.assignments = assignments.map(function (entry) {
+            if (buildReplacementAssignmentKey_(entry.period, entry.classCode, entry.originalTeacherEmail) !== assignmentKey) {
+              return entry;
+            }
+            replaced = true;
+            return nextEntry;
+          });
+          if (!replaced) {
+            draft.assignments.push(nextEntry);
+          }
+          replacementState.draft = draft;
+        }
+
+        function markReplacementDraftChanged_(options) {
+          replacementState.dirty = true;
+          replacementState.preview = null;
+          renderReplacementModal_();
+          refreshReplacementModelFromDraft_(options || {});
+        }
+
+        function updateReplacementActionButtons_() {
+          var loading = replacementLoading && replacementLoading.style.display === 'flex';
+          var previewDisabled = !replacementState.isOpen || !isReplacementDateValid_() || loading;
+          var saveDisabled = !replacementState.isOpen || !isReplacementDateValid_() || !replacementState.dirty || loading;
+          var sendDisabled = !canSendReplacementReport_() || loading;
+          replacementActionButtons.forEach(function (button) {
+            var action = button.getAttribute('data-replacement-action');
+            if (action === 'preview') {
+              button.disabled = previewDisabled;
+            } else if (action === 'save') {
+              button.disabled = saveDisabled;
+            } else if (action === 'send') {
+              button.disabled = sendDisabled;
+            }
+          });
+        }
+
+        function renderReplacementStatus_() {
+          var savedAt = getReplacementSavedAt_();
+          var report = getReplacementReportStatus_();
+          if (replacementStatusPill) {
+            if (replacementState.dirty && savedAt) {
+              replacementStatusPill.textContent = 'Modifiche successive all\'ultimo salvataggio';
+            } else if (replacementState.dirty) {
+              replacementStatusPill.textContent = 'Bozza non salvata';
+            } else if (savedAt) {
+              replacementStatusPill.textContent = 'Salvato alle ' + formatReplacementDateTime_(savedAt);
+            } else {
+              replacementStatusPill.textContent = 'Bozza non salvata';
+            }
+          }
+          if (replacementReportPill) {
+            if (report && report.sentAtISO && report.status === 'SENT') {
+              replacementReportPill.style.display = 'inline-flex';
+              replacementReportPill.textContent = 'Report inviato alle ' + formatReplacementDateTime_(report.sentAtISO);
+            } else if (report && report.sentAtISO && report.status) {
+              replacementReportPill.style.display = 'inline-flex';
+              replacementReportPill.textContent = 'Ultimo invio: ' + report.status + ' ' + formatReplacementDateTime_(report.sentAtISO);
+            } else {
+              replacementReportPill.style.display = 'none';
+              replacementReportPill.textContent = '';
+            }
+          }
+        }
+
+        function renderReplacementQuickSummary_() {
+          var summary = replacementState.model && replacementState.model.summary ? replacementState.model.summary : {};
+          if (!replacementQuickSummary) {
+            return;
+          }
+          ROOMS_UI.clearNode(replacementQuickSummary);
+          [
+            'Classi in uscita: ' + Number(summary.classOutCount || 0),
+            'Docenti assenti: ' + Number(summary.absentCount || 0),
+            'Sostituzioni assegnate: ' + Number(summary.assignedCount || 0),
+            'Da assegnare: ' + Number(summary.toAssignCount || 0)
+          ].forEach(function (label) {
+            replacementQuickSummary.appendChild(ROOMS_UI.el('span', 'status-pill', label));
+          });
+        }
+
+        function createReplacementStatusNode_(status) {
+          var normalized = String(status || '').trim().toUpperCase();
+          var cssClass = 'replacement-status-tag';
+          var label = normalized || 'NONE';
+          if (normalized === 'IN_USCITA') {
+            cssClass += ' in-uscita';
+            label = 'IN USCITA';
+          } else if (normalized === 'ASSIGNED') {
+            cssClass += ' assigned';
+            label = 'ASSEGNATA';
+          } else if (normalized === 'TO_ASSIGN') {
+            cssClass += ' to-assign';
+            label = 'DA ASSEGNARE';
+          } else if (normalized === 'NO_ACTION') {
+            label = 'NESSUNA AZIONE';
+          } else if (normalized === 'NONE') {
+            label = 'NESSUNA LEZIONE';
+          }
+          return ROOMS_UI.el('span', cssClass, label);
+        }
+
+        function renderReplacementClasses_() {
+          var classes = safeArray(replacementState.draft && replacementState.draft.classOut);
+          var isDisabled = !isReplacementDateValid_();
+          renderTable(
+            'replacement-classes-table',
+            ['Classe', 'In uscita'],
+            classes.map(function (entry) {
+              var toggleWrap = ROOMS_UI.el('div', 'replacement-class-toggle');
+              var label = document.createElement('label');
+              var checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.checked = Boolean(entry.isOut);
+              checkbox.disabled = isDisabled;
+              checkbox.addEventListener('change', function () {
+                entry.isOut = checkbox.checked;
+                markReplacementDraftChanged_({
+                  reloadTeacherDetail: true,
+                  loadingMessage: 'Aggiornamento classi in uscita...'
+                });
+              });
+              label.appendChild(checkbox);
+              label.appendChild(ROOMS_UI.el('span', '', entry.isOut ? 'Selezionata' : 'Non selezionata'));
+              toggleWrap.appendChild(label);
+              return [
+                entry.classCode || '',
+                toggleWrap
+              ];
+            }),
+            isReplacementDateValid_() ? 'Nessuna classe disponibile per il giorno selezionato.' : 'Data non valida. Correggere la data per proseguire.'
+          );
+        }
+
+        function renderReplacementTeachers_() {
+          var teachers = safeArray(replacementState.draft && replacementState.draft.teachers);
+          var enabledClassCodes = safeArray(replacementState.draft && replacementState.draft.classOut).filter(function (entry) {
+            return Boolean(entry.isOut);
+          }).map(function (entry) {
+            return entry.classCode;
+          });
+          var isDisabled = !isReplacementDateValid_();
+
+          renderTable(
+            'replacement-teachers-table',
+            ['Docente', 'Stato', 'Classi accompagnate', 'Azioni'],
+            teachers.map(function (teacher) {
+              var flags = ROOMS_UI.el('div', 'replacement-teacher-flags');
+              var absentLabel = document.createElement('label');
+              var absentCheckbox = document.createElement('input');
+              absentCheckbox.type = 'checkbox';
+              absentCheckbox.checked = Boolean(teacher.absent);
+              absentCheckbox.disabled = isDisabled;
+              absentCheckbox.addEventListener('change', function () {
+                teacher.absent = absentCheckbox.checked;
+                if (!teacher.absent) {
+                  teacher.accompanist = false;
+                  teacher.accompaniedClasses = [];
+                }
+                markReplacementDraftChanged_({
+                  reloadTeacherDetail: replacementState.selectedTeacherEmail === teacher.teacherEmail,
+                  loadingMessage: 'Aggiornamento stato docenti...'
+                });
+              });
+              absentLabel.appendChild(absentCheckbox);
+              absentLabel.appendChild(ROOMS_UI.el('span', '', 'Assente'));
+              flags.appendChild(absentLabel);
+
+              var accompanistLabel = document.createElement('label');
+              var accompanistCheckbox = document.createElement('input');
+              accompanistCheckbox.type = 'checkbox';
+              accompanistCheckbox.checked = Boolean(teacher.accompanist);
+              accompanistCheckbox.disabled = isDisabled;
+              accompanistCheckbox.addEventListener('change', function () {
+                teacher.accompanist = accompanistCheckbox.checked;
+                if (teacher.accompanist) {
+                  teacher.absent = true;
+                }
+                if (!teacher.absent) {
+                  teacher.accompanist = false;
+                }
+                markReplacementDraftChanged_({
+                  reloadTeacherDetail: replacementState.selectedTeacherEmail === teacher.teacherEmail,
+                  loadingMessage: 'Aggiornamento accompagnatori...'
+                });
+              });
+              accompanistLabel.appendChild(accompanistCheckbox);
+              accompanistLabel.appendChild(ROOMS_UI.el('span', '', 'Accompagnatore'));
+              flags.appendChild(accompanistLabel);
+
+              var accompaniedCell = ROOMS_UI.el('div', enabledClassCodes.length ? 'replacement-accompanied-list' : 'replacement-accompanied-list empty');
+              if (!enabledClassCodes.length) {
+                accompaniedCell.textContent = 'Seleziona prima le classi in uscita.';
+              } else if (!teacher.absent) {
+                accompaniedCell.textContent = 'Disponibile solo per docenti assenti.';
+              } else {
+                enabledClassCodes.forEach(function (classCode) {
+                  var classLabel = document.createElement('label');
+                  var classCheckbox = document.createElement('input');
+                  classCheckbox.type = 'checkbox';
+                  classCheckbox.checked = safeArray(teacher.accompaniedClasses).indexOf(classCode) >= 0;
+                  classCheckbox.disabled = isDisabled;
+                  classCheckbox.addEventListener('change', function () {
+                    teacher.absent = true;
+                    if (classCheckbox.checked) {
+                      teacher.accompanist = true;
+                      if (teacher.accompaniedClasses.indexOf(classCode) < 0) {
+                        teacher.accompaniedClasses.push(classCode);
+                      }
+                    } else {
+                      teacher.accompaniedClasses = safeArray(teacher.accompaniedClasses).filter(function (entry) {
+                        return entry !== classCode;
+                      });
+                      if (!teacher.accompaniedClasses.length) {
+                        teacher.accompanist = false;
+                      }
+                    }
+                    markReplacementDraftChanged_({
+                      reloadTeacherDetail: replacementState.selectedTeacherEmail === teacher.teacherEmail,
+                      loadingMessage: 'Aggiornamento classi accompagnate...'
+                    });
+                  });
+                  classLabel.appendChild(classCheckbox);
+                  classLabel.appendChild(ROOMS_UI.el('span', '', classCode));
+                  accompaniedCell.appendChild(classLabel);
+                });
+              }
+
+              var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
+              var manageButton = ROOMS_UI.el('button', 'button secondary', 'Gestisci');
+              manageButton.type = 'button';
+              manageButton.disabled = isDisabled || !teacher.absent;
+              manageButton.addEventListener('click', function () {
+                loadReplacementTeacherDetail_(teacher.teacherEmail, {
+                  loadingMessage: 'Caricamento dettaglio docente...'
+                });
+              });
+              actions.appendChild(manageButton);
+
+              return [
+                teacher.teacherName || teacher.teacherEmail || '-',
+                flags,
+                accompaniedCell,
+                actions
+              ];
+            }),
+            isReplacementDateValid_() ? 'Nessun docente disponibile per il giorno selezionato.' : 'Data non valida. Correggere la data per proseguire.'
+          );
+        }
+
+        function renderReplacementDetail_() {
+          var detail = replacementState.teacherDetail;
+          var selectedTeacher = getReplacementTeacher_(replacementState.selectedTeacherEmail);
+          if (replacementDetailTitle) {
+            replacementDetailTitle.textContent = detail && detail.teacherName ? detail.teacherName : 'Dettaglio docente';
+          }
+          if (replacementDetailMeta) {
+            replacementDetailMeta.textContent = detail && detail.teacherEmail
+              ? ('Docente ' + detail.teacherEmail)
+              : 'Seleziona un docente assente per gestire le sostituzioni.';
+          }
+          if (!replacementDetailTable) {
+            return;
+          }
+          if (!detail || !selectedTeacher || !selectedTeacher.absent) {
+            renderTable(
+              'replacement-detail-table',
+              ['Ora', 'Classe', 'Stato', 'Assegnazione'],
+              [],
+              isReplacementDateValid_() ? 'Apri Gestisci su un docente assente per vedere il dettaglio giornaliero.' : 'Data non valida. Nessun dettaglio disponibile.'
+            );
+            return;
+          }
+
+          renderTable(
+            'replacement-detail-table',
+            ['Ora', 'Classe', 'Stato', 'Assegnazione'],
+            safeArray(detail.rows).map(function (row) {
+              var assignment = row.assignment || {
+                period: row.period,
+                classCode: row.classCode,
+                originalTeacherEmail: detail.teacherEmail,
+                originalTeacherName: detail.teacherName,
+                originalStatus: detail.accompanist ? 'ACCOMPANIST' : 'ABSENT',
+                replacementTeacherEmail: '',
+                replacementTeacherName: '',
+                replacementSource: '',
+                replacementStatus: row.status
+              };
+              var assignmentKey = buildReplacementAssignmentKey_(assignment.period, assignment.classCode, assignment.originalTeacherEmail);
+              var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
+
+              if (!row.requiresReplacement) {
+                actions.appendChild(ROOMS_UI.el('span', 'muted', row.label || 'Nessuna lezione'));
+              } else if (row.status === 'IN_USCITA') {
+                actions.appendChild(ROOMS_UI.el('span', 'muted', 'Nessuna sostituzione richiesta.'));
+              } else {
+                var select = document.createElement('select');
+                select.className = 'select replacement-detail-select';
+                select.disabled = !isReplacementDateValid_();
+                select.appendChild(new Option('Seleziona sostituto', ''));
+                safeArray(row.candidates).forEach(function (candidate) {
+                  select.appendChild(new Option(candidate.label, candidate.value));
+                });
+                if (assignment.replacementStatus === 'ASSIGNED') {
+                  if (assignment.replacementSource === 'MANUAL') {
+                    select.value = '__MANUAL__';
+                  } else {
+                    select.value = String(assignment.replacementTeacherEmail || '') + '|' + String(assignment.replacementSource || '');
+                  }
+                }
+                select.addEventListener('change', function () {
+                  var selectedValue = select.value;
+                  if (!selectedValue) {
+                    delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                    upsertReplacementAssignment_(assignment, {
+                      replacementTeacherEmail: '',
+                      replacementTeacherName: '',
+                      replacementSource: '',
+                      replacementStatus: 'TO_ASSIGN'
+                    });
+                    markReplacementDraftChanged_({
+                      reloadTeacherDetail: true,
+                      loadingMessage: 'Aggiornamento assegnazioni...'
+                    });
+                    return;
+                  }
+                  if (selectedValue === '__MANUAL__') {
+                    replacementState.pendingManualAssignmentKeys[assignmentKey] = true;
+                    renderReplacementDetail_();
+                    return;
+                  }
+                  var parts = String(selectedValue).split('|');
+                  var teacherEmail = parts[0] || '';
+                  var source = parts[1] || '';
+                  var selectedCandidate = safeArray(row.candidates).filter(function (candidate) {
+                    return candidate.value === selectedValue;
+                  })[0] || null;
+                  delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                  upsertReplacementAssignment_(assignment, {
+                    replacementTeacherEmail: teacherEmail,
+                    replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
+                    replacementSource: source,
+                    replacementStatus: 'ASSIGNED'
+                  });
+                  markReplacementDraftChanged_({
+                    reloadTeacherDetail: true,
+                    loadingMessage: 'Aggiornamento assegnazioni...'
+                  });
+                });
+                actions.appendChild(select);
+
+                if (assignment.replacementSource === 'MANUAL' || replacementState.pendingManualAssignmentKeys[assignmentKey]) {
+                  var manualSelect = document.createElement('select');
+                  manualSelect.className = 'select replacement-detail-select';
+                  manualSelect.disabled = !isReplacementDateValid_();
+                  manualSelect.appendChild(new Option('Seleziona altro docente', ''));
+                  safeArray(row.manualCandidates).forEach(function (candidate) {
+                    manualSelect.appendChild(new Option(candidate.label, candidate.value));
+                  });
+                  if (assignment.replacementSource === 'MANUAL' && assignment.replacementTeacherEmail) {
+                    manualSelect.value = String(assignment.replacementTeacherEmail || '') + '|MANUAL';
+                  }
+                  manualSelect.addEventListener('change', function () {
+                    if (!manualSelect.value) {
+                      upsertReplacementAssignment_(assignment, {
+                        replacementTeacherEmail: '',
+                        replacementTeacherName: '',
+                        replacementSource: '',
+                        replacementStatus: 'TO_ASSIGN'
+                      });
+                    } else {
+                      var manualParts = String(manualSelect.value).split('|');
+                      var manualCandidate = safeArray(row.manualCandidates).filter(function (candidate) {
+                        return candidate.value === manualSelect.value;
+                      })[0] || null;
+                      upsertReplacementAssignment_(assignment, {
+                        replacementTeacherEmail: manualParts[0] || '',
+                        replacementTeacherName: manualCandidate ? manualCandidate.teacherName : '',
+                        replacementSource: 'MANUAL',
+                        replacementStatus: 'ASSIGNED'
+                      });
+                    }
+                    delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                    markReplacementDraftChanged_({
+                      reloadTeacherDetail: true,
+                      loadingMessage: 'Aggiornamento assegnazioni manuali...'
+                    });
+                  });
+                  actions.appendChild(manualSelect);
+                }
+              }
+
+              return [
+                (row.period || '') + 'a ora (' + (row.startTime || '--:--') + ' - ' + (row.endTime || '--:--') + ')',
+                row.classCode || row.label || '-',
+                createReplacementStatusNode_(row.status),
+                actions
+              ];
+            }),
+            'Nessun dettaglio disponibile per il docente selezionato.'
+          );
+        }
+
+        function renderReplacementPreview_() {
+          if (!replacementPreviewMount) {
+            return;
+          }
+          ROOMS_UI.clearNode(replacementPreviewMount);
+          if (!replacementState.preview) {
+            replacementPreviewMount.appendChild(ROOMS_UI.el('div', 'notice', 'Anteprima non ancora generata. Usa "Anteprima report" per vedere il contenuto corrente.'));
+            return;
+          }
+          var preview = replacementState.preview;
+          var meta = ROOMS_UI.el('div', 'replacement-preview-meta');
+          meta.appendChild(ROOMS_UI.el('div', '', 'Oggetto: ' + (preview.subject || '-')));
+          meta.appendChild(ROOMS_UI.el('div', '', 'Destinatari TO: ' + safeArray(preview.recipients && preview.recipients.to).join(', ')));
+          if (safeArray(preview.recipients && preview.recipients.cc).length) {
+            meta.appendChild(ROOMS_UI.el('div', '', 'CC: ' + safeArray(preview.recipients.cc).join(', ')));
+          }
+          if (safeArray(preview.recipients && preview.recipients.bcc).length) {
+            meta.appendChild(ROOMS_UI.el('div', '', 'BCC: ' + safeArray(preview.recipients.bcc).join(', ')));
+          }
+          replacementPreviewMount.appendChild(meta);
+          var linesWrap = ROOMS_UI.el('div', 'replacement-preview-lines');
+          if (!safeArray(preview.lines).length) {
+            linesWrap.appendChild(ROOMS_UI.el('div', 'replacement-preview-line', 'Nessuna sostituzione richiesta.'));
+          } else {
+            safeArray(preview.lines).forEach(function (line) {
+              linesWrap.appendChild(ROOMS_UI.el('div', 'replacement-preview-line', line));
+            });
+          }
+          replacementPreviewMount.appendChild(linesWrap);
+        }
+
+        function renderReplacementModal_() {
+          if (!replacementState.isOpen) {
+            return;
+          }
+          var model = replacementState.model || {};
+          if (replacementSelectedDate) {
+            replacementSelectedDate.textContent = formatReplacementDate_(model.date || replacementState.date || getDefaultPanelDate_());
+          }
+          if (replacementDateInput) {
+            replacementDateInput.value = model.date || replacementState.date || getDefaultPanelDate_();
+          }
+          renderReplacementStatus_();
+          renderReplacementQuickSummary_();
+          renderReplacementClasses_();
+          renderReplacementTeachers_();
+          renderReplacementDetail_();
+          renderReplacementPreview_();
+
+          if (model.dateState) {
+            if (!model.dateState.isValid) {
+              setReplacementDateStateMessage_(model.dateState.message || 'Data non valida.', 'error');
+            } else if (model.dateState.autoShifted) {
+              setReplacementDateStateMessage_(model.dateState.message || '', 'success');
+            } else {
+              setReplacementDateStateMessage_('', '');
+            }
+          } else {
+            setReplacementDateStateMessage_('', '');
+          }
+          updateReplacementActionButtons_();
+        }
+
+        function applyReplacementModel_(model, options) {
+          var settings = options || {};
+          replacementState.model = model && typeof model === 'object' ? model : {};
+          replacementState.date = replacementState.model.date || replacementState.date || getDefaultPanelDate_();
+          replacementState.draft = buildReplacementDraftFromModel_(replacementState.model);
+          if (!settings.keepDirty) {
+            replacementState.dirty = false;
+          }
+          if (!getReplacementTeacher_(replacementState.selectedTeacherEmail) || !getReplacementTeacher_(replacementState.selectedTeacherEmail).absent) {
+            replacementState.selectedTeacherEmail = '';
+            replacementState.teacherDetail = null;
+          }
+          renderReplacementModal_();
+        }
+
+        function loadReplacementTeacherDetail_(teacherEmail, options) {
+          var settings = options || {};
+          if (!replacementState.isOpen || !teacherEmail || !isReplacementDateValid_()) {
+            replacementState.selectedTeacherEmail = '';
+            replacementState.teacherDetail = null;
+            renderReplacementDetail_();
+            return Promise.resolve(null);
+          }
+          var requestSeq = ++replacementState.detailRequestSeq;
+          replacementState.selectedTeacherEmail = teacherEmail;
+          setReplacementDetailLoading_(true);
+          renderReplacementDetail_();
+          return ROOMS_UI.call(
+            'getReplacementTeacherDetail',
+            replacementState.date,
+            cloneReplacementData_(replacementState.draft),
+            teacherEmail
+          ).then(function (detail) {
+            if (requestSeq !== replacementState.detailRequestSeq) {
+              return null;
+            }
+            replacementState.teacherDetail = detail || null;
+            renderReplacementDetail_();
+            return detail;
+          }).catch(function (error) {
+            if (requestSeq !== replacementState.detailRequestSeq) {
+              return null;
+            }
+            replacementState.teacherDetail = null;
+            renderReplacementDetail_();
+            setReplacementNotice_(error && error.message ? error.message : 'Errore caricamento dettaglio docente.', 'error');
+            return null;
+          }).then(function (result) {
+            if (requestSeq === replacementState.detailRequestSeq) {
+              setReplacementDetailLoading_(false);
+            }
+            return result;
+          });
+        }
+
+        function loadReplacementModel_(dateValue, draft, options) {
+          var settings = options || {};
+          var requestSeq = ++replacementState.loadingRequestSeq;
+          var targetDate = String(dateValue || getDefaultPanelDate_());
+          replacementState.date = targetDate;
+          setReplacementLoading_(true, settings.loadingMessage || 'Caricamento sostituzioni...');
+          if (!settings.keepNotice) {
+            setReplacementNotice_('', '');
+          }
+          return ROOMS_UI.call(
+            'getReplacementModalModel',
+            targetDate,
+            cloneReplacementData_(draft),
+            {
+              allowAutoShift: settings.allowAutoShift !== false
+            }
+          ).then(function (model) {
+            if (requestSeq !== replacementState.loadingRequestSeq) {
+              return null;
+            }
+            applyReplacementModel_(model, {
+              keepDirty: Boolean(settings.keepDirty)
+            });
+            if (settings.reloadTeacherDetail && replacementState.selectedTeacherEmail) {
+              return loadReplacementTeacherDetail_(replacementState.selectedTeacherEmail, settings);
+            }
+            return model;
+          }).catch(function (error) {
+            if (requestSeq !== replacementState.loadingRequestSeq) {
+              return null;
+            }
+            setReplacementNotice_(error && error.message ? error.message : 'Errore caricamento sostituzioni.', 'error');
+            return null;
+          }).then(function (result) {
+            if (requestSeq === replacementState.loadingRequestSeq) {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            }
+            return result;
+          });
+        }
+
+        function refreshReplacementModelFromDraft_(options) {
+          if (!replacementState.isOpen) {
+            return Promise.resolve(null);
+          }
+          return loadReplacementModel_(
+            replacementState.date,
+            replacementState.draft,
+            {
+              allowAutoShift: false,
+              keepDirty: true,
+              reloadTeacherDetail: Boolean(options && options.reloadTeacherDetail),
+              loadingMessage: options && options.loadingMessage ? options.loadingMessage : 'Aggiornamento sostituzioni...'
+            }
+          );
+        }
+
+        function closeReplacementModalImmediate_() {
+          replacementState.isOpen = false;
+          replacementState.model = null;
+          replacementState.draft = null;
+          replacementState.date = '';
+          replacementState.dirty = false;
+          replacementState.selectedTeacherEmail = '';
+          replacementState.teacherDetail = null;
+          replacementState.preview = null;
+          replacementState.pendingManualAssignmentKeys = {};
+          closeReplacementConfirm_();
+          setReplacementNotice_('', '');
+          setReplacementDateStateMessage_('', '');
+          setReplacementLoading_(false);
+          setReplacementDetailLoading_(false);
+          if (replacementModal) {
+            replacementModal.style.display = 'none';
+          }
+        }
+
+        function closeReplacementModal_() {
+          ensureCanDiscardReplacementDraft_(function () {
+            closeReplacementModalImmediate_();
+          }, 'Modifiche non salvate', 'Sono presenti modifiche non salvate. Chiudere la gestione sostituzioni senza salvare?');
+        }
+
+        function openReplacementModal_() {
+          if (!canOpenReplacementModal_() || !replacementModal) {
+            return;
+          }
+          replacementState.isOpen = true;
+          replacementModal.style.display = 'flex';
+          replacementState.preview = null;
+          replacementState.pendingManualAssignmentKeys = {};
+          replacementState.teacherDetail = null;
+          replacementState.selectedTeacherEmail = '';
+          loadReplacementModel_(getDefaultPanelDate_(), null, {
+            allowAutoShift: true,
+            keepDirty: false,
+            loadingMessage: 'Caricamento sostituzioni...'
+          });
+        }
+
+        function handleReplacementDateChange_() {
+          var nextDate = replacementDateInput ? replacementDateInput.value : '';
+          if (!nextDate || nextDate === replacementState.date) {
+            return;
+          }
+          ensureCanDiscardReplacementDraft_(function () {
+            replacementState.preview = null;
+            replacementState.selectedTeacherEmail = '';
+            replacementState.teacherDetail = null;
+            replacementState.pendingManualAssignmentKeys = {};
+            loadReplacementModel_(nextDate, null, {
+              allowAutoShift: false,
+              keepDirty: false,
+              loadingMessage: 'Caricamento nuova data...'
+            });
+          }, 'Cambia data', 'Il cambio data scarta la bozza corrente non salvata. Continuare?');
+        }
+
+        function previewReplacementReport_() {
+          if (!isReplacementDateValid_()) {
+            setReplacementNotice_('Seleziona una data valida prima di generare l\'anteprima.', 'error');
+            return;
+          }
+          setReplacementLoading_(true, 'Generazione anteprima report...');
+          ROOMS_UI.call('previewReplacementReport', replacementState.date, cloneReplacementData_(replacementState.draft))
+            .then(function (preview) {
+              replacementState.preview = preview || null;
+              renderReplacementPreview_();
+              setReplacementNotice_('Anteprima report aggiornata. Nessun dato salvato o inviato.', 'success');
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore generazione anteprima report.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
+        }
+
+        function saveReplacementDay_() {
+          if (!replacementState.dirty || !isReplacementDateValid_()) {
+            return;
+          }
+          setReplacementLoading_(true, 'Salvataggio sostituzioni...');
+          ROOMS_UI.call('saveReplacementDay', replacementState.date, cloneReplacementData_(replacementState.draft))
+            .then(function (result) {
+              var model = result && result.model ? result.model : null;
+              applyReplacementModel_(model, {
+                keepDirty: false
+              });
+              replacementState.preview = null;
+              setReplacementNotice_('Sostituzioni salvate con successo.', 'success');
+              if (replacementState.selectedTeacherEmail) {
+                loadReplacementTeacherDetail_(replacementState.selectedTeacherEmail, {});
+              }
+              refresh({ skipPanelRefresh: false });
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore salvataggio sostituzioni.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
+        }
+
+        function sendReplacementReport_() {
+          if (!canSendReplacementReport_()) {
+            return;
+          }
+          setReplacementLoading_(true, 'Invio report sostituzioni...');
+          ROOMS_UI.call('sendReplacementReport', replacementState.date)
+            .then(function (result) {
+              if (replacementState.model) {
+                replacementState.model.report = result && result.report ? result.report : {};
+              }
+              replacementState.preview = null;
+              setReplacementNotice_('Report inviato correttamente.', 'success');
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore invio report.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
         }
 
         function showPanelError(message) {
@@ -2032,6 +3103,9 @@
           if (shouldUseFullscreenCompact(state)) {
             return;
           }
+          if (replacementState.isOpen) {
+            return;
+          }
           if (isPanelOpen()) {
             return;
           }
@@ -2070,6 +3144,9 @@
         if (fullscreenButton) {
           fullscreenButton.addEventListener('click', toggleFullscreen);
         }
+        if (replacementsButton) {
+          replacementsButton.addEventListener('click', openReplacementModal_);
+        }
         if (simulationButton) {
           simulationButton.addEventListener('click', openSimulationModal_);
         }
@@ -2086,6 +3163,51 @@
           simulationModal.addEventListener('click', function (event) {
             if (event.target === simulationModal) {
               closeSimulationModal_();
+            }
+          });
+        }
+        if (replacementDateInput) {
+          replacementDateInput.addEventListener('change', handleReplacementDateChange_);
+        }
+        replacementActionButtons.forEach(function (button) {
+          button.addEventListener('click', function () {
+            var action = button.getAttribute('data-replacement-action');
+            if (action === 'preview') {
+              previewReplacementReport_();
+            } else if (action === 'save') {
+              saveReplacementDay_();
+            } else if (action === 'send') {
+              sendReplacementReport_();
+            }
+          });
+        });
+        if (replacementCloseButton) {
+          replacementCloseButton.addEventListener('click', closeReplacementModal_);
+        }
+        if (replacementCloseButtonBottom) {
+          replacementCloseButtonBottom.addEventListener('click', closeReplacementModal_);
+        }
+        if (replacementConfirmYes) {
+          replacementConfirmYes.addEventListener('click', function () {
+            var action = replacementState.confirmAction;
+            closeReplacementConfirm_();
+            if (typeof action === 'function') {
+              action();
+            }
+          });
+        }
+        if (replacementConfirmNo) {
+          replacementConfirmNo.addEventListener('click', function () {
+            if (replacementDateInput && replacementState.date) {
+              replacementDateInput.value = replacementState.date;
+            }
+            closeReplacementConfirm_();
+          });
+        }
+        if (replacementModal) {
+          replacementModal.addEventListener('click', function (event) {
+            if (event.target === replacementModal) {
+              closeReplacementModal_();
             }
           });
         }
@@ -2253,6 +3375,14 @@
               event.stopPropagation();
               return;
             }
+          }
+          if (event.key === 'Escape' && replacementConfirmModal && replacementConfirmModal.style.display === 'flex') {
+            closeReplacementConfirm_();
+            return;
+          }
+          if (event.key === 'Escape' && replacementState.isOpen) {
+            closeReplacementModal_();
+            return;
           }
           if (event.key === 'Escape' && simulationModal && simulationModal.style.display === 'flex') {
             closeSimulationModal_();

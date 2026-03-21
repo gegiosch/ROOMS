@@ -30,6 +30,11 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_RAW] = true;
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_SPACES_RAW] = true;
     sheets[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPORT_LOG] = true;
     return sheets;
   }()),
 
@@ -43,6 +48,11 @@ ROOMS_APP.Schema = {
     this.ensureTimetableDocentiRaw();
     this.ensureTimetableSpacesRaw();
     this.ensureAulaMagnaEvents();
+    this.ensureReplacementClassOut();
+    this.ensureReplacementDayTeachers();
+    this.ensureReplacementAssignments();
+    this.ensureReportRecipients();
+    this.ensureReportLog();
     this.ensureWeekSchedule();
     this.ensureHolidays();
     this.ensureClosures();
@@ -195,6 +205,72 @@ ROOMS_APP.Schema = {
       'UpdatedAtISO'
     ];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS, headers);
+  },
+
+  ensureReplacementClassOut: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT, [
+      'Date',
+      'ClassCode',
+      'IsOut',
+      'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementDayTeachers: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS, [
+      'Date',
+      'TeacherEmail',
+      'TeacherName',
+      'Absent',
+      'Accompanist',
+      'AccompaniedClasses',
+      'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementAssignments: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS, [
+      'Date',
+      'Period',
+      'ClassCode',
+      'OriginalTeacherEmail',
+      'OriginalTeacherName',
+      'OriginalStatus',
+      'ReplacementTeacherEmail',
+      'ReplacementTeacherName',
+      'ReplacementSource',
+      'ReplacementStatus',
+      'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReportRecipients: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS, [
+      'Enabled',
+      'ReportType',
+      'RecipientType',
+      'Email',
+      'Notes'
+    ]);
+  },
+
+  ensureReportLog: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPORT_LOG, [
+      'ReportType',
+      'ReferenceDate',
+      'SentAtISO',
+      'SentBy',
+      'Recipients',
+      'Subject',
+      'Status',
+      'Notes'
+    ]);
   },
 
   ensurePolicyOverrides: function () {

@@ -205,6 +205,36 @@ function applyRoomPanelChanges(resourceId, dateString, changes, requestContext) 
   });
 }
 
+function getReplacementModalModel(dateString, draft, options, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.getModalModel(dateString, draft, options);
+  });
+}
+
+function getReplacementTeacherDetail(dateString, draft, teacherEmail, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.getTeacherDetail(dateString, draft, teacherEmail);
+  });
+}
+
+function previewReplacementReport(dateString, draft, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.previewReport(dateString, draft);
+  });
+}
+
+function saveReplacementDay(dateString, draft, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.saveDay(dateString, draft);
+  });
+}
+
+function sendReplacementReport(dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.sendReport(dateString);
+  });
+}
+
 function previewRecurringRoomBooking(payload) {
   return ROOMS_APP.Recurring.previewWeekly(payload);
 }
@@ -236,6 +266,8 @@ function rebuildTimetableOccupancyFromSheets() {
 function getAdminBootstrap() {
   var user = ROOMS_APP.Auth.requireAdmin();
   ROOMS_APP.Schema.ensureAdmins();
+  ROOMS_APP.Schema.ensureReportRecipients();
+  ROOMS_APP.Schema.ensureReportLog();
   var tableNames = [
     ROOMS_APP.SHEET_NAMES.CONFIG,
     ROOMS_APP.SHEET_NAMES.ADMINS,
@@ -244,7 +276,8 @@ function getAdminBootstrap() {
     ROOMS_APP.SHEET_NAMES.HOLIDAYS,
     ROOMS_APP.SHEET_NAMES.CLOSURES,
     ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS,
-    ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS
+    ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS,
+    ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS
   ];
   var tables = {};
 
@@ -258,6 +291,10 @@ function getAdminBootstrap() {
   tables[ROOMS_APP.SHEET_NAMES.AUDIT] = {
     headers: ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.AUDIT),
     rows: ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.AUDIT).slice(-200).reverse()
+  };
+  tables[ROOMS_APP.SHEET_NAMES.REPORT_LOG] = {
+    headers: ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPORT_LOG),
+    rows: ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPORT_LOG).slice(-200).reverse()
   };
 
   return {
@@ -277,6 +314,7 @@ function adminReplaceTable(tableName, rows) {
   allowed[ROOMS_APP.SHEET_NAMES.CLOSURES] = true;
   allowed[ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS] = true;
   allowed[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
+  allowed[ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS] = true;
 
   if (!allowed[tableName]) {
     throw new Error('Table is not editable: ' + tableName);
@@ -284,6 +322,9 @@ function adminReplaceTable(tableName, rows) {
 
   if (tableName === ROOMS_APP.SHEET_NAMES.ADMINS) {
     ROOMS_APP.Schema.ensureAdmins();
+  }
+  if (tableName === ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS) {
+    ROOMS_APP.Schema.ensureReportRecipients();
   }
   ROOMS_APP.DB.replaceRows(tableName, ROOMS_APP.DB.getHeaders(tableName), rows || []);
   if (tableName === ROOMS_APP.SHEET_NAMES.CONFIG) {
@@ -343,6 +384,21 @@ function routeApiRequest_(payload) {
       payload.date,
       payload.changes || payload
     );
+  }
+  if (action === 'getReplacementModalModel') {
+    return ROOMS_APP.Replacements.getModalModel(payload.date, payload.draft, payload.options || {});
+  }
+  if (action === 'getReplacementTeacherDetail') {
+    return ROOMS_APP.Replacements.getTeacherDetail(payload.date, payload.draft, payload.teacherEmail);
+  }
+  if (action === 'previewReplacementReport') {
+    return ROOMS_APP.Replacements.previewReport(payload.date, payload.draft);
+  }
+  if (action === 'saveReplacementDay') {
+    return ROOMS_APP.Replacements.saveDay(payload.date, payload.draft);
+  }
+  if (action === 'sendReplacementReport') {
+    return ROOMS_APP.Replacements.sendReport(payload.date);
   }
   if (action === 'getAulaMagnaEditorModel') {
     return ROOMS_APP.Booking.getAulaMagnaEditorModel(

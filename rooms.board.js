@@ -78,10 +78,19 @@ ROOMS_APP.Board = {
 
     resources.forEach(function (resource) {
       var roomBookings = byResource[resource.ResourceId] || [];
-      var current = roomBookings.filter(function (booking) {
+      var visibleCurrent = roomBookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
       })[0] || null;
-      var next = roomBookings.filter(function (booking) {
+      var visibleNext = roomBookings.filter(function (booking) {
+        return booking.StartTime > currentTime;
+      })[0] || null;
+      var blockingBookings = roomBookings.filter(function (booking) {
+        return ROOMS_APP.Timetable.isBlockingOccurrence(booking);
+      });
+      var current = blockingBookings.filter(function (booking) {
+        return booking.StartTime <= currentTime && booking.EndTime > currentTime;
+      })[0] || null;
+      var next = blockingBookings.filter(function (booking) {
         return booking.StartTime > currentTime;
       })[0] || null;
       var state = current ? 'OCCUPIED' : (next ? 'NEXT_OCCUPIED' : 'FREE');
@@ -94,8 +103,8 @@ ROOMS_APP.Board = {
         layoutRow: Number(resource.LayoutRow || 0),
         layoutCol: Number(resource.LayoutCol || 0),
         state: state,
-        currentLabel: current ? ROOMS_APP.Board.getOccupancyLabel_(current) : 'LIBERA',
-        nextLabel: next ? ROOMS_APP.Board.getOccupancyLabel_(next) : 'LIBERA'
+        currentLabel: visibleCurrent ? ROOMS_APP.Board.getOccupancyLabel_(visibleCurrent) : 'LIBERA',
+        nextLabel: visibleNext ? ROOMS_APP.Board.getOccupancyLabel_(visibleNext) : 'LIBERA'
       });
     });
 

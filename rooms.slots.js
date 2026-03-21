@@ -104,6 +104,9 @@ ROOMS_APP.Slots = {
       var slotStart = self.toMinutes_(slot.startTime);
       var slotEnd = self.toMinutes_(slot.endTime);
       var occupancyEntry = normalizedOccupancies.filter(function (entry) {
+        if (!ROOMS_APP.Timetable.isBlockingOccurrence(entry.row)) {
+          return false;
+        }
         return !(slotEnd <= entry.startMinutes || slotStart >= entry.endMinutes);
       })[0] || null;
       var occupancy = occupancyEntry ? occupancyEntry.row : null;

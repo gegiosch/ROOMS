@@ -409,6 +409,9 @@ ROOMS_APP.Timetable = {
     var activeRows = this.listActiveRows_();
     var results = this.buildOccurrencesForDateFromRows_(activeRows, targetDate, targetResource);
     results = this.filterDisabledOccurrences_(results, targetDate, targetResource);
+    if (ROOMS_APP.Replacements && typeof ROOMS_APP.Replacements.applySavedStateToOccurrences_ === 'function') {
+      results = ROOMS_APP.Replacements.applySavedStateToOccurrences_(targetDate, results);
+    }
     Logger.log(
       '[PERF] Timetable.listOccupanciesForDate total=%sms rows=%s resourceFilter=%s results=%s',
       Date.now() - startedAt,
@@ -463,6 +466,10 @@ ROOMS_APP.Timetable = {
       occupancy.Title ||
       'N/D'
     );
+  },
+
+  isBlockingOccurrence: function (occupancy) {
+    return !ROOMS_APP.asBoolean(occupancy && occupancy.IsNonBlocking);
   },
 
   isValidClassCode_: function (value) {

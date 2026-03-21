@@ -561,7 +561,10 @@ ROOMS_APP.Booking = {
         currentDateIso,
         currentTime
       );
-      var current = isCurrentDate ? bookings.filter(function (booking) {
+      var blockingBookings = bookings.filter(function (booking) {
+        return ROOMS_APP.Timetable.isBlockingOccurrence(booking);
+      });
+      var current = isCurrentDate ? blockingBookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
       })[0] || null : null;
       var ownBookings = userBookingsDay.filter(function (booking) {
@@ -997,6 +1000,9 @@ ROOMS_APP.Booking = {
   hasTimetableConflict_: function (resourceId, bookingDate, startTime, endTime, ignoredTimetableBookingIds) {
     var ignored = ignoredTimetableBookingIds || {};
     return ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, bookingDate).some(function (occupancy) {
+      if (!ROOMS_APP.Timetable.isBlockingOccurrence(occupancy)) {
+        return false;
+      }
       var bookingId = ROOMS_APP.normalizeString(occupancy.BookingId);
       if (bookingId && ignored[bookingId]) {
         return false;

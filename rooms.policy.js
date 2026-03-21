@@ -167,6 +167,9 @@ ROOMS_APP.Policy = {
     }
 
     return ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, dateString).some(function (occupancy) {
+      if (!ROOMS_APP.Timetable.isBlockingOccurrence(occupancy)) {
+        return false;
+      }
       return !(endTime <= occupancy.StartTime || startTime >= occupancy.EndTime);
     });
   },
