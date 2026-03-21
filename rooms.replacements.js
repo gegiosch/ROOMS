@@ -557,8 +557,10 @@ ROOMS_APP.Replacements = {
     var savedClassOutRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT, targetDate);
     var savedTeacherRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS, targetDate);
     var savedAssignmentRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS, targetDate);
+    var periodMap = ROOMS_APP.Timetable.getPeriodTimeMap();
     var teacherMap = {};
     var classSet = {};
+    var savedTeacherFallbackMap = {};
 
     baseTeachers.forEach(function (teacher) {
       teacherMap[teacher.teacherEmail] = teacher;
@@ -589,6 +591,55 @@ ROOMS_APP.Replacements = {
       }
     });
 
+    savedAssignmentRows.forEach(function (row) {
+      var period = ROOMS_APP.normalizeString(row.Period);
+      var classCode = ROOMS_APP.normalizeString(row.ClassCode).toUpperCase();
+      var originalTeacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.OriginalTeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.OriginalTeacherName);
+      var activeLongAssignment = activeLongAssignmentMap[originalTeacherEmail] || null;
+      var teacherEmail = activeLongAssignment ? activeLongAssignment.replacementTeacherEmail : originalTeacherEmail;
+      var teacherName = activeLongAssignment ? activeLongAssignment.replacementTeacherDisplayName : ROOMS_APP.normalizeString(row.OriginalTeacherName);
+      var slot;
+      if (!teacherEmail) {
+        return;
+      }
+      if (!teacherMap[teacherEmail]) {
+        teacherMap[teacherEmail] = {
+          teacherEmail: teacherEmail,
+          teacherName: teacherName || teacherEmail,
+          periods: {}
+        };
+      }
+      if (period && classCode && !teacherMap[teacherEmail].periods[period]) {
+        slot = periodMap[period] || {};
+        teacherMap[teacherEmail].periods[period] = {
+          period: String(period || ''),
+          startTime: slot.startTime || '',
+          endTime: slot.endTime || '',
+          rawValue: classCode,
+          type: 'CLASS',
+          classCode: classCode,
+          label: classCode
+        };
+      }
+      if (classCode) {
+        classSet[classCode] = true;
+      }
+      if (!savedTeacherFallbackMap[teacherEmail]) {
+        savedTeacherFallbackMap[teacherEmail] = {
+          TeacherEmail: teacherEmail,
+          TeacherName: teacherName,
+          Absent: false,
+          Accompanist: false,
+          AccompaniedClasses: [],
+          Notes: ''
+        };
+      }
+      savedTeacherFallbackMap[teacherEmail].Absent = true;
+      if (ROOMS_APP.normalizeString(row.OriginalStatus) === 'ACCOMPANIST') {
+        savedTeacherFallbackMap[teacherEmail].Accompanist = true;
+      }
+    });
+
     var classOutMap = {};
     savedClassOutRows.forEach(function (row) {
       if (ROOMS_APP.asBoolean(row.IsOut)) {
@@ -600,7 +651,7 @@ ROOMS_APP.Replacements = {
 
     var teachers = Object.keys(teacherMap).map(function (teacherEmail) {
       var teacher = teacherMap[teacherEmail];
-      var saved = ROOMS_APP.Replacements.findSavedTeacherRow_(savedTeacherRows, teacherEmail, teacher.teacherName, activeLongAssignmentMap) || {};
+      var saved = ROOMS_APP.Replacements.findSavedTeacherRow_(savedTeacherRows, teacherEmail, teacher.teacherName, activeLongAssignmentMap) || savedTeacherFallbackMap[teacherEmail] || {};
       var accompaniedClasses = ROOMS_APP.Replacements.parsePipeList_(saved.AccompaniedClasses);
       accompaniedClasses.forEach(function (classCode) {
         classSet[classCode] = true;
