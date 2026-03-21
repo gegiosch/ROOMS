@@ -9,6 +9,7 @@ ROOMS_APP.Replacements = {
     ROOMS_APP.Schema.ensureReplacementClassOut();
     ROOMS_APP.Schema.ensureReplacementDayTeachers();
     ROOMS_APP.Schema.ensureReplacementAssignments();
+    ROOMS_APP.Schema.ensureReplacementLongAssignments();
     ROOMS_APP.Schema.ensureReportRecipients();
     ROOMS_APP.Schema.ensureReportLog();
   },
@@ -41,6 +42,8 @@ ROOMS_APP.Replacements = {
       teachers: normalized.teachers,
       assignments: normalized.assignments,
       summary: this.buildSummaryFromAssignments_(normalized.assignments, normalized.classes, normalized.teachers),
+      longAssignments: context.longAssignments,
+      longTeacherOptions: context.longTeacherOptions,
       savedAtISO: context.savedAtISO,
       report: context.reportStatus,
       recipientsConfigured: Boolean(context.recipients.to.length)
@@ -219,6 +222,152 @@ ROOMS_APP.Replacements = {
     };
   },
 
+  saveLongAssignment: function (payload, referenceDate) {
+    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    this.ensureSchema_();
+    var normalized = this.normalizeLongAssignmentInput_(payload || {});
+    var rows = this.listLongAssignmentRows_();
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var updatedBy = actor.email;
+    var replaced = false;
+
+    this.validateLongAssignment_(normalized, rows, normalized.matchKey);
+
+    var nextRows = rows.map(function (row) {
+      if (normalized.matchKey && ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row) === normalized.matchKey) {
+        replaced = true;
+        return {
+          Enabled: normalized.enabled ? 'TRUE' : 'FALSE',
+          OriginalTeacherEmail: normalized.originalTeacherEmail,
+          OriginalTeacherName: normalized.originalTeacherName,
+          ReplacementTeacherSurname: normalized.replacementTeacherSurname,
+          ReplacementTeacherName: normalized.replacementTeacherName,
+          ReplacementTeacherDisplayName: normalized.replacementTeacherDisplayName,
+          StartDate: normalized.startDate,
+          EndDate: normalized.endDate,
+          Reason: normalized.reason,
+          Notes: normalized.notes,
+          UpdatedAtISO: nowIso,
+          UpdatedBy: updatedBy
+        };
+      }
+      return row;
+    });
+
+    if (!replaced) {
+      nextRows.push({
+        Enabled: normalized.enabled ? 'TRUE' : 'FALSE',
+        OriginalTeacherEmail: normalized.originalTeacherEmail,
+        OriginalTeacherName: normalized.originalTeacherName,
+        ReplacementTeacherSurname: normalized.replacementTeacherSurname,
+        ReplacementTeacherName: normalized.replacementTeacherName,
+        ReplacementTeacherDisplayName: normalized.replacementTeacherDisplayName,
+        StartDate: normalized.startDate,
+        EndDate: normalized.endDate,
+        Reason: normalized.reason,
+        Notes: normalized.notes,
+        UpdatedAtISO: nowIso,
+        UpdatedBy: updatedBy
+      });
+    }
+
+    ROOMS_APP.DB.replaceRows(
+      ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS,
+      ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS),
+      nextRows
+    );
+
+    return {
+      ok: true,
+      model: this.getModalModel(referenceDate || normalized.startDate, null, {
+        allowAutoShift: false
+      })
+    };
+  },
+
+  toggleLongAssignment: function (matchKey, enabled, referenceDate) {
+    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    this.ensureSchema_();
+    var rows = this.listLongAssignmentRows_();
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var found = false;
+    var targetRow = null;
+    var nextRows = rows.map(function (row) {
+      if (ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row) !== ROOMS_APP.normalizeString(matchKey)) {
+        return row;
+      }
+      found = true;
+      targetRow = row;
+      var next = ROOMS_APP.Replacements.cloneRow_(row);
+      next.Enabled = enabled ? 'TRUE' : 'FALSE';
+      next.UpdatedAtISO = nowIso;
+      next.UpdatedBy = actor.email;
+      return next;
+    });
+
+    if (!found) {
+      throw new Error('Supplenza lunga non trovata.');
+    }
+    if (enabled && targetRow) {
+      this.validateLongAssignment_({
+        matchKey: ROOMS_APP.normalizeString(matchKey),
+        enabled: true,
+        originalTeacherEmail: targetRow.OriginalTeacherEmail,
+        originalTeacherName: targetRow.OriginalTeacherName,
+        replacementTeacherSurname: targetRow.ReplacementTeacherSurname,
+        replacementTeacherName: targetRow.ReplacementTeacherName,
+        replacementTeacherDisplayName: targetRow.ReplacementTeacherDisplayName,
+        startDate: targetRow.StartDate,
+        endDate: targetRow.EndDate,
+        reason: targetRow.Reason,
+        notes: targetRow.Notes
+      }, rows, matchKey);
+    }
+
+    ROOMS_APP.DB.replaceRows(
+      ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS,
+      ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS),
+      nextRows
+    );
+
+    return {
+      ok: true,
+      model: this.getModalModel(referenceDate || ROOMS_APP.toIsoDate(new Date()), null, {
+        allowAutoShift: false
+      })
+    };
+  },
+
+  deleteLongAssignment: function (matchKey, referenceDate) {
+    ROOMS_APP.Auth.requireCanManageReplacement();
+    this.ensureSchema_();
+    var removed = false;
+    var nextRows = this.listLongAssignmentRows_().filter(function (row) {
+      var keep = ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row) !== ROOMS_APP.normalizeString(matchKey);
+      if (!keep) {
+        removed = true;
+      }
+      return keep;
+    });
+
+    if (!removed) {
+      throw new Error('Supplenza lunga non trovata.');
+    }
+
+    ROOMS_APP.DB.replaceRows(
+      ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS,
+      ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS),
+      nextRows
+    );
+
+    return {
+      ok: true,
+      model: this.getModalModel(referenceDate || ROOMS_APP.toIsoDate(new Date()), null, {
+        allowAutoShift: false
+      })
+    };
+  },
+
   applySavedStateToOccurrences_: function (dateString, occurrences) {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var reflectionState = this.getSavedReflectionState_(targetDate);
@@ -235,8 +384,21 @@ ROOMS_APP.Replacements = {
     var next = this.cloneRow_(occurrence);
     var teacherEmail = this.normalizeTeacherEmail_(occurrence && occurrence.TeacherEmail);
     var originalTeacherName = ROOMS_APP.normalizeString(occurrence && occurrence.TeacherName);
-    if (!teacherEmail) {
-      teacherEmail = this.buildTeacherSyntheticEmail_(originalTeacherName);
+    var originalTeacherEmail = teacherEmail;
+    if (!originalTeacherEmail) {
+      originalTeacherEmail = this.buildTeacherSyntheticEmail_(originalTeacherName);
+    }
+    var longAssignment = normalized.longAssignmentMap && normalized.longAssignmentMap[originalTeacherEmail]
+      ? normalized.longAssignmentMap[originalTeacherEmail]
+      : null;
+    if (longAssignment) {
+      teacherEmail = longAssignment.replacementTeacherEmail;
+      next.TeacherEmail = teacherEmail;
+      next.TeacherName = longAssignment.replacementTeacherDisplayName;
+      next.BookerName = longAssignment.replacementTeacherDisplayName;
+      next.DisplayLabel = longAssignment.replacementTeacherDisplayName;
+    } else if (!teacherEmail) {
+      teacherEmail = originalTeacherEmail;
     }
     var period = this.resolvePeriodFromOccurrence_(occurrence);
     var classCode = ROOMS_APP.normalizeString(occurrence && occurrence.ClassCode).toUpperCase();
@@ -336,6 +498,7 @@ ROOMS_APP.Replacements = {
 
   buildDayContext_: function (dateString) {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
+    var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate);
     var baseTeachers = this.buildTeacherDayTeachers_(targetDate);
     var savedClassOutRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT, targetDate);
     var savedTeacherRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS, targetDate);
@@ -358,10 +521,15 @@ ROOMS_APP.Replacements = {
       if (!teacherEmail) {
         teacherEmail = ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName);
       }
+      if (activeLongAssignments[teacherEmail]) {
+        teacherEmail = activeLongAssignments[teacherEmail].replacementTeacherEmail;
+      }
       if (!teacherMap[teacherEmail]) {
         teacherMap[teacherEmail] = {
           teacherEmail: teacherEmail,
-          teacherName: ROOMS_APP.normalizeString(row.TeacherName),
+          teacherName: activeLongAssignments[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)]
+            ? activeLongAssignments[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)].replacementTeacherDisplayName
+            : ROOMS_APP.normalizeString(row.TeacherName),
           periods: {}
         };
       }
@@ -378,7 +546,7 @@ ROOMS_APP.Replacements = {
 
     var teachers = Object.keys(teacherMap).map(function (teacherEmail) {
       var teacher = teacherMap[teacherEmail];
-      var saved = ROOMS_APP.Replacements.findSavedTeacherRow_(savedTeacherRows, teacherEmail, teacher.teacherName) || {};
+      var saved = ROOMS_APP.Replacements.findSavedTeacherRow_(savedTeacherRows, teacherEmail, teacher.teacherName, activeLongAssignments) || {};
       var accompaniedClasses = ROOMS_APP.Replacements.parsePipeList_(saved.AccompaniedClasses);
       accompaniedClasses.forEach(function (classCode) {
         classSet[classCode] = true;
@@ -423,11 +591,13 @@ ROOMS_APP.Replacements = {
         };
       }),
       assignments: savedAssignmentRows.map(function (row) {
+        var originalTeacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.OriginalTeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.OriginalTeacherName);
+        var activeLongAssignment = activeLongAssignments[originalTeacherEmail] || null;
         return {
           period: ROOMS_APP.normalizeString(row.Period),
           classCode: ROOMS_APP.normalizeString(row.ClassCode).toUpperCase(),
-          originalTeacherEmail: ROOMS_APP.Replacements.normalizeTeacherEmail_(row.OriginalTeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.OriginalTeacherName),
-          originalTeacherName: ROOMS_APP.normalizeString(row.OriginalTeacherName),
+          originalTeacherEmail: activeLongAssignment ? activeLongAssignment.replacementTeacherEmail : originalTeacherEmail,
+          originalTeacherName: activeLongAssignment ? activeLongAssignment.replacementTeacherDisplayName : ROOMS_APP.normalizeString(row.OriginalTeacherName),
           originalStatus: ROOMS_APP.normalizeString(row.OriginalStatus),
           replacementTeacherEmail: ROOMS_APP.Replacements.normalizeTeacherEmail_(row.ReplacementTeacherEmail),
           replacementTeacherName: ROOMS_APP.normalizeString(row.ReplacementTeacherName),
@@ -446,7 +616,10 @@ ROOMS_APP.Replacements = {
       savedDraft: savedDraft,
       savedAtISO: this.computeSavedAtISO_(savedClassOutRows, savedTeacherRows, savedAssignmentRows),
       reportStatus: this.getLatestReportStatus_(targetDate),
-      recipients: this.getRecipients_()
+      recipients: this.getRecipients_(),
+      longAssignments: this.buildLongAssignmentsList_(),
+      longTeacherOptions: this.listTimetableTeacherDirectory_(),
+      activeLongAssignments: activeLongAssignments
     };
   },
 
@@ -599,7 +772,8 @@ ROOMS_APP.Replacements = {
       teachers: teacherList,
       teacherMap: teacherMap,
       assignments: normalizedAssignments,
-      assignmentMap: this.indexAssignmentsByKey_(normalizedAssignments)
+      assignmentMap: this.indexAssignmentsByKey_(normalizedAssignments),
+      activeLongAssignments: baseContext.activeLongAssignments || []
     };
   },
 
@@ -902,6 +1076,9 @@ ROOMS_APP.Replacements = {
     }).map(function (entry) {
       return entry.teacherName + (entry.accompaniedClasses.length ? ' [' + entry.accompaniedClasses.join(', ') + ']' : '');
     });
+    var activeLongLines = (normalized.activeLongAssignments || []).map(function (entry) {
+      return entry.originalTeacherName + ' -> ' + entry.replacementTeacherDisplayName + ' (' + entry.startDate + ' / ' + entry.endDate + ')';
+    });
     var assignmentLines = normalized.assignments.map(function (entry) {
       var prefix = entry.period + 'a ora - ' + entry.classCode + ' - ' + entry.originalTeacherName + ': ';
       if (entry.replacementStatus === 'IN_USCITA') {
@@ -919,6 +1096,7 @@ ROOMS_APP.Replacements = {
       'Classi in uscita: ' + (classOutList.length ? classOutList.join(', ') : 'Nessuna'),
       'Docenti assenti: ' + (absentTeachers.length ? absentTeachers.join(', ') : 'Nessuno'),
       'Docenti accompagnatori: ' + (accompanists.length ? accompanists.join(', ') : 'Nessuno'),
+      'Supplenze lunghe attive: ' + (activeLongLines.length ? activeLongLines.join('; ') : 'Nessuna'),
       '',
       'Dettaglio sostituzioni:',
       assignmentLines.length ? assignmentLines.join('\n') : 'Nessuna sostituzione richiesta.',
@@ -935,6 +1113,7 @@ ROOMS_APP.Replacements = {
       '<p><strong>Classi in uscita:</strong> ' + this.escapeHtml_(classOutList.length ? classOutList.join(', ') : 'Nessuna') + '</p>',
       '<p><strong>Docenti assenti:</strong> ' + this.escapeHtml_(absentTeachers.length ? absentTeachers.join(', ') : 'Nessuno') + '</p>',
       '<p><strong>Docenti accompagnatori:</strong> ' + this.escapeHtml_(accompanists.length ? accompanists.join(', ') : 'Nessuno') + '</p>',
+      '<p><strong>Supplenze lunghe attive:</strong> ' + this.escapeHtml_(activeLongLines.length ? activeLongLines.join('; ') : 'Nessuna') + '</p>',
       '<h3>Dettaglio sostituzioni</h3>',
       '<ul>' + assignmentLines.map(function (line) {
         return '<li>' + ROOMS_APP.Replacements.escapeHtml_(line) + '</li>';
@@ -1011,6 +1190,7 @@ ROOMS_APP.Replacements = {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var classOutSet = {};
     var assignmentMap = {};
+    var activeLongAssignmentMap = this.getActiveLongAssignmentsForDate_(targetDate, true);
 
     this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT, targetDate).forEach(function (row) {
       if (!ROOMS_APP.asBoolean(row.IsOut)) {
@@ -1044,10 +1224,11 @@ ROOMS_APP.Replacements = {
     });
 
     return {
-      hasSavedState: Boolean(Object.keys(classOutSet).length || Object.keys(assignmentMap).length),
+      hasSavedState: Boolean(Object.keys(classOutSet).length || Object.keys(assignmentMap).length || Object.keys(activeLongAssignmentMap).length),
       classOutSet: classOutSet,
       classOutSetKeys: Object.keys(classOutSet),
-      assignmentMap: assignmentMap
+      assignmentMap: assignmentMap,
+      longAssignmentMap: activeLongAssignmentMap
     };
   },
 
@@ -1097,9 +1278,98 @@ ROOMS_APP.Replacements = {
     });
   },
 
-  buildTeacherDayTeachers_: function (dateString) {
+  listLongAssignmentRows_: function () {
+    return ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS).map(function (row) {
+      return {
+        Enabled: ROOMS_APP.asBoolean(row.Enabled) ? 'TRUE' : 'FALSE',
+        OriginalTeacherEmail: ROOMS_APP.Replacements.normalizeTeacherEmail_(row.OriginalTeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.OriginalTeacherName),
+        OriginalTeacherName: ROOMS_APP.normalizeString(row.OriginalTeacherName),
+        ReplacementTeacherSurname: ROOMS_APP.normalizeString(row.ReplacementTeacherSurname),
+        ReplacementTeacherName: ROOMS_APP.normalizeString(row.ReplacementTeacherName),
+        ReplacementTeacherDisplayName: ROOMS_APP.Replacements.buildReplacementTeacherDisplayName_(
+          row.ReplacementTeacherSurname,
+          row.ReplacementTeacherName,
+          row.ReplacementTeacherDisplayName
+        ),
+        StartDate: ROOMS_APP.toIsoDate(row.StartDate),
+        EndDate: ROOMS_APP.toIsoDate(row.EndDate),
+        Reason: ROOMS_APP.normalizeString(row.Reason),
+        Notes: ROOMS_APP.normalizeString(row.Notes),
+        UpdatedAtISO: ROOMS_APP.normalizeString(row.UpdatedAtISO),
+        UpdatedBy: ROOMS_APP.normalizeEmail(row.UpdatedBy)
+      };
+    }).filter(function (row) {
+      return Boolean(row.OriginalTeacherEmail && row.OriginalTeacherName && row.ReplacementTeacherDisplayName && row.StartDate && row.EndDate);
+    });
+  },
+
+  buildLongAssignmentsList_: function () {
+    var today = ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow());
+    return this.listLongAssignmentRows_().map(function (row) {
+      var enabled = ROOMS_APP.asBoolean(row.Enabled);
+      var status = 'DISABLED';
+      if (enabled) {
+        if (today < row.StartDate) {
+          status = 'FUTURE';
+        } else if (today > row.EndDate) {
+          status = 'EXPIRED';
+        } else {
+          status = 'ACTIVE';
+        }
+      }
+      return {
+        matchKey: ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row),
+        enabled: enabled,
+        originalTeacherEmail: row.OriginalTeacherEmail,
+        originalTeacherName: row.OriginalTeacherName,
+        replacementTeacherSurname: row.ReplacementTeacherSurname,
+        replacementTeacherName: row.ReplacementTeacherName,
+        replacementTeacherDisplayName: row.ReplacementTeacherDisplayName,
+        startDate: row.StartDate,
+        endDate: row.EndDate,
+        reason: row.Reason,
+        notes: row.Notes,
+        status: status,
+        updatedAtISO: row.UpdatedAtISO,
+        updatedBy: row.UpdatedBy
+      };
+    }).sort(function (left, right) {
+      var teacherDelta = left.originalTeacherName.localeCompare(right.originalTeacherName);
+      if (teacherDelta !== 0) {
+        return teacherDelta;
+      }
+      return left.startDate.localeCompare(right.startDate);
+    });
+  },
+
+  getActiveLongAssignmentsForDate_: function (dateString, asMap) {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
-    var weekday = ROOMS_APP.getWeekdayName(targetDate);
+    var activeRows = this.listLongAssignmentRows_().filter(function (row) {
+      return ROOMS_APP.asBoolean(row.Enabled) && row.StartDate <= targetDate && row.EndDate >= targetDate;
+    }).map(function (row) {
+      return {
+        originalTeacherEmail: row.OriginalTeacherEmail,
+        originalTeacherName: row.OriginalTeacherName,
+        replacementTeacherSurname: row.ReplacementTeacherSurname,
+        replacementTeacherName: row.ReplacementTeacherName,
+        replacementTeacherDisplayName: row.ReplacementTeacherDisplayName,
+        replacementTeacherEmail: ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.ReplacementTeacherDisplayName),
+        startDate: row.StartDate,
+        endDate: row.EndDate,
+        reason: row.Reason,
+        notes: row.Notes
+      };
+    });
+    if (!asMap) {
+      return activeRows;
+    }
+    return activeRows.reduce(function (map, row) {
+      map[row.originalTeacherEmail] = row;
+      return map;
+    }, {});
+  },
+
+  listTimetableTeacherDirectory_: function () {
     var sheetName = ROOMS_APP.Timetable.getConfiguredSourceSheetName_(
       ROOMS_APP.Timetable.CONFIG_DOCENTI_SHEET_KEY_,
       ROOMS_APP.Timetable.DEFAULT_DOCENTI_SHEET_
@@ -1111,7 +1381,47 @@ ROOMS_APP.Replacements = {
 
     var values = ROOMS_APP.Timetable.readSheetDisplayValues_(sheet);
     var columnMeta = ROOMS_APP.Timetable.detectColumnMeta_(values);
-    var teachers = [];
+    var rows = [];
+    var seen = {};
+    var rowIndex;
+
+    for (rowIndex = columnMeta.dataStartRow; rowIndex < values.length; rowIndex += 1) {
+      var rowLabel = ROOMS_APP.normalizeString(values[rowIndex] && values[rowIndex][0]);
+      if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
+        continue;
+      }
+      var teacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
+      if (!teacherEmail || seen[teacherEmail]) {
+        continue;
+      }
+      seen[teacherEmail] = true;
+      rows.push({
+        teacherEmail: teacherEmail,
+        teacherName: rowLabel
+      });
+    }
+
+    return rows.sort(function (left, right) {
+      return left.teacherName.localeCompare(right.teacherName);
+    });
+  },
+
+  buildTeacherDayTeachers_: function (dateString) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
+    var weekday = ROOMS_APP.getWeekdayName(targetDate);
+    var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate, true);
+    var sheetName = ROOMS_APP.Timetable.getConfiguredSourceSheetName_(
+      ROOMS_APP.Timetable.CONFIG_DOCENTI_SHEET_KEY_,
+      ROOMS_APP.Timetable.DEFAULT_DOCENTI_SHEET_
+    );
+    var sheet = ROOMS_APP.DB.getSheet(sheetName);
+    if (!sheet) {
+      return [];
+    }
+
+    var values = ROOMS_APP.Timetable.readSheetDisplayValues_(sheet);
+    var columnMeta = ROOMS_APP.Timetable.detectColumnMeta_(values);
+    var teacherMap = {};
     var rowIndex;
 
     for (rowIndex = columnMeta.dataStartRow; rowIndex < values.length; rowIndex += 1) {
@@ -1120,11 +1430,19 @@ ROOMS_APP.Replacements = {
         continue;
       }
 
-      var teacher = {
-        teacherEmail: this.buildTeacherSyntheticEmail_(rowLabel),
-        teacherName: rowLabel,
-        periods: {}
+      var originalTeacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
+      var longAssignment = activeLongAssignments[originalTeacherEmail] || null;
+      var teacherEmail = longAssignment ? longAssignment.replacementTeacherEmail : originalTeacherEmail;
+      var teacherName = longAssignment ? longAssignment.replacementTeacherDisplayName : rowLabel;
+      var teacher = teacherMap[teacherEmail] || {
+        teacherEmail: teacherEmail,
+        teacherName: teacherName,
+        periods: {},
+        originalTeacherEmails: {}
       };
+      if (originalTeacherEmail) {
+        teacher.originalTeacherEmails[originalTeacherEmail] = rowLabel;
+      }
 
       columnMeta.usableColumns.forEach(function (column) {
         var meta = columnMeta.columns[column] || {};
@@ -1135,10 +1453,12 @@ ROOMS_APP.Replacements = {
         teacher.periods[String(meta.period)] = ROOMS_APP.Replacements.classifyTeacherSlotValue_(rawValue, meta.period, meta.startTime, meta.endTime);
       });
 
-      teachers.push(teacher);
+      teacherMap[teacherEmail] = teacher;
     }
 
-    return teachers.sort(function (left, right) {
+    return Object.keys(teacherMap).map(function (teacherEmail) {
+      return teacherMap[teacherEmail];
+    }).sort(function (left, right) {
       return left.teacherName.localeCompare(right.teacherName);
     });
   },
@@ -1187,15 +1507,24 @@ ROOMS_APP.Replacements = {
     return '';
   },
 
-  findSavedTeacherRow_: function (rows, teacherEmail, teacherName) {
+  findSavedTeacherRow_: function (rows, teacherEmail, teacherName, activeLongAssignments) {
     var normalizedEmail = this.normalizeTeacherEmail_(teacherEmail);
     var normalizedName = ROOMS_APP.normalizeString(teacherName);
     return (rows || []).filter(function (row) {
       var rowEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail);
+      if (!rowEmail) {
+        rowEmail = ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName);
+      }
+      var activeLong = activeLongAssignments && activeLongAssignments[rowEmail] ? activeLongAssignments[rowEmail] : null;
+      if (activeLong) {
+        rowEmail = activeLong.replacementTeacherEmail;
+      }
       if (rowEmail && rowEmail === normalizedEmail) {
         return true;
       }
-      return ROOMS_APP.normalizeString(row.TeacherName) === normalizedName;
+      return activeLong
+        ? activeLong.replacementTeacherDisplayName === normalizedName
+        : ROOMS_APP.normalizeString(row.TeacherName) === normalizedName;
     })[0] || null;
   },
 
@@ -1233,6 +1562,82 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.normalizeString(period),
       ROOMS_APP.normalizeString(classCode).toUpperCase(),
       this.normalizeTeacherEmail_(teacherEmail)
+    ].join('|');
+  },
+
+  normalizeLongAssignmentInput_: function (payload) {
+    var originalTeacherName = ROOMS_APP.normalizeString(payload && payload.originalTeacherName);
+    var originalTeacherEmail = this.normalizeTeacherEmail_(payload && payload.originalTeacherEmail);
+    if (!originalTeacherEmail && originalTeacherName) {
+      originalTeacherEmail = this.buildTeacherSyntheticEmail_(originalTeacherName);
+    }
+    return {
+      matchKey: ROOMS_APP.normalizeString(payload && payload.matchKey),
+      enabled: payload && Object.prototype.hasOwnProperty.call(payload, 'enabled') ? ROOMS_APP.asBoolean(payload.enabled) : true,
+      originalTeacherEmail: originalTeacherEmail,
+      originalTeacherName: originalTeacherName,
+      replacementTeacherSurname: ROOMS_APP.normalizeString(payload && payload.replacementTeacherSurname),
+      replacementTeacherName: ROOMS_APP.normalizeString(payload && payload.replacementTeacherName),
+      replacementTeacherDisplayName: this.buildReplacementTeacherDisplayName_(
+        payload && payload.replacementTeacherSurname,
+        payload && payload.replacementTeacherName,
+        payload && payload.replacementTeacherDisplayName
+      ),
+      startDate: ROOMS_APP.toIsoDate(payload && payload.startDate),
+      endDate: ROOMS_APP.toIsoDate(payload && payload.endDate),
+      reason: ROOMS_APP.normalizeString(payload && payload.reason),
+      notes: ROOMS_APP.normalizeString(payload && payload.notes)
+    };
+  },
+
+  validateLongAssignment_: function (candidate, rows, skipMatchKey) {
+    if (!candidate.originalTeacherEmail || !candidate.originalTeacherName) {
+      throw new Error('Selezionare il docente originale.');
+    }
+    if (!candidate.replacementTeacherSurname || !candidate.replacementTeacherName) {
+      throw new Error('Inserire cognome e nome del supplente.');
+    }
+    if (!candidate.startDate || !candidate.endDate) {
+      throw new Error('Inserire un intervallo date valido.');
+    }
+    if (candidate.startDate > candidate.endDate) {
+      throw new Error('La data iniziale deve essere precedente o uguale alla data finale.');
+    }
+
+    var overlap = (rows || []).filter(function (row) {
+      if (!ROOMS_APP.asBoolean(row.Enabled) || !candidate.enabled) {
+        return false;
+      }
+      if (ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row) === ROOMS_APP.normalizeString(skipMatchKey)) {
+        return false;
+      }
+      if (ROOMS_APP.Replacements.normalizeTeacherEmail_(row.OriginalTeacherEmail) !== candidate.originalTeacherEmail) {
+        return false;
+      }
+      return !(candidate.endDate < row.StartDate || candidate.startDate > row.EndDate);
+    })[0] || null;
+
+    if (overlap) {
+      throw new Error('Intervallo sovrapposto per il docente originale selezionato.');
+    }
+  },
+
+  buildReplacementTeacherDisplayName_: function (surname, name, fallbackDisplayName) {
+    var normalizedSurname = ROOMS_APP.normalizeString(surname).toUpperCase();
+    var normalizedName = ROOMS_APP.normalizeString(name).toUpperCase();
+    var display = [normalizedSurname, normalizedName].filter(function (token) {
+      return Boolean(token);
+    }).join(' ');
+    return display || ROOMS_APP.normalizeString(fallbackDisplayName).toUpperCase();
+  },
+
+  buildLongAssignmentMatchKey_: function (row) {
+    return [
+      this.normalizeTeacherEmail_(row && row.OriginalTeacherEmail),
+      ROOMS_APP.normalizeString(row && row.ReplacementTeacherDisplayName),
+      ROOMS_APP.toIsoDate(row && row.StartDate),
+      ROOMS_APP.toIsoDate(row && row.EndDate),
+      ROOMS_APP.normalizeString(row && row.UpdatedAtISO)
     ].join('|');
   },
 

@@ -62,7 +62,7 @@
 
         <div class="replacement-header">
           <div>
-            <div class="eyebrow">Workflow giornaliero</div>
+            <div class="eyebrow">Workflow sostituzioni</div>
             <h2>Gestione sostituzioni</h2>
             <p class="subtitle">Data selezionata: <span id="replacement-selected-date">-</span></p>
           </div>
@@ -84,59 +84,127 @@
         <div id="replacement-notice" class="notice" style="display:none;"></div>
         <div id="replacement-date-state" class="notice" style="display:none;"></div>
 
-        <div class="replacement-layout">
-          <div class="replacement-column replacement-column-left">
-            <section class="panel form-card replacement-section">
-              <h3>Data</h3>
-              <div class="grid grid-2 replacement-date-grid">
-                <div>
-                  <label for="replacement-date-input">Giorno</label>
-                  <input id="replacement-date-input" class="input" type="date">
+        <div class="replacement-tabs">
+          <button id="replacement-tab-daily" class="button secondary replacement-tab-button" type="button" data-tab="daily">Sostituzioni giornaliere</button>
+          <button id="replacement-tab-long" class="button secondary replacement-tab-button" type="button" data-tab="long">Supplenze lunghe</button>
+        </div>
+
+        <div id="replacement-daily-tab" class="replacement-tab-panel">
+          <div class="replacement-layout">
+            <div class="replacement-column replacement-column-left">
+              <section class="panel form-card replacement-section">
+                <h3>Data</h3>
+                <div class="grid grid-2 replacement-date-grid">
+                  <div>
+                    <label for="replacement-date-input">Giorno</label>
+                    <input id="replacement-date-input" class="input" type="date">
+                  </div>
+                  <div class="replacement-quick-summary" id="replacement-quick-summary"></div>
                 </div>
-                <div class="replacement-quick-summary" id="replacement-quick-summary"></div>
-              </div>
-            </section>
+              </section>
 
-            <section class="panel table-card replacement-section">
-              <h3>Classi in uscita</h3>
-              <div id="replacement-classes-table"></div>
-            </section>
+              <section class="panel table-card replacement-section">
+                <h3>Classi in uscita</h3>
+                <div id="replacement-classes-table"></div>
+              </section>
 
-            <section class="panel table-card replacement-section">
-              <h3>Docenti</h3>
-              <div id="replacement-teachers-table"></div>
-            </section>
+              <section class="panel table-card replacement-section">
+                <h3>Docenti</h3>
+                <div id="replacement-teachers-table"></div>
+              </section>
+            </div>
+
+            <div class="replacement-column replacement-column-right">
+              <section class="panel table-card replacement-section replacement-detail-section">
+                <div class="replacement-detail-header">
+                  <div>
+                    <h3 id="replacement-detail-title">Dettaglio docente</h3>
+                    <p id="replacement-detail-meta" class="subtitle">Seleziona un docente assente per gestire le sostituzioni.</p>
+                  </div>
+                  <span id="replacement-detail-loading" class="status-pill" style="display:none;">Aggiornamento...</span>
+                </div>
+                <div id="replacement-detail-table"></div>
+              </section>
+
+              <section class="panel table-card replacement-section">
+                <div class="replacement-detail-header">
+                  <div>
+                    <h3>Anteprima report</h3>
+                    <p class="subtitle">Generata solo su richiesta. L'invio usa sempre i dati salvati.</p>
+                  </div>
+                </div>
+                <div id="replacement-report-preview"></div>
+              </section>
+            </div>
           </div>
+        </div>
 
-          <div class="replacement-column replacement-column-right">
-            <section class="panel table-card replacement-section replacement-detail-section">
-              <div class="replacement-detail-header">
-                <div>
-                  <h3 id="replacement-detail-title">Dettaglio docente</h3>
-                  <p id="replacement-detail-meta" class="subtitle">Seleziona un docente assente per gestire le sostituzioni.</p>
-                </div>
-                <span id="replacement-detail-loading" class="status-pill" style="display:none;">Aggiornamento...</span>
-              </div>
-              <div id="replacement-detail-table"></div>
-            </section>
-
+        <div id="replacement-long-tab" class="replacement-tab-panel" style="display:none;">
+          <div class="replacement-column">
             <section class="panel table-card replacement-section">
               <div class="replacement-detail-header">
                 <div>
-                  <h3>Anteprima report</h3>
-                  <p class="subtitle">Generata solo su richiesta. L'invio usa sempre i dati salvati.</p>
+                  <h3>Supplenze lunghe</h3>
+                  <p class="subtitle">Override manuale del docente effettivo su intervallo date.</p>
                 </div>
               </div>
-              <div id="replacement-report-preview"></div>
+              <div id="replacement-long-list-table"></div>
+            </section>
+
+            <section class="panel form-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3 id="replacement-long-form-title">Nuova supplenza lunga</h3>
+                  <p class="subtitle">Il supplente puo non appartenere al dominio. Nessuna sovrapposizione ammessa sullo stesso docente originale.</p>
+                </div>
+              </div>
+              <div class="grid grid-2">
+                <div>
+                  <label for="replacement-long-original-teacher">Docente originale</label>
+                  <select id="replacement-long-original-teacher" class="select"></select>
+                </div>
+                <div>
+                  <label for="replacement-long-reason">Motivo</label>
+                  <input id="replacement-long-reason" class="input" type="text" placeholder="Malattia, maternita, aspettativa...">
+                </div>
+                <div>
+                  <label for="replacement-long-surname">Cognome supplente</label>
+                  <input id="replacement-long-surname" class="input" type="text" placeholder="Cognome">
+                </div>
+                <div>
+                  <label for="replacement-long-name">Nome supplente</label>
+                  <input id="replacement-long-name" class="input" type="text" placeholder="Nome">
+                </div>
+                <div>
+                  <label for="replacement-long-start">Data iniziale</label>
+                  <input id="replacement-long-start" class="input" type="date">
+                </div>
+                <div>
+                  <label for="replacement-long-end">Data finale</label>
+                  <input id="replacement-long-end" class="input" type="date">
+                </div>
+              </div>
+              <div style="margin-top:12px;">
+                <label for="replacement-long-notes">Note</label>
+                <textarea id="replacement-long-notes" class="textarea" placeholder="Note interne"></textarea>
+              </div>
+              <div class="toolbar replacement-toolbar replacement-long-form-actions">
+                <button id="replacement-long-save" class="button" type="button">Salva supplenza lunga</button>
+                <button id="replacement-long-cancel" class="button secondary" type="button">Annulla</button>
+              </div>
             </section>
           </div>
         </div>
 
-        <div class="toolbar replacement-toolbar replacement-toolbar-bottom">
+        <div id="replacement-daily-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom">
           <button class="button secondary replacement-action-button" data-replacement-action="preview" type="button">Anteprima report</button>
           <button class="button secondary replacement-action-button" data-replacement-action="send" type="button" disabled>Invia report</button>
           <button class="button replacement-action-button" data-replacement-action="save" type="button" disabled>Salva</button>
           <button class="button secondary" id="replacement-close-button-bottom" type="button">Chiudi</button>
+        </div>
+
+        <div id="replacement-long-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom" style="display:none;">
+          <button class="button secondary" id="replacement-close-button-long-bottom" type="button">Chiudi</button>
         </div>
 
         <div id="replacement-confirm-modal" class="room-panel-unsaved-confirm" style="display:none;">
@@ -341,6 +409,12 @@
         var replacementNotice = document.getElementById('replacement-notice');
         var replacementDateState = document.getElementById('replacement-date-state');
         var replacementSelectedDate = document.getElementById('replacement-selected-date');
+        var replacementTabDaily = document.getElementById('replacement-tab-daily');
+        var replacementTabLong = document.getElementById('replacement-tab-long');
+        var replacementDailyTab = document.getElementById('replacement-daily-tab');
+        var replacementLongTab = document.getElementById('replacement-long-tab');
+        var replacementDailyActionsBottom = document.getElementById('replacement-daily-actions-bottom');
+        var replacementLongActionsBottom = document.getElementById('replacement-long-actions-bottom');
         var replacementDateInput = document.getElementById('replacement-date-input');
         var replacementQuickSummary = document.getElementById('replacement-quick-summary');
         var replacementClassesTable = document.getElementById('replacement-classes-table');
@@ -354,7 +428,19 @@
         var replacementReportPill = document.getElementById('replacement-report-pill');
         var replacementCloseButton = document.getElementById('replacement-close-button');
         var replacementCloseButtonBottom = document.getElementById('replacement-close-button-bottom');
+        var replacementCloseButtonLongBottom = document.getElementById('replacement-close-button-long-bottom');
         var replacementActionButtons = Array.prototype.slice.call(document.querySelectorAll('.replacement-action-button'));
+        var replacementLongListTable = document.getElementById('replacement-long-list-table');
+        var replacementLongFormTitle = document.getElementById('replacement-long-form-title');
+        var replacementLongOriginalTeacher = document.getElementById('replacement-long-original-teacher');
+        var replacementLongReason = document.getElementById('replacement-long-reason');
+        var replacementLongSurname = document.getElementById('replacement-long-surname');
+        var replacementLongName = document.getElementById('replacement-long-name');
+        var replacementLongStart = document.getElementById('replacement-long-start');
+        var replacementLongEnd = document.getElementById('replacement-long-end');
+        var replacementLongNotes = document.getElementById('replacement-long-notes');
+        var replacementLongSave = document.getElementById('replacement-long-save');
+        var replacementLongCancel = document.getElementById('replacement-long-cancel');
         var replacementConfirmModal = document.getElementById('replacement-confirm-modal');
         var replacementConfirmTitle = document.getElementById('replacement-confirm-title');
         var replacementConfirmMessage = document.getElementById('replacement-confirm-message');
@@ -437,13 +523,15 @@
           draft: null,
           date: '',
           dirty: false,
+          activeTab: 'daily',
           loadingRequestSeq: 0,
           detailRequestSeq: 0,
           selectedTeacherEmail: '',
           teacherDetail: null,
           preview: null,
           pendingManualAssignmentKeys: {},
-          confirmAction: null
+          confirmAction: null,
+          longForm: null
         };
         var pendingDiscardAction = null;
         var pendingDiscardRollbackDate = '';
@@ -1576,6 +1664,260 @@
           replacementPreviewMount.appendChild(linesWrap);
         }
 
+        function buildEmptyReplacementLongForm_() {
+          return {
+            matchKey: '',
+            enabled: true,
+            originalTeacherEmail: '',
+            originalTeacherName: '',
+            replacementTeacherSurname: '',
+            replacementTeacherName: '',
+            startDate: replacementState.date || getDefaultPanelDate_(),
+            endDate: replacementState.date || getDefaultPanelDate_(),
+            reason: '',
+            notes: ''
+          };
+        }
+
+        function resetReplacementLongForm_() {
+          replacementState.longForm = buildEmptyReplacementLongForm_();
+        }
+
+        function setReplacementLongForm_(entry) {
+          if (!entry) {
+            resetReplacementLongForm_();
+            return;
+          }
+          replacementState.longForm = {
+            matchKey: entry.matchKey || '',
+            enabled: Boolean(entry.enabled),
+            originalTeacherEmail: entry.originalTeacherEmail || '',
+            originalTeacherName: entry.originalTeacherName || '',
+            replacementTeacherSurname: entry.replacementTeacherSurname || '',
+            replacementTeacherName: entry.replacementTeacherName || '',
+            startDate: entry.startDate || (replacementState.date || getDefaultPanelDate_()),
+            endDate: entry.endDate || (replacementState.date || getDefaultPanelDate_()),
+            reason: entry.reason || '',
+            notes: entry.notes || ''
+          };
+        }
+
+        function renderReplacementLongForm_() {
+          var form = replacementState.longForm || buildEmptyReplacementLongForm_();
+          var options = safeArray(replacementState.model && replacementState.model.longTeacherOptions);
+          if (replacementLongFormTitle) {
+            replacementLongFormTitle.textContent = form.matchKey ? 'Modifica supplenza lunga' : 'Nuova supplenza lunga';
+          }
+          if (replacementLongOriginalTeacher) {
+            ROOMS_UI.clearNode(replacementLongOriginalTeacher);
+            replacementLongOriginalTeacher.appendChild(new Option('Seleziona docente', ''));
+            options.forEach(function (entry) {
+              var option = new Option(entry.teacherName, entry.teacherEmail);
+              option.dataset.teacherName = entry.teacherName || '';
+              if (entry.teacherEmail === form.originalTeacherEmail) {
+                option.selected = true;
+              }
+              replacementLongOriginalTeacher.appendChild(option);
+            });
+          }
+          if (replacementLongReason) {
+            replacementLongReason.value = form.reason || '';
+          }
+          if (replacementLongSurname) {
+            replacementLongSurname.value = form.replacementTeacherSurname || '';
+          }
+          if (replacementLongName) {
+            replacementLongName.value = form.replacementTeacherName || '';
+          }
+          if (replacementLongStart) {
+            replacementLongStart.value = form.startDate || '';
+          }
+          if (replacementLongEnd) {
+            replacementLongEnd.value = form.endDate || '';
+          }
+          if (replacementLongNotes) {
+            replacementLongNotes.value = form.notes || '';
+          }
+        }
+
+        function renderReplacementLongList_() {
+          var rows = safeArray(replacementState.model && replacementState.model.longAssignments);
+          renderTable(
+            'replacement-long-list-table',
+            ['Docente originale', 'Supplente', 'Dal', 'Al', 'Stato', 'Azioni'],
+            rows.map(function (entry) {
+              var statusNode = createReplacementStatusNode_(entry.status === 'ACTIVE' ? 'ASSIGNED' : (entry.status === 'FUTURE' ? 'NO_ACTION' : (entry.status === 'EXPIRED' ? 'NONE' : 'TO_ASSIGN')));
+              statusNode.textContent = entry.status;
+              var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
+
+              var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
+              editButton.type = 'button';
+              editButton.addEventListener('click', function () {
+                setReplacementLongForm_(entry);
+                renderReplacementLongForm_();
+              });
+              actions.appendChild(editButton);
+
+              var toggleButton = ROOMS_UI.el('button', 'button secondary', entry.enabled ? 'Disabilita' : 'Abilita');
+              toggleButton.type = 'button';
+              toggleButton.addEventListener('click', function () {
+                toggleLongReplacement_(entry.matchKey, !entry.enabled);
+              });
+              actions.appendChild(toggleButton);
+
+              var deleteButton = ROOMS_UI.el('button', 'button warn', 'Elimina');
+              deleteButton.type = 'button';
+              deleteButton.addEventListener('click', function () {
+                deleteLongReplacement_(entry.matchKey);
+              });
+              actions.appendChild(deleteButton);
+
+              return [
+                entry.originalTeacherName || '',
+                entry.replacementTeacherDisplayName || '',
+                formatReplacementDate_(entry.startDate),
+                formatReplacementDate_(entry.endDate),
+                statusNode,
+                actions
+              ];
+            }),
+            'Nessuna supplenza lunga configurata.'
+          );
+        }
+
+        function updateReplacementTabUi_() {
+          var isDaily = replacementState.activeTab !== 'long';
+          if (replacementDailyTab) {
+            replacementDailyTab.style.display = isDaily ? 'block' : 'none';
+          }
+          if (replacementLongTab) {
+            replacementLongTab.style.display = isDaily ? 'none' : 'block';
+          }
+          if (replacementDailyActionsBottom) {
+            replacementDailyActionsBottom.style.display = isDaily ? 'flex' : 'none';
+          }
+          if (replacementLongActionsBottom) {
+            replacementLongActionsBottom.style.display = isDaily ? 'none' : 'flex';
+          }
+          if (replacementTabDaily) {
+            replacementTabDaily.classList.toggle('active', isDaily);
+          }
+          if (replacementTabLong) {
+            replacementTabLong.classList.toggle('active', !isDaily);
+          }
+          replacementActionButtons.forEach(function (button) {
+            button.style.display = isDaily ? 'inline-flex' : 'none';
+          });
+          if (replacementReportPill) {
+            replacementReportPill.style.display = isDaily && replacementReportPill.textContent ? 'inline-flex' : 'none';
+          }
+        }
+
+        function ensureCleanDailyDraftForLongAction_() {
+          if (!replacementState.dirty) {
+            return true;
+          }
+          setReplacementNotice_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le supplenze lunghe.', 'error');
+          return false;
+        }
+
+        function switchReplacementTab_(tabName) {
+          replacementState.activeTab = tabName === 'long' ? 'long' : 'daily';
+          renderReplacementModal_();
+        }
+
+        function getReplacementLongFormPayload_() {
+          var teacherOption = replacementLongOriginalTeacher && replacementLongOriginalTeacher.selectedIndex >= 0
+            ? replacementLongOriginalTeacher.options[replacementLongOriginalTeacher.selectedIndex]
+            : null;
+          return {
+            matchKey: replacementState.longForm && replacementState.longForm.matchKey ? replacementState.longForm.matchKey : '',
+            enabled: true,
+            originalTeacherEmail: replacementLongOriginalTeacher ? replacementLongOriginalTeacher.value : '',
+            originalTeacherName: teacherOption ? (teacherOption.dataset.teacherName || teacherOption.textContent || '') : '',
+            replacementTeacherSurname: replacementLongSurname ? replacementLongSurname.value : '',
+            replacementTeacherName: replacementLongName ? replacementLongName.value : '',
+            startDate: replacementLongStart ? replacementLongStart.value : '',
+            endDate: replacementLongEnd ? replacementLongEnd.value : '',
+            reason: replacementLongReason ? replacementLongReason.value : '',
+            notes: replacementLongNotes ? replacementLongNotes.value : ''
+          };
+        }
+
+        function saveLongReplacement_() {
+          if (!ensureCleanDailyDraftForLongAction_()) {
+            return;
+          }
+          setReplacementLoading_(true, 'Salvataggio supplenza lunga...');
+          ROOMS_UI.call('saveLongReplacementAssignment', getReplacementLongFormPayload_(), replacementState.date)
+            .then(function (result) {
+              var model = result && result.model ? result.model : null;
+              applyReplacementModel_(model, {
+                keepDirty: false
+              });
+              resetReplacementLongForm_();
+              replacementState.activeTab = 'long';
+              setReplacementNotice_('Supplenza lunga salvata.', 'success');
+              refresh({ skipPanelRefresh: false });
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore salvataggio supplenza lunga.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
+        }
+
+        function toggleLongReplacement_(matchKey, enabled) {
+          if (!ensureCleanDailyDraftForLongAction_()) {
+            return;
+          }
+          setReplacementLoading_(true, enabled ? 'Abilitazione supplenza lunga...' : 'Disabilitazione supplenza lunga...');
+          ROOMS_UI.call('toggleLongReplacementAssignment', matchKey, enabled, replacementState.date)
+            .then(function (result) {
+              applyReplacementModel_(result && result.model ? result.model : null, {
+                keepDirty: false
+              });
+              replacementState.activeTab = 'long';
+              setReplacementNotice_('Supplenza lunga aggiornata.', 'success');
+              refresh({ skipPanelRefresh: false });
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore aggiornamento supplenza lunga.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
+        }
+
+        function deleteLongReplacement_(matchKey) {
+          if (!ensureCleanDailyDraftForLongAction_()) {
+            return;
+          }
+          openReplacementConfirm_('Elimina supplenza lunga', 'Confermare eliminazione della supplenza lunga selezionata?', function () {
+            setReplacementLoading_(true, 'Eliminazione supplenza lunga...');
+            ROOMS_UI.call('deleteLongReplacementAssignment', matchKey, replacementState.date)
+              .then(function (result) {
+                applyReplacementModel_(result && result.model ? result.model : null, {
+                  keepDirty: false
+                });
+                resetReplacementLongForm_();
+                replacementState.activeTab = 'long';
+                setReplacementNotice_('Supplenza lunga eliminata.', 'success');
+                refresh({ skipPanelRefresh: false });
+              })
+              .catch(function (error) {
+                setReplacementNotice_(error && error.message ? error.message : 'Errore eliminazione supplenza lunga.', 'error');
+              })
+              .then(function () {
+                setReplacementLoading_(false);
+                renderReplacementModal_();
+              });
+          });
+        }
+
         function renderReplacementModal_() {
           if (!replacementState.isOpen) {
             return;
@@ -1593,6 +1935,9 @@
           renderReplacementTeachers_();
           renderReplacementDetail_();
           renderReplacementPreview_();
+          renderReplacementLongList_();
+          renderReplacementLongForm_();
+          updateReplacementTabUi_();
 
           if (model.dateState) {
             if (!model.dateState.isValid) {
@@ -1613,6 +1958,9 @@
           replacementState.model = model && typeof model === 'object' ? model : {};
           replacementState.date = replacementState.model.date || replacementState.date || getDefaultPanelDate_();
           replacementState.draft = buildReplacementDraftFromModel_(replacementState.model);
+          if (!replacementState.longForm) {
+            resetReplacementLongForm_();
+          }
           if (!settings.keepDirty) {
             replacementState.dirty = false;
           }
@@ -1727,10 +2075,12 @@
           replacementState.draft = null;
           replacementState.date = '';
           replacementState.dirty = false;
+          replacementState.activeTab = 'daily';
           replacementState.selectedTeacherEmail = '';
           replacementState.teacherDetail = null;
           replacementState.preview = null;
           replacementState.pendingManualAssignmentKeys = {};
+          replacementState.longForm = null;
           closeReplacementConfirm_();
           setReplacementNotice_('', '');
           setReplacementDateStateMessage_('', '');
@@ -1752,11 +2102,13 @@
             return;
           }
           replacementState.isOpen = true;
+          replacementState.activeTab = 'daily';
           replacementModal.style.display = 'flex';
           replacementState.preview = null;
           replacementState.pendingManualAssignmentKeys = {};
           replacementState.teacherDetail = null;
           replacementState.selectedTeacherEmail = '';
+          resetReplacementLongForm_();
           loadReplacementModel_(getDefaultPanelDate_(), null, {
             allowAutoShift: true,
             keepDirty: false,
@@ -3169,6 +3521,16 @@
         if (replacementDateInput) {
           replacementDateInput.addEventListener('change', handleReplacementDateChange_);
         }
+        if (replacementTabDaily) {
+          replacementTabDaily.addEventListener('click', function () {
+            switchReplacementTab_('daily');
+          });
+        }
+        if (replacementTabLong) {
+          replacementTabLong.addEventListener('click', function () {
+            switchReplacementTab_('long');
+          });
+        }
         replacementActionButtons.forEach(function (button) {
           button.addEventListener('click', function () {
             var action = button.getAttribute('data-replacement-action');
@@ -3186,6 +3548,18 @@
         }
         if (replacementCloseButtonBottom) {
           replacementCloseButtonBottom.addEventListener('click', closeReplacementModal_);
+        }
+        if (replacementCloseButtonLongBottom) {
+          replacementCloseButtonLongBottom.addEventListener('click', closeReplacementModal_);
+        }
+        if (replacementLongSave) {
+          replacementLongSave.addEventListener('click', saveLongReplacement_);
+        }
+        if (replacementLongCancel) {
+          replacementLongCancel.addEventListener('click', function () {
+            resetReplacementLongForm_();
+            renderReplacementLongForm_();
+          });
         }
         if (replacementConfirmYes) {
           replacementConfirmYes.addEventListener('click', function () {

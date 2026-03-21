@@ -235,6 +235,24 @@ function sendReplacementReport(dateString, requestContext) {
   });
 }
 
+function saveLongReplacementAssignment(payload, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.saveLongAssignment(payload || {}, dateString);
+  });
+}
+
+function toggleLongReplacementAssignment(matchKey, enabled, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.toggleLongAssignment(matchKey, enabled, dateString);
+  });
+}
+
+function deleteLongReplacementAssignment(matchKey, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.deleteLongAssignment(matchKey, dateString);
+  });
+}
+
 function previewRecurringRoomBooking(payload) {
   return ROOMS_APP.Recurring.previewWeekly(payload);
 }
@@ -399,6 +417,15 @@ function routeApiRequest_(payload) {
   }
   if (action === 'sendReplacementReport') {
     return ROOMS_APP.Replacements.sendReport(payload.date);
+  }
+  if (action === 'saveLongReplacementAssignment') {
+    return ROOMS_APP.Replacements.saveLongAssignment(payload.assignment || payload, payload.date);
+  }
+  if (action === 'toggleLongReplacementAssignment') {
+    return ROOMS_APP.Replacements.toggleLongAssignment(payload.matchKey, payload.enabled, payload.date);
+  }
+  if (action === 'deleteLongReplacementAssignment') {
+    return ROOMS_APP.Replacements.deleteLongAssignment(payload.matchKey, payload.date);
   }
   if (action === 'getAulaMagnaEditorModel') {
     return ROOMS_APP.Booking.getAulaMagnaEditorModel(

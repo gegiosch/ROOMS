@@ -33,6 +33,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_LOG] = true;
     return sheets;
@@ -51,6 +52,7 @@ ROOMS_APP.Schema = {
     this.ensureReplacementClassOut();
     this.ensureReplacementDayTeachers();
     this.ensureReplacementAssignments();
+    this.ensureReplacementLongAssignments();
     this.ensureReportRecipients();
     this.ensureReportLog();
     this.ensureWeekSchedule();
@@ -244,6 +246,23 @@ ROOMS_APP.Schema = {
       'ReplacementTeacherName',
       'ReplacementSource',
       'ReplacementStatus',
+      'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementLongAssignments: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS, [
+      'Enabled',
+      'OriginalTeacherEmail',
+      'OriginalTeacherName',
+      'ReplacementTeacherSurname',
+      'ReplacementTeacherName',
+      'ReplacementTeacherDisplayName',
+      'StartDate',
+      'EndDate',
+      'Reason',
       'Notes',
       'UpdatedAtISO',
       'UpdatedBy'
