@@ -552,6 +552,7 @@ ROOMS_APP.Replacements = {
   buildDayContext_: function (dateString) {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate);
+    var activeLongAssignmentMap = this.getActiveLongAssignmentsForDate_(targetDate, true);
     var baseTeachers = this.buildTeacherDayTeachers_(targetDate);
     var savedClassOutRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT, targetDate);
     var savedTeacherRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS, targetDate);
@@ -574,14 +575,14 @@ ROOMS_APP.Replacements = {
       if (!teacherEmail) {
         teacherEmail = ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName);
       }
-      if (activeLongAssignments[teacherEmail]) {
-        teacherEmail = activeLongAssignments[teacherEmail].replacementTeacherEmail;
+      if (activeLongAssignmentMap[teacherEmail]) {
+        teacherEmail = activeLongAssignmentMap[teacherEmail].replacementTeacherEmail;
       }
       if (!teacherMap[teacherEmail]) {
         teacherMap[teacherEmail] = {
           teacherEmail: teacherEmail,
-          teacherName: activeLongAssignments[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)]
-            ? activeLongAssignments[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)].replacementTeacherDisplayName
+          teacherName: activeLongAssignmentMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)]
+            ? activeLongAssignmentMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)].replacementTeacherDisplayName
             : ROOMS_APP.normalizeString(row.TeacherName),
           periods: {}
         };
@@ -599,7 +600,7 @@ ROOMS_APP.Replacements = {
 
     var teachers = Object.keys(teacherMap).map(function (teacherEmail) {
       var teacher = teacherMap[teacherEmail];
-      var saved = ROOMS_APP.Replacements.findSavedTeacherRow_(savedTeacherRows, teacherEmail, teacher.teacherName, activeLongAssignments) || {};
+      var saved = ROOMS_APP.Replacements.findSavedTeacherRow_(savedTeacherRows, teacherEmail, teacher.teacherName, activeLongAssignmentMap) || {};
       var accompaniedClasses = ROOMS_APP.Replacements.parsePipeList_(saved.AccompaniedClasses);
       accompaniedClasses.forEach(function (classCode) {
         classSet[classCode] = true;
@@ -645,7 +646,7 @@ ROOMS_APP.Replacements = {
       }),
       assignments: savedAssignmentRows.map(function (row) {
         var originalTeacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.OriginalTeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.OriginalTeacherName);
-        var activeLongAssignment = activeLongAssignments[originalTeacherEmail] || null;
+        var activeLongAssignment = activeLongAssignmentMap[originalTeacherEmail] || null;
         return {
           period: ROOMS_APP.normalizeString(row.Period),
           classCode: ROOMS_APP.normalizeString(row.ClassCode).toUpperCase(),
@@ -673,7 +674,8 @@ ROOMS_APP.Replacements = {
       recipients: this.getRecipients_(),
       longAssignments: this.buildLongAssignmentsList_(),
       longTeacherOptions: this.listTimetableTeacherDirectory_(),
-      activeLongAssignments: activeLongAssignments
+      activeLongAssignments: activeLongAssignments,
+      activeLongAssignmentMap: activeLongAssignmentMap
     };
   },
 
