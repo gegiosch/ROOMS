@@ -108,11 +108,13 @@ ROOMS_APP.Replacements = {
     var context = this.buildDayContext_(targetDate);
     var normalized = this.normalizeDraft_(targetDate, draft, context);
     var validationErrors = this.validateDraft_(normalized);
+    var savedPreviewPayload;
     if (validationErrors.length) {
       throw new Error(validationErrors.join(' '));
     }
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var updatedBy = actor.email;
+    savedPreviewPayload = this.buildReportPayload_(normalized, context.recipients, validationErrors);
 
     var classRows = normalized.classes.filter(function (entry) {
       return Boolean(entry.isOut);
@@ -169,7 +171,8 @@ ROOMS_APP.Replacements = {
     return {
       ok: true,
       savedAtISO: nowIso,
-      model: this.getModalModel(targetDate)
+      model: this.getModalModel(targetDate),
+      preview: savedPreviewPayload
     };
   },
 

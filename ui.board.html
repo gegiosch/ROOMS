@@ -2756,6 +2756,7 @@
         }
 
         function saveReplacementDay_() {
+          var hadPreviewBeforeSave;
           if (!replacementState.dirty || !isReplacementDateValid_()) {
             return;
           }
@@ -2763,14 +2764,18 @@
             setReplacementNotice_(replacementState.localValidationErrors.join(' '), 'error');
             return;
           }
+          hadPreviewBeforeSave = Boolean(replacementState.preview);
           setReplacementLoading_(true, 'Salvataggio sostituzioni...');
           ROOMS_UI.call('saveReplacementDay', replacementState.date, cloneReplacementData_(replacementState.draft))
             .then(function (result) {
               var model = result && result.model ? result.model : null;
+              var savedPreview = result && result.preview ? result.preview : null;
+              if (hadPreviewBeforeSave && savedPreview) {
+                replacementState.preview = savedPreview;
+              }
               applyReplacementModel_(model, {
                 keepDirty: false
               });
-              replacementState.preview = null;
               setReplacementNotice_('Sostituzioni salvate con successo.', 'success');
               if (replacementState.selectedTeacherEmail) {
                 loadReplacementTeacherDetail_(replacementState.selectedTeacherEmail, {});
