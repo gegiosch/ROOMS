@@ -1064,19 +1064,27 @@
 
         function normalizeReplacementHandlingType_(value) {
           var normalized = String(value || '').trim().toUpperCase();
-          if (normalized === 'LATE_ENTRY' || normalized === 'EARLY_EXIT' || normalized === 'CO_TEACHING') {
+          if (normalized === 'RECOVERY' || normalized === 'SHIFT_WITHIN_CLASS' || normalized === 'CO_TEACHING') {
             return normalized;
           }
           return 'SUBSTITUTION';
         }
 
+        function normalizeReplacementClassHandlingType_(value) {
+          var normalized = String(value || '').trim().toUpperCase();
+          if (normalized === 'LATE_ENTRY' || normalized === 'EARLY_EXIT') {
+            return normalized;
+          }
+          return '';
+        }
+
         function getReplacementHandlingTypeLabel_(handlingType) {
           var normalized = normalizeReplacementHandlingType_(handlingType);
-          if (normalized === 'LATE_ENTRY') {
-            return 'Entrata posticipata';
+          if (normalized === 'RECOVERY') {
+            return 'Recupero';
           }
-          if (normalized === 'EARLY_EXIT') {
-            return 'Uscita anticipata';
+          if (normalized === 'SHIFT_WITHIN_CLASS') {
+            return 'Spostamento stessa classe';
           }
           if (normalized === 'CO_TEACHING') {
             return 'Compresenza';
@@ -1112,6 +1120,20 @@
                 notes: entry.notes || ''
               };
             }),
+            hourlyAbsences: safeArray(effectiveModel.hourlyAbsences).map(function (entry) {
+              return {
+                date: entry.date || '',
+                teacherEmail: entry.teacherEmail || '',
+                teacherName: entry.teacherName || '',
+                period: entry.period || '',
+                reason: entry.reason || '',
+                recoveryRequired: Boolean(entry.recoveryRequired),
+                recoveryStatus: entry.recoveryStatus || '',
+                recoveredOnDate: entry.recoveredOnDate || '',
+                recoveredByAssignmentKey: entry.recoveredByAssignmentKey || '',
+                notes: entry.notes || ''
+              };
+            }),
             assignments: safeArray(effectiveModel.assignments).map(function (entry) {
               return {
                 period: entry.period || '',
@@ -1119,11 +1141,18 @@
                 originalTeacherEmail: entry.originalTeacherEmail || '',
                 originalTeacherName: entry.originalTeacherName || '',
                 originalStatus: entry.originalStatus || '',
+                classHandlingType: normalizeReplacementClassHandlingType_(entry.classHandlingType),
                 handlingType: normalizeReplacementHandlingType_(entry.handlingType),
                 replacementTeacherEmail: entry.replacementTeacherEmail || '',
                 replacementTeacherName: entry.replacementTeacherName || '',
                 replacementSource: entry.replacementSource || '',
                 replacementStatus: entry.replacementStatus || '',
+                recoverySourceDate: entry.recoverySourceDate || '',
+                recoverySourcePeriod: entry.recoverySourcePeriod || '',
+                shiftOriginPeriod: entry.shiftOriginPeriod || '',
+                shiftTargetPeriod: entry.shiftTargetPeriod || '',
+                shiftTeacherEmail: entry.shiftTeacherEmail || '',
+                shiftTeacherName: entry.shiftTeacherName || '',
                 notes: entry.notes || ''
               };
             })
@@ -1175,6 +1204,42 @@
             }
           });
           return set;
+        }
+
+        function buildReplacementHourlyAbsenceKey_(teacherEmail, period) {
+          return [
+            normalizeReplacementTeacherEmail_(teacherEmail),
+            String(period || '')
+          ].join('|');
+        }
+
+        function buildReplacementHourlyAbsenceDateKey_(dateString, teacherEmail, period) {
+          return [
+            String(dateString || ''),
+            normalizeReplacementTeacherEmail_(teacherEmail),
+            String(period || '')
+          ].join('|');
+        }
+
+        function buildReplacementAssignmentLinkKey_(dateString, period, classCode, teacherEmail) {
+          return [
+            String(dateString || ''),
+            String(period || ''),
+            normalizeReplacementClassCode_(classCode),
+            normalizeReplacementTeacherEmail_(teacherEmail)
+          ].join('|');
+        }
+
+        function getReplacementHourlyAbsenceMap_() {
+          var map = {};
+          safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).forEach(function (entry) {
+            var key = buildReplacementHourlyAbsenceKey_(entry && entry.teacherEmail, entry && entry.period);
+            if (!key) {
+              return;
+            }
+            map[key] = entry;
+          });
+          return map;
         }
 
         function getReplacementEffectiveTeachers_() {
@@ -1229,11 +1294,18 @@
               originalTeacherEmail: normalizeReplacementTeacherEmail_(entry.originalTeacherEmail),
               originalTeacherName: entry.originalTeacherName || '',
               originalStatus: entry.originalStatus || '',
+              classHandlingType: normalizeReplacementClassHandlingType_(entry.classHandlingType),
               handlingType: normalizeReplacementHandlingType_(entry.handlingType),
               replacementTeacherEmail: normalizeReplacementTeacherEmail_(entry.replacementTeacherEmail),
               replacementTeacherName: entry.replacementTeacherName || '',
               replacementSource: entry.replacementSource || '',
               replacementStatus: entry.replacementStatus || '',
+              recoverySourceDate: entry.recoverySourceDate || '',
+              recoverySourcePeriod: entry.recoverySourcePeriod || '',
+              shiftOriginPeriod: entry.shiftOriginPeriod || '',
+              shiftTargetPeriod: entry.shiftTargetPeriod || '',
+              shiftTeacherEmail: normalizeReplacementTeacherEmail_(entry.shiftTeacherEmail),
+              shiftTeacherName: entry.shiftTeacherName || '',
               notes: entry.notes || ''
             };
           });
@@ -1243,7 +1315,15 @@
         function buildReplacementEffectiveAssignments_(teachers) {
           var classOutSet = getReplacementClassOutSet_();
           var draftAssignmentMap = buildReplacementDraftAssignmentMap_();
-          var assignments = [];
+          var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
+          var teacherMap = {};
+          var affectedMap = {};
+
+          safeArray(teachers).forEach(function (teacher) {
+            if (teacher && teacher.teacherEmail) {
+              teacherMap[normalizeReplacementTeacherEmail_(teacher.teacherEmail)] = teacher;
+            }
+          });
 
           safeArray(teachers).forEach(function (teacher) {
             if (!teacher || !teacher.absent) {
@@ -1251,97 +1331,114 @@
             }
             Object.keys(teacher.periods || {}).forEach(function (period) {
               var slot = teacher.periods[period];
+              var key;
               if (!slot || slot.type !== 'CLASS' || !slot.classCode) {
                 return;
               }
-              var classCode = normalizeReplacementClassCode_(slot.classCode);
-              var originalStatus = teacher.accompanist ? 'ACCOMPANIST' : 'ABSENT';
-              var assignmentKey = buildReplacementAssignmentKey_(period, classCode, teacher.teacherEmail);
-              var draftEntry = draftAssignmentMap[assignmentKey] || {};
-              var handlingType = normalizeReplacementHandlingType_(draftEntry.handlingType);
-              var isCoveredByOuting = Boolean(
-                teacher.accompanist &&
-                classOutSet[classCode] &&
-                safeArray(teacher.accompaniedClasses).indexOf(classCode) >= 0
-              );
-
-              if (isCoveredByOuting) {
-                assignments.push({
-                  date: replacementState.date,
-                  period: String(period || ''),
-                  classCode: classCode,
-                  originalTeacherEmail: teacher.teacherEmail,
-                  originalTeacherName: teacher.teacherName,
-                  originalStatus: originalStatus,
-                  handlingType: 'SUBSTITUTION',
-                  replacementTeacherEmail: '',
-                  replacementTeacherName: '',
-                  replacementSource: '',
-                  replacementStatus: 'IN_USCITA',
-                  notes: draftEntry.notes || '',
-                  startTime: slot.startTime || '',
-                  endTime: slot.endTime || ''
-                });
-                return;
-              }
-
-              if (handlingType !== 'SUBSTITUTION') {
-                assignments.push({
-                  date: replacementState.date,
-                  period: String(period || ''),
-                  classCode: classCode,
-                  originalTeacherEmail: teacher.teacherEmail,
-                  originalTeacherName: teacher.teacherName,
-                  originalStatus: originalStatus,
-                  handlingType: handlingType,
-                  replacementTeacherEmail: '',
-                  replacementTeacherName: '',
-                  replacementSource: '',
-                  replacementStatus: handlingType,
-                  notes: draftEntry.notes || '',
-                  startTime: slot.startTime || '',
-                  endTime: slot.endTime || ''
-                });
-                return;
-              }
-
-              if (draftEntry.replacementTeacherEmail || draftEntry.replacementTeacherName) {
-                assignments.push({
-                  date: replacementState.date,
-                  period: String(period || ''),
-                  classCode: classCode,
-                  originalTeacherEmail: teacher.teacherEmail,
-                  originalTeacherName: teacher.teacherName,
-                  originalStatus: originalStatus,
-                  handlingType: 'SUBSTITUTION',
-                  replacementTeacherEmail: draftEntry.replacementTeacherEmail || '',
-                  replacementTeacherName: draftEntry.replacementTeacherName || '',
-                  replacementSource: draftEntry.replacementSource || 'MANUAL',
-                  replacementStatus: 'ASSIGNED',
-                  notes: draftEntry.notes || '',
-                  startTime: slot.startTime || '',
-                  endTime: slot.endTime || ''
-                });
-                return;
-              }
-
-              assignments.push({
-                date: replacementState.date,
+              key = buildReplacementAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
+              affectedMap[key] = {
+                teacher: teacher,
                 period: String(period || ''),
-                classCode: classCode,
-                originalTeacherEmail: teacher.teacherEmail,
-                originalTeacherName: teacher.teacherName,
-                originalStatus: originalStatus,
-                handlingType: 'SUBSTITUTION',
-                replacementTeacherEmail: '',
-                replacementTeacherName: '',
-                replacementSource: '',
-                replacementStatus: 'TO_ASSIGN',
-                notes: draftEntry.notes || '',
-                startTime: slot.startTime || '',
-                endTime: slot.endTime || ''
-              });
+                slot: slot,
+                originalStatus: teacher.accompanist ? 'ACCOMPANIST' : 'ABSENT'
+              };
             });
+          });
+
+          Object.keys(hourlyAbsenceMap).forEach(function (key) {
+            var entry = hourlyAbsenceMap[key];
+            var teacher = teacherMap[normalizeReplacementTeacherEmail_(entry.teacherEmail)] || null;
+            var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
+            var assignmentKey;
+            if (!teacher || teacher.absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+              return;
+            }
+            assignmentKey = buildReplacementAssignmentKey_(entry.period, slot.classCode, teacher.teacherEmail);
+            if (!affectedMap[assignmentKey]) {
+              affectedMap[assignmentKey] = {
+                teacher: teacher,
+                period: String(entry.period || ''),
+                slot: slot,
+                originalStatus: 'HOURLY_ABSENCE'
+              };
+            }
+          });
+
+          var assignments = Object.keys(affectedMap).map(function (assignmentKey) {
+            var meta = affectedMap[assignmentKey];
+            var teacher = meta.teacher;
+            var slot = meta.slot || {};
+            var draftEntry = draftAssignmentMap[assignmentKey] || {};
+            var classCode = normalizeReplacementClassCode_(slot.classCode);
+            var classHandlingType = normalizeReplacementClassHandlingType_(draftEntry.classHandlingType);
+            var handlingType = normalizeReplacementHandlingType_(draftEntry.handlingType);
+            var hourlyAbsenceEntry = hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacher.teacherEmail, meta.period)] || null;
+            var isCoveredByOuting = Boolean(
+              teacher.accompanist &&
+              classOutSet[classCode] &&
+              safeArray(teacher.accompaniedClasses).indexOf(classCode) >= 0
+            );
+            var next = {
+              date: replacementState.date,
+              period: String(meta.period || ''),
+              classCode: classCode,
+              originalTeacherEmail: teacher.teacherEmail,
+              originalTeacherName: teacher.teacherName,
+              originalStatus: meta.originalStatus,
+              classHandlingType: classHandlingType,
+              handlingType: handlingType,
+              replacementTeacherEmail: draftEntry.replacementTeacherEmail || '',
+              replacementTeacherName: draftEntry.replacementTeacherName || '',
+              replacementSource: draftEntry.replacementSource || '',
+              replacementStatus: '',
+              recoverySourceDate: draftEntry.recoverySourceDate || '',
+              recoverySourcePeriod: draftEntry.recoverySourcePeriod || '',
+              shiftOriginPeriod: draftEntry.shiftOriginPeriod || '',
+              shiftTargetPeriod: draftEntry.shiftTargetPeriod || String(meta.period || ''),
+              shiftTeacherEmail: draftEntry.shiftTeacherEmail || '',
+              shiftTeacherName: draftEntry.shiftTeacherName || '',
+              notes: draftEntry.notes || (hourlyAbsenceEntry && hourlyAbsenceEntry.notes) || '',
+              startTime: slot.startTime || '',
+              endTime: slot.endTime || ''
+            };
+
+            if (isCoveredByOuting) {
+              next.handlingType = 'SUBSTITUTION';
+              next.classHandlingType = '';
+              next.replacementStatus = 'IN_USCITA';
+              next.replacementTeacherEmail = '';
+              next.replacementTeacherName = '';
+              next.replacementSource = '';
+              return next;
+            }
+            if (classHandlingType) {
+              next.replacementStatus = classHandlingType;
+              return next;
+            }
+            if (handlingType === 'RECOVERY') {
+              next.replacementStatus = next.replacementTeacherEmail && next.recoverySourceDate && next.recoverySourcePeriod ? 'ASSIGNED' : 'TO_ASSIGN';
+              return next;
+            }
+            if (handlingType === 'SHIFT_WITHIN_CLASS') {
+              next.replacementStatus = next.shiftTeacherEmail && next.shiftOriginPeriod ? 'SHIFT_WITHIN_CLASS' : 'TO_ASSIGN';
+              if (!next.replacementTeacherEmail) {
+                next.replacementTeacherEmail = next.shiftTeacherEmail;
+              }
+              if (!next.replacementTeacherName) {
+                next.replacementTeacherName = next.shiftTeacherName;
+              }
+              return next;
+            }
+            if (handlingType === 'CO_TEACHING') {
+              next.replacementStatus = 'CO_TEACHING';
+              return next;
+            }
+            next.handlingType = 'SUBSTITUTION';
+            next.replacementStatus = next.replacementTeacherEmail || next.replacementTeacherName ? 'ASSIGNED' : 'TO_ASSIGN';
+            if (next.replacementStatus === 'ASSIGNED' && !next.replacementSource) {
+              next.replacementSource = 'MANUAL';
+            }
+            return next;
           });
 
           return assignments.sort(function (left, right) {
@@ -1361,12 +1458,24 @@
           var byPeriod = {};
           safeArray(assignments).forEach(function (assignment) {
             var period;
-            var teacherEmail;
-            if (!assignment || assignment.replacementStatus !== 'ASSIGNED') {
+            var teacherEmail = normalizeReplacementTeacherEmail_(assignment && assignment.replacementTeacherEmail);
+            var shiftTeacherEmail = normalizeReplacementTeacherEmail_(assignment && assignment.shiftTeacherEmail);
+            if (!assignment) {
+              return;
+            }
+            if (assignment.replacementStatus === 'SHIFT_WITHIN_CLASS' && shiftTeacherEmail) {
+              period = String(assignment.period || '');
+              if (!period) {
+                return;
+              }
+              byPeriod[period] = byPeriod[period] || {};
+              byPeriod[period][shiftTeacherEmail] = true;
+              return;
+            }
+            if (assignment.replacementStatus !== 'ASSIGNED') {
               return;
             }
             period = String(assignment.period || '');
-            teacherEmail = normalizeReplacementTeacherEmail_(assignment.replacementTeacherEmail);
             if (!period || !teacherEmail) {
               return;
             }
@@ -1387,8 +1496,20 @@
         }
 
         function buildReplacementCandidateLists_(teachers, targetTeacher, period, currentAssignment, assignedByPeriod) {
+          var handlingType = normalizeReplacementHandlingType_(currentAssignment && currentAssignment.handlingType);
+          if (handlingType === 'RECOVERY') {
+            return buildReplacementRecoveryCandidateLists_(teachers, period, currentAssignment, assignedByPeriod);
+          }
+          if (handlingType === 'SHIFT_WITHIN_CLASS') {
+            return buildReplacementShiftCandidateLists_(teachers, period, currentAssignment, assignedByPeriod);
+          }
+          return buildReplacementSubstitutionCandidateLists_(teachers, targetTeacher, period, currentAssignment, assignedByPeriod);
+        }
+
+        function buildReplacementSubstitutionCandidateLists_(teachers, targetTeacher, period, currentAssignment, assignedByPeriod) {
           var usedTeachers = Object.assign({}, assignedByPeriod[String(period || '')] || {});
           var classOutSet = getReplacementClassOutSet_();
+          var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
           var classOutCandidates = [];
           var pCandidates = [];
           var dCandidates = [];
@@ -1406,6 +1527,9 @@
               return;
             }
             if (teacher.absent || usedTeachers[teacherEmail]) {
+              return;
+            }
+            if (hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacherEmail, period)]) {
               return;
             }
             if (slot.type === 'CLASS' && teacher.accompanist && safeArray(teacher.accompaniedClasses).indexOf(slotClassCode) >= 0 && classOutSet[slotClassCode]) {
@@ -1474,6 +1598,148 @@
           };
         }
 
+        function buildReplacementPendingRecoveryRows_() {
+          var map = {};
+          safeArray(replacementState.model && replacementState.model.pendingRecoveryRows).forEach(function (entry) {
+            map[buildReplacementHourlyAbsenceDateKey_(entry.date, entry.teacherEmail, entry.period)] = entry;
+          });
+          safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).forEach(function (entry) {
+            if (!entry || !entry.recoveryRequired) {
+              return;
+            }
+            map[buildReplacementHourlyAbsenceDateKey_(replacementState.date, entry.teacherEmail, entry.period)] = {
+              date: replacementState.date,
+              teacherEmail: entry.teacherEmail,
+              teacherName: entry.teacherName,
+              period: entry.period
+            };
+          });
+          safeArray(replacementState.localAssignments).forEach(function (entry) {
+            if (!entry || normalizeReplacementHandlingType_(entry.handlingType) !== 'RECOVERY' || entry.replacementStatus !== 'ASSIGNED') {
+              return;
+            }
+            delete map[buildReplacementHourlyAbsenceDateKey_(entry.recoverySourceDate, entry.replacementTeacherEmail, entry.recoverySourcePeriod)];
+          });
+          return Object.keys(map).map(function (key) {
+            return map[key];
+          });
+        }
+
+        function isReplacementTeacherEligibleForRecovery_(teacher, period, assignedByPeriod, currentAssignment) {
+          var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+          var usedTeachers = Object.assign({}, assignedByPeriod[String(period || '')] || {});
+          var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
+          var slot = teacher && teacher.periods ? teacher.periods[period] : null;
+          if (!teacherEmail || !teacher || teacher.absent || teacher.accompanist) {
+            return false;
+          }
+          if (currentAssignment && normalizeReplacementTeacherEmail_(currentAssignment.replacementTeacherEmail) === teacherEmail) {
+            delete usedTeachers[teacherEmail];
+          }
+          if (usedTeachers[teacherEmail] || hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacherEmail, period)]) {
+            return false;
+          }
+          return !slot || slot.type === 'FREE';
+        }
+
+        function buildReplacementRecoveryCandidateLists_(teachers, period, currentAssignment, assignedByPeriod) {
+          var candidates = [];
+          var currentKey = buildReplacementHourlyAbsenceDateKey_(
+            currentAssignment && currentAssignment.recoverySourceDate,
+            currentAssignment && currentAssignment.replacementTeacherEmail,
+            currentAssignment && currentAssignment.recoverySourcePeriod
+          );
+          buildReplacementPendingRecoveryRows_().forEach(function (entry) {
+            var teacher = safeArray(teachers).filter(function (candidate) {
+              return normalizeReplacementTeacherEmail_(candidate.teacherEmail) === normalizeReplacementTeacherEmail_(entry.teacherEmail);
+            })[0] || null;
+            var key = buildReplacementHourlyAbsenceDateKey_(entry.date, entry.teacherEmail, entry.period);
+            if (!teacher) {
+              return;
+            }
+            if (key !== currentKey && !isReplacementTeacherEligibleForRecovery_(teacher, period, assignedByPeriod, currentAssignment)) {
+              return;
+            }
+            candidates.push({
+              value: 'RECOVERY|' + [entry.date, entry.period, normalizeReplacementTeacherEmail_(entry.teacherEmail)].join('|'),
+              teacherEmail: normalizeReplacementTeacherEmail_(entry.teacherEmail),
+              teacherName: entry.teacherName || teacher.teacherName || '',
+              recoverySourceDate: entry.date,
+              recoverySourcePeriod: entry.period,
+              label: (entry.teacherName || teacher.teacherName || '') + ' (Recupero ' + formatReplacementDate_(entry.date) + ' ' + entry.period + 'ª ora)'
+            });
+          });
+          return {
+            candidates: candidates,
+            manualCandidates: []
+          };
+        }
+
+        function getReplacementShiftNoteLabel_(originPeriod, targetPeriod) {
+          var origin = Number(originPeriod || 0);
+          var target = Number(targetPeriod || 0);
+          if (origin && target && target < origin) {
+            return 'Anticipa alla ' + targetPeriod + 'ª ora';
+          }
+          return 'Posticipa alla ' + targetPeriod + 'ª ora';
+        }
+
+        function isReplacementTeacherEligibleForShift_(teacher, originPeriod, targetPeriod, assignedByPeriod, currentAssignment) {
+          var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+          var usedTeachers = Object.assign({}, assignedByPeriod[String(targetPeriod || '')] || {});
+          var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
+          var targetSlot = teacher && teacher.periods ? teacher.periods[targetPeriod] : null;
+          if (!teacherEmail || !teacher || teacher.absent || teacher.accompanist) {
+            return false;
+          }
+          if (currentAssignment && normalizeReplacementTeacherEmail_(currentAssignment.shiftTeacherEmail) === teacherEmail) {
+            delete usedTeachers[teacherEmail];
+          }
+          if (usedTeachers[teacherEmail] || hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacherEmail, targetPeriod)]) {
+            return false;
+          }
+          if (targetSlot && targetSlot.type !== 'FREE') {
+            return false;
+          }
+          return !safeArray(replacementState.localAssignments).some(function (assignment) {
+            return assignment !== currentAssignment &&
+              normalizeReplacementHandlingType_(assignment.handlingType) === 'SHIFT_WITHIN_CLASS' &&
+              normalizeReplacementTeacherEmail_(assignment.shiftTeacherEmail) === teacherEmail &&
+              String(assignment.shiftOriginPeriod || '') === String(originPeriod || '');
+          });
+        }
+
+        function buildReplacementShiftCandidateLists_(teachers, period, currentAssignment, assignedByPeriod) {
+          var candidates = [];
+          var targetClassCode = normalizeReplacementClassCode_(currentAssignment && currentAssignment.classCode);
+          safeArray(teachers).forEach(function (teacher) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+            Object.keys((teacher && teacher.periods) || {}).forEach(function (originPeriod) {
+              var originSlot = teacher.periods[originPeriod];
+              if (!teacherEmail || !originSlot || originSlot.type !== 'CLASS' || normalizeReplacementClassCode_(originSlot.classCode) !== targetClassCode || String(originPeriod) === String(period)) {
+                return;
+              }
+              if (!isReplacementTeacherEligibleForShift_(teacher, originPeriod, period, assignedByPeriod, currentAssignment) &&
+                  !(normalizeReplacementTeacherEmail_(currentAssignment && currentAssignment.shiftTeacherEmail) === teacherEmail &&
+                    String(currentAssignment && currentAssignment.shiftOriginPeriod || '') === String(originPeriod || ''))) {
+                return;
+              }
+              candidates.push({
+                value: 'SHIFT|' + [teacherEmail, originPeriod].join('|'),
+                teacherEmail: teacherEmail,
+                teacherName: teacher.teacherName || teacherEmail,
+                shiftOriginPeriod: originPeriod,
+                shiftTargetPeriod: String(period || ''),
+                label: (teacher.teacherName || teacherEmail) + ' (' + getReplacementShiftNoteLabel_(originPeriod, period) + ')'
+              });
+            });
+          });
+          return {
+            candidates: candidates,
+            manualCandidates: []
+          };
+        }
+
         function buildReplacementAssignmentIndex_(assignments) {
           var index = {};
           safeArray(assignments).forEach(function (assignment) {
@@ -1489,6 +1755,7 @@
           var assignmentIndex = buildReplacementAssignmentIndex_(assignments);
           var assignedByPeriod = buildReplacementAssignedTeacherSetByPeriod_(assignments);
           var periodMap = getReplacementPeriodTimeMap_();
+          var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
 
           return Object.keys(periodMap).sort(function (left, right) {
             return Number(left) - Number(right);
@@ -1509,7 +1776,8 @@
             };
             var classCode = normalizeReplacementClassCode_(slot.classCode);
             var assignment = assignmentIndex[buildReplacementAssignmentKey_(period, classCode, teacher.teacherEmail)] || null;
-            var requiresReplacement = Boolean(slot.type === 'CLASS' && teacher.absent);
+            var hourlyAbsence = hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
+            var requiresReplacement = Boolean(slot.type === 'CLASS' && (teacher.absent || hourlyAbsence));
             var row = {
               period: String(period || ''),
               startTime: slot.startTime || timeMeta.startTime || '',
@@ -1517,7 +1785,10 @@
               slotType: slot.type || 'FREE',
               classCode: classCode,
               label: slot.label || '',
+              canMarkHourlyAbsence: Boolean(slot.type === 'CLASS' && !teacher.absent),
+              hourlyAbsence: hourlyAbsence,
               requiresReplacement: requiresReplacement,
+              classHandlingType: assignment ? normalizeReplacementClassHandlingType_(assignment.classHandlingType) : '',
               handlingType: assignment ? normalizeReplacementHandlingType_(assignment.handlingType) : 'SUBSTITUTION',
               status: assignment ? assignment.replacementStatus : 'NONE',
               assignment: assignment,
@@ -1532,7 +1803,7 @@
             if (assignment && assignment.replacementStatus !== 'TO_ASSIGN') {
               row.status = assignment.replacementStatus;
             }
-            if (assignment && row.handlingType === 'SUBSTITUTION' && assignment.replacementStatus !== 'IN_USCITA') {
+            if (assignment && !row.classHandlingType && assignment.replacementStatus !== 'IN_USCITA') {
               var candidateInfo = buildReplacementCandidateLists_(teachers, teacher, period, assignment, assignedByPeriod);
               row.candidates = candidateInfo.candidates;
               row.manualCandidates = candidateInfo.manualCandidates;
@@ -1546,7 +1817,10 @@
             classOutCount: 0,
             absentCount: 0,
             accompanistCount: 0,
+            hourlyAbsenceCount: 0,
             assignedCount: 0,
+            recoveryCount: 0,
+            shiftCount: 0,
             toAssignCount: 0,
             inUscitaCount: 0
           };
@@ -1567,8 +1841,17 @@
             if (!assignment) {
               return;
             }
+            if (assignment.originalStatus === 'HOURLY_ABSENCE') {
+              summary.hourlyAbsenceCount += 1;
+            }
             if (assignment.replacementStatus === 'ASSIGNED') {
               summary.assignedCount += 1;
+              if (normalizeReplacementHandlingType_(assignment.handlingType) === 'RECOVERY') {
+                summary.recoveryCount += 1;
+              }
+            } else if (assignment.replacementStatus === 'SHIFT_WITHIN_CLASS') {
+              summary.assignedCount += 1;
+              summary.shiftCount += 1;
             } else if (assignment.replacementStatus === 'TO_ASSIGN') {
               summary.toAssignCount += 1;
             } else if (assignment.replacementStatus === 'IN_USCITA') {
@@ -1783,6 +2066,13 @@
           })[0] || null;
         }
 
+        function getReplacementHourlyAbsenceEntry_(teacherEmail, period) {
+          var targetKey = buildReplacementHourlyAbsenceKey_(teacherEmail, period);
+          return safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).filter(function (entry) {
+            return buildReplacementHourlyAbsenceKey_(entry && entry.teacherEmail, entry && entry.period) === targetKey;
+          })[0] || null;
+        }
+
         function getReplacementAssignmentEntry_(assignmentKey) {
           return safeArray(replacementState.draft && replacementState.draft.assignments).filter(function (entry) {
             return buildReplacementAssignmentKey_(entry.period, entry.classCode, entry.originalTeacherEmail) === assignmentKey;
@@ -1799,6 +2089,14 @@
           nextEntry.originalTeacherEmail = assignment.originalTeacherEmail || nextEntry.originalTeacherEmail || '';
           nextEntry.originalTeacherName = assignment.originalTeacherName || nextEntry.originalTeacherName || '';
           nextEntry.originalStatus = assignment.originalStatus || nextEntry.originalStatus || '';
+          nextEntry.classHandlingType = normalizeReplacementClassHandlingType_(nextEntry.classHandlingType);
+          nextEntry.handlingType = normalizeReplacementHandlingType_(nextEntry.handlingType);
+          nextEntry.recoverySourceDate = nextEntry.recoverySourceDate || '';
+          nextEntry.recoverySourcePeriod = nextEntry.recoverySourcePeriod || '';
+          nextEntry.shiftOriginPeriod = nextEntry.shiftOriginPeriod || '';
+          nextEntry.shiftTargetPeriod = nextEntry.shiftTargetPeriod || '';
+          nextEntry.shiftTeacherEmail = normalizeReplacementTeacherEmail_(nextEntry.shiftTeacherEmail || '');
+          nextEntry.shiftTeacherName = nextEntry.shiftTeacherName || '';
           nextEntry.notes = nextEntry.notes || '';
           var replaced = false;
           draft.assignments = assignments.map(function (entry) {
@@ -1811,6 +2109,39 @@
           if (!replaced) {
             draft.assignments.push(nextEntry);
           }
+          replacementState.draft = draft;
+        }
+
+        function upsertReplacementHourlyAbsence_(entry, patch) {
+          var draft = replacementState.draft || buildReplacementDraftFromModel_(replacementState.model || {});
+          var hourlyAbsences = safeArray(draft.hourlyAbsences);
+          var nextEntry = Object.assign({}, entry || {}, patch || {});
+          var key = buildReplacementHourlyAbsenceKey_(nextEntry.teacherEmail, nextEntry.period);
+          var replaced = false;
+          draft.hourlyAbsences = hourlyAbsences.map(function (candidate) {
+            if (buildReplacementHourlyAbsenceKey_(candidate && candidate.teacherEmail, candidate && candidate.period) !== key) {
+              return candidate;
+            }
+            replaced = true;
+            return nextEntry;
+          });
+          if (!replaced) {
+            draft.hourlyAbsences.push(nextEntry);
+          }
+          replacementState.draft = draft;
+        }
+
+        function removeReplacementHourlyAbsence_(teacherEmail, period) {
+          var draft = replacementState.draft || buildReplacementDraftFromModel_(replacementState.model || {});
+          var key = buildReplacementHourlyAbsenceKey_(teacherEmail, period);
+          draft.hourlyAbsences = safeArray(draft.hourlyAbsences).filter(function (entry) {
+            return buildReplacementHourlyAbsenceKey_(entry && entry.teacherEmail, entry && entry.period) !== key;
+          });
+          draft.assignments = safeArray(draft.assignments).filter(function (entry) {
+            return !(normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === normalizeReplacementTeacherEmail_(teacherEmail) &&
+              String(entry && entry.period || '') === String(period || '') &&
+              String(entry && entry.originalStatus || '') === 'HOURLY_ABSENCE');
+          });
           replacementState.draft = draft;
         }
 
@@ -1896,6 +2227,9 @@
           } else if (normalized === 'ASSIGNED') {
             cssClass += ' assigned';
             label = 'ASSEGNATA';
+          } else if (normalized === 'SHIFT_WITHIN_CLASS') {
+            cssClass += ' assigned';
+            label = 'SPOSTATA';
           } else if (normalized === 'TO_ASSIGN') {
             cssClass += ' to-assign';
             label = 'DA ASSEGNARE';
@@ -1903,6 +2237,8 @@
             label = 'ENTRATA POSTICIPATA';
           } else if (normalized === 'EARLY_EXIT') {
             label = 'USCITA ANTICIPATA';
+          } else if (normalized === 'RECOVERY') {
+            label = 'RECUPERO';
           } else if (normalized === 'CO_TEACHING') {
             label = 'COMPRESENZA';
           } else if (normalized === 'NO_ACTION') {
@@ -2040,9 +2376,13 @@
 
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var manageButton = ROOMS_UI.el('button', 'button secondary', 'Gestisci');
+              var hasClassSlots = Object.keys(teacher.periods || {}).some(function (period) {
+                var slot = teacher.periods[period];
+                return slot && slot.type === 'CLASS' && slot.classCode;
+              });
               var isSelectedTeacher = normalizeReplacementTeacherEmail_(teacher.teacherEmail) === normalizeReplacementTeacherEmail_(replacementState.selectedTeacherEmail);
               manageButton.type = 'button';
-              manageButton.disabled = isDisabled || !teacher.absent;
+              manageButton.disabled = isDisabled || !hasClassSlots;
               manageButton.classList.toggle('replacement-manage-button-active', isSelectedTeacher);
               manageButton.setAttribute('aria-pressed', isSelectedTeacher ? 'true' : 'false');
               manageButton.addEventListener('click', function () {
@@ -2079,12 +2419,12 @@
           if (!replacementDetailTable) {
             return;
           }
-          if (!detail || !selectedTeacher || !selectedTeacher.absent) {
+          if (!detail || !selectedTeacher) {
             renderTable(
               'replacement-detail-table',
               ['Ora', 'Classe', 'Stato', 'Assegnazione'],
               [],
-              isReplacementDateValid_() ? 'Apri Gestisci su un docente assente per vedere il dettaglio giornaliero.' : 'Data non valida. Nessun dettaglio disponibile.'
+              isReplacementDateValid_() ? 'Apri Gestisci su un docente per vedere il dettaglio giornaliero.' : 'Data non valida. Nessun dettaglio disponibile.'
             );
             return;
           }
@@ -2098,84 +2438,61 @@
                 classCode: row.classCode,
                 originalTeacherEmail: detail.teacherEmail,
                 originalTeacherName: detail.teacherName,
-                originalStatus: detail.accompanist ? 'ACCOMPANIST' : 'ABSENT',
+                originalStatus: row.hourlyAbsence ? 'HOURLY_ABSENCE' : (detail.accompanist ? 'ACCOMPANIST' : 'ABSENT'),
+                classHandlingType: row.classHandlingType || '',
                 handlingType: row.handlingType || 'SUBSTITUTION',
                 replacementTeacherEmail: '',
                 replacementTeacherName: '',
                 replacementSource: '',
-                replacementStatus: row.status
+                replacementStatus: row.status,
+                recoverySourceDate: '',
+                recoverySourcePeriod: '',
+                shiftOriginPeriod: '',
+                shiftTargetPeriod: row.period,
+                shiftTeacherEmail: '',
+                shiftTeacherName: '',
+                notes: row.hourlyAbsence && row.hourlyAbsence.notes ? row.hourlyAbsence.notes : ''
               };
               var assignmentKey = buildReplacementAssignmentKey_(assignment.period, assignment.classCode, assignment.originalTeacherEmail);
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
+              var isClassSlot = row.slotType === 'CLASS' && row.classCode;
 
-              if (!row.requiresReplacement) {
+              if (!isClassSlot) {
                 actions.appendChild(ROOMS_UI.el('span', 'muted', row.label || 'Nessuna lezione'));
-              } else if (row.status === 'IN_USCITA') {
-                actions.appendChild(ROOMS_UI.el('span', 'muted', 'Nessuna sostituzione richiesta.'));
               } else {
-                var managementSelect = document.createElement('select');
-                managementSelect.className = 'select replacement-detail-select';
-                managementSelect.disabled = !isReplacementDateValid_();
-                managementSelect.appendChild(new Option('Sostituzione', 'SUBSTITUTION'));
-                managementSelect.appendChild(new Option('Entrata posticipata', 'LATE_ENTRY'));
-                managementSelect.appendChild(new Option('Uscita anticipata', 'EARLY_EXIT'));
-                managementSelect.appendChild(new Option('Compresenza', 'CO_TEACHING'));
-                managementSelect.value = normalizeReplacementHandlingType_(assignment.handlingType || row.handlingType);
-                managementSelect.addEventListener('change', function () {
-                  var nextHandlingType = normalizeReplacementHandlingType_(managementSelect.value);
-                  delete replacementState.pendingManualAssignmentKeys[assignmentKey];
-                  if (nextHandlingType !== 'SUBSTITUTION') {
+                if (row.canMarkHourlyAbsence) {
+                  var hourlyWrap = ROOMS_UI.el('div', 'replacement-class-toggle');
+                  var hourlyLabel = document.createElement('label');
+                  var hourlyCheckbox = document.createElement('input');
+                  hourlyCheckbox.type = 'checkbox';
+                  hourlyCheckbox.disabled = !isReplacementDateValid_();
+                  hourlyCheckbox.checked = Boolean(row.hourlyAbsence);
+                  hourlyCheckbox.addEventListener('change', function () {
+                    var baseHourlyEntry;
+                    if (!hourlyCheckbox.checked) {
+                      delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                      removeReplacementHourlyAbsence_(detail.teacherEmail, row.period);
+                      markReplacementDraftChanged_({
+                        clearNotice: true
+                      });
+                      return;
+                    }
+                    baseHourlyEntry = {
+                      date: replacementState.date,
+                      teacherEmail: detail.teacherEmail,
+                      teacherName: detail.teacherName,
+                      period: row.period,
+                      reason: '',
+                      recoveryRequired: false,
+                      recoveryStatus: 'PENDING',
+                      recoveredOnDate: '',
+                      recoveredByAssignmentKey: '',
+                      notes: ''
+                    };
+                    upsertReplacementHourlyAbsence_(baseHourlyEntry, {});
                     upsertReplacementAssignment_(assignment, {
-                      handlingType: nextHandlingType,
-                      replacementTeacherEmail: '',
-                      replacementTeacherName: '',
-                      replacementSource: '',
-                      replacementStatus: nextHandlingType
-                    });
-                  } else {
-                    upsertReplacementAssignment_(assignment, {
-                      handlingType: 'SUBSTITUTION',
-                      replacementTeacherEmail: '',
-                      replacementTeacherName: '',
-                      replacementSource: '',
-                      replacementStatus: 'TO_ASSIGN'
-                    });
-                  }
-                  markReplacementDraftChanged_({
-                    clearNotice: true
-                  });
-                });
-                actions.appendChild(managementSelect);
-
-                if (normalizeReplacementHandlingType_(assignment.handlingType || row.handlingType) !== 'SUBSTITUTION') {
-                  actions.appendChild(ROOMS_UI.el('span', 'muted', getReplacementHandlingTypeLabel_(assignment.handlingType || row.handlingType)));
-                  return [
-                    (row.period || '') + 'a ora (' + (row.startTime || '--:--') + ' - ' + (row.endTime || '--:--') + ')',
-                    row.classCode || row.label || '-',
-                    createReplacementStatusNode_(row.status),
-                    actions
-                  ];
-                }
-
-                var select = document.createElement('select');
-                select.className = 'select replacement-detail-select';
-                select.disabled = !isReplacementDateValid_();
-                select.appendChild(new Option('Seleziona sostituto', ''));
-                safeArray(row.candidates).forEach(function (candidate) {
-                  select.appendChild(new Option(candidate.label, candidate.value));
-                });
-                if (assignment.replacementStatus === 'ASSIGNED') {
-                  if (assignment.replacementSource === 'MANUAL') {
-                    select.value = '__MANUAL__';
-                  } else {
-                    select.value = String(assignment.replacementTeacherEmail || '') + '|' + String(assignment.replacementSource || '');
-                  }
-                }
-                select.addEventListener('change', function () {
-                  var selectedValue = select.value;
-                  if (!selectedValue) {
-                    delete replacementState.pendingManualAssignmentKeys[assignmentKey];
-                    upsertReplacementAssignment_(assignment, {
+                      originalStatus: 'HOURLY_ABSENCE',
+                      classHandlingType: '',
                       handlingType: 'SUBSTITUTION',
                       replacementTeacherEmail: '',
                       replacementTeacherName: '',
@@ -2185,72 +2502,269 @@
                     markReplacementDraftChanged_({
                       clearNotice: true
                     });
-                    return;
-                  }
-                  if (selectedValue === '__MANUAL__') {
-                    replacementState.pendingManualAssignmentKeys[assignmentKey] = true;
-                    renderReplacementDetail_();
-                    return;
-                  }
-                  var parts = String(selectedValue).split('|');
-                  var teacherEmail = parts[0] || '';
-                  var source = parts[1] || '';
-                  var selectedCandidate = safeArray(row.candidates).filter(function (candidate) {
-                    return candidate.value === selectedValue;
-                  })[0] || null;
-                  delete replacementState.pendingManualAssignmentKeys[assignmentKey];
-                  upsertReplacementAssignment_(assignment, {
-                    handlingType: 'SUBSTITUTION',
-                    replacementTeacherEmail: teacherEmail,
-                    replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
-                    replacementSource: source,
-                    replacementStatus: 'ASSIGNED'
                   });
-                  markReplacementDraftChanged_({
-                    clearNotice: true
-                  });
-                });
-                actions.appendChild(select);
+                  hourlyLabel.appendChild(hourlyCheckbox);
+                  hourlyLabel.appendChild(ROOMS_UI.el('span', '', 'Assenza oraria'));
+                  hourlyWrap.appendChild(hourlyLabel);
+                  actions.appendChild(hourlyWrap);
+                }
 
-                if (assignment.replacementSource === 'MANUAL' || replacementState.pendingManualAssignmentKeys[assignmentKey]) {
-                  var manualSelect = document.createElement('select');
-                  manualSelect.className = 'select replacement-detail-select';
-                  manualSelect.disabled = !isReplacementDateValid_();
-                  manualSelect.appendChild(new Option('Seleziona altro docente', ''));
-                  safeArray(row.manualCandidates).forEach(function (candidate) {
-                    manualSelect.appendChild(new Option(candidate.label, candidate.value));
+                if (row.hourlyAbsence && !selectedTeacher.absent) {
+                  var hourlyReason = document.createElement('input');
+                  hourlyReason.type = 'text';
+                  hourlyReason.className = 'input';
+                  hourlyReason.placeholder = 'Motivo assenza oraria';
+                  hourlyReason.value = row.hourlyAbsence.reason || '';
+                  hourlyReason.disabled = !isReplacementDateValid_();
+                  hourlyReason.addEventListener('change', function () {
+                    upsertReplacementHourlyAbsence_(row.hourlyAbsence, {
+                      reason: hourlyReason.value || ''
+                    });
+                    markReplacementDraftChanged_({
+                      clearNotice: true
+                    });
                   });
-                  if (assignment.replacementSource === 'MANUAL' && assignment.replacementTeacherEmail) {
-                    manualSelect.value = String(assignment.replacementTeacherEmail || '') + '|MANUAL';
-                  }
-                  manualSelect.addEventListener('change', function () {
-                    if (!manualSelect.value) {
+                  actions.appendChild(hourlyReason);
+
+                  var recoveryToggleWrap = ROOMS_UI.el('div', 'replacement-class-toggle');
+                  var recoveryToggleLabel = document.createElement('label');
+                  var recoveryCheckbox = document.createElement('input');
+                  recoveryCheckbox.type = 'checkbox';
+                  recoveryCheckbox.checked = Boolean(row.hourlyAbsence.recoveryRequired);
+                  recoveryCheckbox.disabled = !isReplacementDateValid_();
+                  recoveryCheckbox.addEventListener('change', function () {
+                    upsertReplacementHourlyAbsence_(row.hourlyAbsence, {
+                      recoveryRequired: recoveryCheckbox.checked,
+                      recoveryStatus: recoveryCheckbox.checked ? 'PENDING' : '',
+                      recoveredOnDate: '',
+                      recoveredByAssignmentKey: ''
+                    });
+                    markReplacementDraftChanged_({
+                      clearNotice: true
+                    });
+                  });
+                  recoveryToggleLabel.appendChild(recoveryCheckbox);
+                  recoveryToggleLabel.appendChild(ROOMS_UI.el('span', '', 'Richiede recupero'));
+                  recoveryToggleWrap.appendChild(recoveryToggleLabel);
+                  actions.appendChild(recoveryToggleWrap);
+                }
+
+                if (row.requiresReplacement) {
+                  if (row.status === 'IN_USCITA') {
+                    actions.appendChild(ROOMS_UI.el('span', 'muted', 'Nessuna sostituzione richiesta.'));
+                  } else {
+                    var classHandlingSelect = document.createElement('select');
+                    classHandlingSelect.className = 'select replacement-detail-select';
+                    classHandlingSelect.disabled = !isReplacementDateValid_();
+                    classHandlingSelect.appendChild(new Option('Gestione classe: nessuna', ''));
+                    classHandlingSelect.appendChild(new Option('Entrata posticipata', 'LATE_ENTRY'));
+                    classHandlingSelect.appendChild(new Option('Uscita anticipata', 'EARLY_EXIT'));
+                    classHandlingSelect.value = normalizeReplacementClassHandlingType_(assignment.classHandlingType || row.classHandlingType);
+                    classHandlingSelect.addEventListener('change', function () {
                       upsertReplacementAssignment_(assignment, {
-                        handlingType: 'SUBSTITUTION',
+                        classHandlingType: normalizeReplacementClassHandlingType_(classHandlingSelect.value),
+                        replacementStatus: normalizeReplacementClassHandlingType_(classHandlingSelect.value) || 'TO_ASSIGN'
+                      });
+                      markReplacementDraftChanged_({
+                        clearNotice: true
+                      });
+                    });
+                    actions.appendChild(classHandlingSelect);
+
+                    var teacherHandlingSelect = document.createElement('select');
+                    teacherHandlingSelect.className = 'select replacement-detail-select';
+                    teacherHandlingSelect.disabled = !isReplacementDateValid_();
+                    teacherHandlingSelect.appendChild(new Option('Gestione docente: nessuna', 'NONE'));
+                    teacherHandlingSelect.appendChild(new Option('Sostituzione', 'SUBSTITUTION'));
+                    teacherHandlingSelect.appendChild(new Option('Recupero', 'RECOVERY'));
+                    teacherHandlingSelect.appendChild(new Option('Spostamento stessa classe', 'SHIFT_WITHIN_CLASS'));
+                    teacherHandlingSelect.appendChild(new Option('Compresenza', 'CO_TEACHING'));
+                    teacherHandlingSelect.value = assignment.replacementStatus === 'TO_ASSIGN' && normalizeReplacementHandlingType_(assignment.handlingType) === 'SUBSTITUTION' ? 'NONE' : normalizeReplacementHandlingType_(assignment.handlingType);
+                    teacherHandlingSelect.addEventListener('change', function () {
+                      var nextHandlingType = teacherHandlingSelect.value === 'NONE' ? 'SUBSTITUTION' : normalizeReplacementHandlingType_(teacherHandlingSelect.value);
+                      delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                      upsertReplacementAssignment_(assignment, {
+                        classHandlingType: normalizeReplacementClassHandlingType_(assignment.classHandlingType || row.classHandlingType),
+                        handlingType: nextHandlingType,
                         replacementTeacherEmail: '',
                         replacementTeacherName: '',
                         replacementSource: '',
-                        replacementStatus: 'TO_ASSIGN'
+                        recoverySourceDate: '',
+                        recoverySourcePeriod: '',
+                        shiftOriginPeriod: '',
+                        shiftTargetPeriod: row.period,
+                        shiftTeacherEmail: '',
+                        shiftTeacherName: '',
+                        replacementStatus: teacherHandlingSelect.value === 'NONE'
+                          ? 'TO_ASSIGN'
+                          : (nextHandlingType === 'SHIFT_WITHIN_CLASS' ? 'SHIFT_WITHIN_CLASS' : (nextHandlingType === 'CO_TEACHING' ? 'CO_TEACHING' : 'TO_ASSIGN'))
                       });
-                    } else {
-                      var manualParts = String(manualSelect.value).split('|');
-                      var manualCandidate = safeArray(row.manualCandidates).filter(function (candidate) {
-                        return candidate.value === manualSelect.value;
-                      })[0] || null;
-                      upsertReplacementAssignment_(assignment, {
-                        handlingType: 'SUBSTITUTION',
-                        replacementTeacherEmail: manualParts[0] || '',
-                        replacementTeacherName: manualCandidate ? manualCandidate.teacherName : '',
-                        replacementSource: 'MANUAL',
-                        replacementStatus: 'ASSIGNED'
+                      markReplacementDraftChanged_({
+                        clearNotice: true
                       });
-                    }
-                    delete replacementState.pendingManualAssignmentKeys[assignmentKey];
-                    markReplacementDraftChanged_({
-                      clearNotice: true
                     });
-                  });
-                  actions.appendChild(manualSelect);
+                    actions.appendChild(teacherHandlingSelect);
+
+                    if (!normalizeReplacementClassHandlingType_(assignment.classHandlingType || row.classHandlingType) &&
+                        normalizeReplacementHandlingType_(assignment.handlingType || row.handlingType) !== 'CO_TEACHING') {
+                      var select = document.createElement('select');
+                      var currentHandling = normalizeReplacementHandlingType_(assignment.handlingType || row.handlingType);
+                      select.className = 'select replacement-detail-select';
+                      select.disabled = !isReplacementDateValid_();
+                      select.appendChild(new Option(
+                        currentHandling === 'RECOVERY'
+                          ? 'Seleziona recupero'
+                          : (currentHandling === 'SHIFT_WITHIN_CLASS' ? 'Seleziona spostamento' : 'Seleziona sostituto'),
+                        ''
+                      ));
+                      safeArray(row.candidates).forEach(function (candidate) {
+                        select.appendChild(new Option(candidate.label, candidate.value));
+                      });
+                      if (currentHandling === 'SHIFT_WITHIN_CLASS' && assignment.shiftTeacherEmail && assignment.shiftOriginPeriod) {
+                        select.value = 'SHIFT|' + String(assignment.shiftTeacherEmail || '') + '|' + String(assignment.shiftOriginPeriod || '');
+                      } else if (currentHandling === 'RECOVERY' && assignment.replacementTeacherEmail && assignment.recoverySourceDate && assignment.recoverySourcePeriod) {
+                        select.value = 'RECOVERY|' + [assignment.recoverySourceDate, assignment.recoverySourcePeriod, assignment.replacementTeacherEmail].join('|');
+                      } else if (assignment.replacementStatus === 'ASSIGNED') {
+                        select.value = assignment.replacementSource === 'MANUAL'
+                          ? '__MANUAL__'
+                          : String(assignment.replacementTeacherEmail || '') + '|' + String(assignment.replacementSource || '');
+                      }
+                      select.addEventListener('change', function () {
+                        var selectedValue = select.value;
+                        var selectedCandidate;
+                        var parts;
+                        if (!selectedValue) {
+                          delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                          upsertReplacementAssignment_(assignment, {
+                            handlingType: currentHandling,
+                            replacementTeacherEmail: '',
+                            replacementTeacherName: '',
+                            replacementSource: '',
+                            recoverySourceDate: '',
+                            recoverySourcePeriod: '',
+                            shiftOriginPeriod: '',
+                            shiftTeacherEmail: '',
+                            shiftTeacherName: '',
+                            replacementStatus: currentHandling === 'SHIFT_WITHIN_CLASS' ? 'TO_ASSIGN' : 'TO_ASSIGN'
+                          });
+                          markReplacementDraftChanged_({
+                            clearNotice: true
+                          });
+                          return;
+                        }
+                        if (selectedValue === '__MANUAL__') {
+                          replacementState.pendingManualAssignmentKeys[assignmentKey] = true;
+                          renderReplacementDetail_();
+                          return;
+                        }
+                        selectedCandidate = safeArray(row.candidates).filter(function (candidate) {
+                          return candidate.value === selectedValue;
+                        })[0] || null;
+                        parts = String(selectedValue).split('|');
+                        delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                        if (parts[0] === 'RECOVERY') {
+                          upsertReplacementAssignment_(assignment, {
+                            handlingType: 'RECOVERY',
+                            replacementTeacherEmail: parts[3] || '',
+                            replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
+                            replacementSource: 'RECOVERY',
+                            recoverySourceDate: parts[1] || '',
+                            recoverySourcePeriod: parts[2] || '',
+                            replacementStatus: 'ASSIGNED'
+                          });
+                        } else if (parts[0] === 'SHIFT') {
+                          upsertReplacementAssignment_(assignment, {
+                            handlingType: 'SHIFT_WITHIN_CLASS',
+                            shiftTeacherEmail: parts[1] || '',
+                            shiftTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
+                            shiftOriginPeriod: parts[2] || '',
+                            shiftTargetPeriod: row.period,
+                            replacementTeacherEmail: parts[1] || '',
+                            replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
+                            replacementStatus: 'SHIFT_WITHIN_CLASS'
+                          });
+                        } else {
+                          upsertReplacementAssignment_(assignment, {
+                            handlingType: 'SUBSTITUTION',
+                            replacementTeacherEmail: parts[0] || '',
+                            replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
+                            replacementSource: parts[1] || '',
+                            replacementStatus: 'ASSIGNED'
+                          });
+                        }
+                        markReplacementDraftChanged_({
+                          clearNotice: true
+                        });
+                      });
+                      actions.appendChild(select);
+
+                      if (currentHandling === 'SUBSTITUTION' && (assignment.replacementSource === 'MANUAL' || replacementState.pendingManualAssignmentKeys[assignmentKey])) {
+                        var manualSelect = document.createElement('select');
+                        manualSelect.className = 'select replacement-detail-select';
+                        manualSelect.disabled = !isReplacementDateValid_();
+                        manualSelect.appendChild(new Option('Seleziona altro docente', ''));
+                        safeArray(row.manualCandidates).forEach(function (candidate) {
+                          manualSelect.appendChild(new Option(candidate.label, candidate.value));
+                        });
+                        if (assignment.replacementSource === 'MANUAL' && assignment.replacementTeacherEmail) {
+                          manualSelect.value = String(assignment.replacementTeacherEmail || '') + '|MANUAL';
+                        }
+                        manualSelect.addEventListener('change', function () {
+                          var manualCandidate;
+                          var manualParts;
+                          if (!manualSelect.value) {
+                            upsertReplacementAssignment_(assignment, {
+                              handlingType: 'SUBSTITUTION',
+                              replacementTeacherEmail: '',
+                              replacementTeacherName: '',
+                              replacementSource: '',
+                              replacementStatus: 'TO_ASSIGN'
+                            });
+                          } else {
+                            manualParts = String(manualSelect.value).split('|');
+                            manualCandidate = safeArray(row.manualCandidates).filter(function (candidate) {
+                              return candidate.value === manualSelect.value;
+                            })[0] || null;
+                            upsertReplacementAssignment_(assignment, {
+                              handlingType: 'SUBSTITUTION',
+                              replacementTeacherEmail: manualParts[0] || '',
+                              replacementTeacherName: manualCandidate ? manualCandidate.teacherName : '',
+                              replacementSource: 'MANUAL',
+                              replacementStatus: 'ASSIGNED'
+                            });
+                          }
+                          delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                          markReplacementDraftChanged_({
+                            clearNotice: true
+                          });
+                        });
+                        actions.appendChild(manualSelect);
+                      }
+                    }
+                  }
+
+                  if (row.requiresReplacement || row.hourlyAbsence) {
+                    var noteInput = document.createElement('input');
+                    noteInput.type = 'text';
+                    noteInput.className = 'input';
+                    noteInput.placeholder = 'Nota';
+                    noteInput.value = assignment.notes || '';
+                    noteInput.disabled = !isReplacementDateValid_();
+                    noteInput.addEventListener('change', function () {
+                      upsertReplacementAssignment_(assignment, {
+                        notes: noteInput.value || ''
+                      });
+                      if (row.hourlyAbsence && !selectedTeacher.absent) {
+                        upsertReplacementHourlyAbsence_(row.hourlyAbsence, {
+                          notes: noteInput.value || ''
+                        });
+                      }
+                      markReplacementDraftChanged_({
+                        clearNotice: true
+                      });
+                    });
+                    actions.appendChild(noteInput);
+                  }
                 }
               }
 

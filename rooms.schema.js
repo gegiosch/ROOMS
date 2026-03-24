@@ -58,6 +58,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS] = true;
@@ -77,6 +78,7 @@ ROOMS_APP.Schema = {
     this.ensureAulaMagnaEvents();
     this.ensureReplacementClassOut();
     this.ensureReplacementDayTeachers();
+    this.ensureReplacementHourlyAbsences();
     this.ensureReplacementAssignments();
     this.ensureReplacementLongAssignments();
     this.ensureReportRecipients();
@@ -260,6 +262,23 @@ ROOMS_APP.Schema = {
     ]);
   },
 
+  ensureReplacementHourlyAbsences: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES, [
+      'Date',
+      'TeacherEmail',
+      'TeacherName',
+      'Period',
+      'Reason',
+      'RecoveryRequired',
+      'RecoveryStatus',
+      'RecoveredOnDate',
+      'RecoveredByAssignmentKey',
+      'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
   ensureReplacementAssignments: function () {
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS, [
       'Date',
@@ -268,11 +287,18 @@ ROOMS_APP.Schema = {
       'OriginalTeacherEmail',
       'OriginalTeacherName',
       'OriginalStatus',
+      'ClassHandlingType',
       'HandlingType',
       'ReplacementTeacherEmail',
       'ReplacementTeacherName',
       'ReplacementSource',
       'ReplacementStatus',
+      'RecoverySourceDate',
+      'RecoverySourcePeriod',
+      'ShiftOriginPeriod',
+      'ShiftTargetPeriod',
+      'ShiftTeacherEmail',
+      'ShiftTeacherName',
       'Notes',
       'UpdatedAtISO',
       'UpdatedBy'
