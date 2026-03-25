@@ -1712,14 +1712,7 @@ ROOMS_APP.Replacements = {
     }
     if (entry.replacementStatus === 'ASSIGNED') {
       periodCells[entry.period] = entry.classCode;
-      if (handlingType === this.HANDLING_TYPES_.RECOVERY && entry.recoverySourceDate) {
-        noteParts.push('Recupero del ' + this.formatShortDate_(entry.recoverySourceDate));
-      } else if (sourceLabel) {
-        noteParts.push(sourceLabel);
-      }
-      if (ROOMS_APP.normalizeString(entry.notes)) {
-        noteParts.push(ROOMS_APP.normalizeString(entry.notes));
-      }
+      noteParts = this.buildPublicReportNoteParts_(entry, sourceLabel);
       return {
         groupKey: handlingType + '|ASSIGNED|' + ROOMS_APP.normalizeString(entry.replacementTeacherName) + '|' + noteParts.join(' | '),
         designatedTeacher: ROOMS_APP.normalizeString(entry.replacementTeacherName),
@@ -1736,6 +1729,20 @@ ROOMS_APP.Replacements = {
       noteOnly: false,
       periodCells: periodCells
     };
+  },
+
+  buildPublicReportNoteParts_: function (entry, sourceLabel) {
+    var handlingType = this.normalizeHandlingType_(entry && entry.handlingType);
+    var noteParts = [];
+    if (handlingType === this.HANDLING_TYPES_.RECOVERY && entry && entry.recoverySourceDate) {
+      noteParts.push('Recupero del ' + this.formatShortDate_(entry.recoverySourceDate));
+    } else if (sourceLabel) {
+      noteParts.push(sourceLabel);
+    }
+    if (ROOMS_APP.normalizeString(entry && entry.notes)) {
+      noteParts.push(ROOMS_APP.normalizeString(entry.notes));
+    }
+    return noteParts;
   },
 
   getHandlingTypeLabel_: function (handlingType) {
@@ -2071,12 +2078,21 @@ ROOMS_APP.Replacements = {
       return ROOMS_APP.Replacements.readHourlyAbsenceRow_(row);
     });
     var existingByKey = {};
-    var assignmentKeysForDate = {};
+    var persistedAssignmentKeysForDate = {};
     var recoveredByKey = {};
     var nextRows;
 
     allRows.forEach(function (row) {
       existingByKey[ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(row.date, row.teacherEmail, row.period)] = row;
+    });
+
+    this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS, targetDate).forEach(function (row) {
+      persistedAssignmentKeysForDate[ROOMS_APP.Replacements.buildAssignmentLinkKey_(
+        targetDate,
+        row && row.Period,
+        row && row.ClassCode,
+        row && row.OriginalTeacherEmail
+      )] = true;
     });
 
     (normalized.assignments || []).forEach(function (entry) {
@@ -2086,7 +2102,6 @@ ROOMS_APP.Replacements = {
         entry.classCode,
         entry.originalTeacherEmail
       );
-      assignmentKeysForDate[assignmentLinkKey] = true;
       if (ROOMS_APP.Replacements.normalizeHandlingType_(entry.handlingType) !== ROOMS_APP.Replacements.HANDLING_TYPES_.RECOVERY ||
           entry.replacementStatus !== 'ASSIGNED' ||
           !entry.recoverySourceDate ||
@@ -2106,7 +2121,7 @@ ROOMS_APP.Replacements = {
     }).map(function (row) {
       var key = ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(row.date, row.teacherEmail, row.period);
       var next = ROOMS_APP.Replacements.cloneRow_(row);
-      if (assignmentKeysForDate[next.recoveredByAssignmentKey] && !recoveredByKey[key]) {
+      if (persistedAssignmentKeysForDate[next.recoveredByAssignmentKey] && !recoveredByKey[key]) {
         next.recoveryStatus = next.recoveryRequired ? ROOMS_APP.Replacements.RECOVERY_STATUSES_.PENDING : '';
         next.recoveredOnDate = '';
         next.recoveredByAssignmentKey = '';
