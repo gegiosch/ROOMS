@@ -2457,21 +2457,24 @@
               var assignmentKey = buildReplacementAssignmentKey_(assignment.period, assignment.classCode, assignment.originalTeacherEmail);
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var isClassSlot = row.slotType === 'CLASS' && row.classCode;
+              var canConfigureHourlyPermission = Boolean(selectedTeacher.hourlyPermission && row.canMarkHourlyAbsence);
 
               if (!isClassSlot) {
                 actions.appendChild(ROOMS_UI.el('span', 'muted', row.label || 'Nessuna lezione'));
               } else {
-                if (row.canMarkHourlyAbsence) {
+                if (canConfigureHourlyPermission) {
                   var hourlyWrap = ROOMS_UI.el('div', 'replacement-class-toggle');
-                  var hourlyLabel = document.createElement('label');
-                  var hourlyCheckbox = document.createElement('input');
-                  hourlyCheckbox.type = 'checkbox';
-                  hourlyCheckbox.disabled = !isReplacementDateValid_();
-                  hourlyCheckbox.checked = Boolean(row.hourlyAbsence);
-                  hourlyCheckbox.addEventListener('change', function () {
+                  var hourlyStateLabel = ROOMS_UI.el('span', 'muted', 'Stato ora');
+                  var hourlyStateSelect = document.createElement('select');
+                  hourlyStateSelect.className = 'select replacement-detail-select';
+                  hourlyStateSelect.disabled = !isReplacementDateValid_();
+                  hourlyStateSelect.appendChild(new Option('Servizio', 'SERVICE'));
+                  hourlyStateSelect.appendChild(new Option('Permesso', 'PERMISSION'));
+                  hourlyStateSelect.value = row.hourlyAbsence ? 'PERMISSION' : 'SERVICE';
+                  hourlyStateSelect.addEventListener('change', function () {
                     var baseHourlyEntry;
-                    if (!hourlyCheckbox.checked) {
-                      delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                    delete replacementState.pendingManualAssignmentKeys[assignmentKey];
+                    if (hourlyStateSelect.value !== 'PERMISSION') {
                       removeReplacementHourlyAbsence_(detail.teacherEmail, row.period);
                       markReplacementDraftChanged_({
                         clearNotice: true
@@ -2491,22 +2494,12 @@
                       notes: ''
                     };
                     upsertReplacementHourlyAbsence_(baseHourlyEntry, {});
-                    upsertReplacementAssignment_(assignment, {
-                      originalStatus: 'HOURLY_ABSENCE',
-                      classHandlingType: '',
-                      handlingType: 'SUBSTITUTION',
-                      replacementTeacherEmail: '',
-                      replacementTeacherName: '',
-                      replacementSource: '',
-                      replacementStatus: 'TO_ASSIGN'
-                    });
                     markReplacementDraftChanged_({
                       clearNotice: true
                     });
                   });
-                  hourlyLabel.appendChild(hourlyCheckbox);
-                  hourlyLabel.appendChild(ROOMS_UI.el('span', '', 'Assenza oraria'));
-                  hourlyWrap.appendChild(hourlyLabel);
+                  hourlyWrap.appendChild(hourlyStateLabel);
+                  hourlyWrap.appendChild(hourlyStateSelect);
                   actions.appendChild(hourlyWrap);
                 }
 
@@ -2545,7 +2538,7 @@
                     });
                   });
                   recoveryToggleLabel.appendChild(recoveryCheckbox);
-                  recoveryToggleLabel.appendChild(ROOMS_UI.el('span', '', 'Richiede recupero'));
+                  recoveryToggleLabel.appendChild(ROOMS_UI.el('span', '', 'Da recuperare'));
                   recoveryToggleWrap.appendChild(recoveryToggleLabel);
                   actions.appendChild(recoveryToggleWrap);
                 }
