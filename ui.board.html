@@ -1115,6 +1115,7 @@
                 teacherEmail: entry.teacherEmail || '',
                 teacherName: entry.teacherName || '',
                 absent: Boolean(entry.absent),
+                hourlyPermission: false,
                 accompanist: Boolean(entry.accompanist),
                 accompaniedClasses: safeArray(entry.accompaniedClasses),
                 notes: entry.notes || ''
@@ -1246,6 +1247,7 @@
           var baseMap = buildReplacementBaseTeacherMap_();
           var draftMap = buildReplacementDraftTeacherMap_();
           var validOutClasses = getReplacementClassOutSet_();
+          var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
 
           return Object.keys(baseMap).map(function (teacherEmail) {
             var baseTeacher = baseMap[teacherEmail] || {};
@@ -1269,6 +1271,12 @@
               teacherName: draftTeacher.teacherName || baseTeacher.teacherName || teacherEmail,
               periods: baseTeacher.periods || {},
               absent: absent,
+              hourlyPermission: !absent && (
+                Boolean(draftTeacher.hourlyPermission) ||
+                Object.keys(hourlyAbsenceMap).some(function (key) {
+                  return normalizeReplacementTeacherEmail_(hourlyAbsenceMap[key] && hourlyAbsenceMap[key].teacherEmail) === teacherEmail;
+                })
+              ),
               accompanist: accompanist,
               accompaniedClasses: accompaniedClasses,
               notes: draftTeacher.notes || ''
@@ -2160,6 +2168,27 @@
           replacementState.draft = draft;
         }
 
+        function clearReplacementTeacherHourlyPermission_(teacherEmail) {
+          var draft = replacementState.draft || buildReplacementDraftFromModel_(replacementState.model || {});
+          var targetEmail = normalizeReplacementTeacherEmail_(teacherEmail);
+          draft.hourlyAbsences = safeArray(draft.hourlyAbsences).filter(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) !== targetEmail;
+          });
+          draft.assignments = safeArray(draft.assignments).filter(function (entry) {
+            return !(normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === targetEmail &&
+              String(entry && entry.originalStatus || '') === 'HOURLY_ABSENCE');
+          });
+          draft.teachers = safeArray(draft.teachers).map(function (entry) {
+            if (normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) !== targetEmail) {
+              return entry;
+            }
+            return Object.assign({}, entry, {
+              hourlyPermission: false
+            });
+          });
+          replacementState.draft = draft;
+        }
+
         function markReplacementDraftChanged_(options) {
           var settings = options || {};
           replacementState.dirty = true;
@@ -2297,16 +2326,11 @@
 
         function renderReplacementTeachers_() {
           var teachers = safeArray(replacementState.localTeachers);
-          var enabledClassCodes = safeArray(replacementState.draft && replacementState.draft.classOut).filter(function (entry) {
-            return Boolean(entry.isOut);
-          }).map(function (entry) {
-            return entry.classCode;
-          });
           var isDisabled = !isReplacementDateValid_();
 
           renderTable(
             'replacement-teachers-table',
-            ['Docente', 'Stato', 'Classi accompagnate', 'Azioni'],
+            ['Docente', 'Stato', 'Azioni'],
             teachers.map(function (teacher) {
               var draftTeacher = getReplacementTeacher_(teacher.teacherEmail) || teacher;
               var flags = ROOMS_UI.el('div', 'replacement-teacher-flags');
@@ -2317,77 +2341,40 @@
               absentCheckbox.disabled = isDisabled;
               absentCheckbox.addEventListener('change', function () {
                 draftTeacher.absent = absentCheckbox.checked;
-                if (!draftTeacher.absent) {
-                  draftTeacher.accompanist = false;
-                  draftTeacher.accompaniedClasses = [];
+                draftTeacher.accompanist = false;
+                draftTeacher.accompaniedClasses = [];
+                if (draftTeacher.absent) {
+                  draftTeacher.hourlyPermission = false;
+                  clearReplacementTeacherHourlyPermission_(teacher.teacherEmail);
                 }
                 markReplacementDraftChanged_({
                   clearNotice: true
                 });
               });
               absentLabel.appendChild(absentCheckbox);
-              absentLabel.appendChild(ROOMS_UI.el('span', '', 'Assente'));
+              absentLabel.appendChild(ROOMS_UI.el('span', '', 'Assenza giornaliera'));
               flags.appendChild(absentLabel);
 
-              var accompanistLabel = document.createElement('label');
-              var accompanistCheckbox = document.createElement('input');
-              accompanistCheckbox.type = 'checkbox';
-              accompanistCheckbox.checked = Boolean(teacher.accompanist);
-              accompanistCheckbox.disabled = isDisabled;
-              accompanistCheckbox.addEventListener('change', function () {
-                draftTeacher.accompanist = accompanistCheckbox.checked;
-                if (draftTeacher.accompanist) {
-                  draftTeacher.absent = true;
-                }
-                if (!draftTeacher.absent) {
-                  draftTeacher.accompanist = false;
+              var hourlyPermissionLabel = document.createElement('label');
+              var hourlyPermissionCheckbox = document.createElement('input');
+              hourlyPermissionCheckbox.type = 'checkbox';
+              hourlyPermissionCheckbox.checked = Boolean(teacher.hourlyPermission);
+              hourlyPermissionCheckbox.disabled = isDisabled;
+              hourlyPermissionCheckbox.addEventListener('change', function () {
+                draftTeacher.absent = false;
+                draftTeacher.accompanist = false;
+                draftTeacher.accompaniedClasses = [];
+                draftTeacher.hourlyPermission = hourlyPermissionCheckbox.checked;
+                if (!hourlyPermissionCheckbox.checked) {
+                  clearReplacementTeacherHourlyPermission_(teacher.teacherEmail);
                 }
                 markReplacementDraftChanged_({
                   clearNotice: true
                 });
               });
-              accompanistLabel.appendChild(accompanistCheckbox);
-              accompanistLabel.appendChild(ROOMS_UI.el('span', '', 'Accompagnatore'));
-              flags.appendChild(accompanistLabel);
-
-              var accompaniedCell = ROOMS_UI.el('div', teacher.accompanist ? 'replacement-accompanied-list' : 'replacement-accompanied-list hidden');
-              if (teacher.accompanist) {
-                if (!enabledClassCodes.length) {
-                  accompaniedCell.classList.add('empty');
-                  accompaniedCell.textContent = 'Seleziona prima le classi in uscita.';
-                } else {
-                enabledClassCodes.forEach(function (classCode) {
-                  var classLabel = document.createElement('label');
-                  var classCheckbox = document.createElement('input');
-                  classCheckbox.type = 'checkbox';
-                  classCheckbox.checked = safeArray(teacher.accompaniedClasses).indexOf(classCode) >= 0;
-                  classCheckbox.disabled = isDisabled;
-                  classCheckbox.addEventListener('change', function () {
-                    draftTeacher.absent = true;
-                    draftTeacher.accompaniedClasses = safeArray(draftTeacher.accompaniedClasses);
-                    if (classCheckbox.checked) {
-                      draftTeacher.accompanist = true;
-                      if (draftTeacher.accompaniedClasses.indexOf(classCode) < 0) {
-                        draftTeacher.accompaniedClasses.push(classCode);
-                      }
-                    } else {
-                      draftTeacher.accompaniedClasses = safeArray(draftTeacher.accompaniedClasses).filter(function (entry) {
-                        return entry !== classCode;
-                      });
-                      if (!draftTeacher.accompaniedClasses.length) {
-                        draftTeacher.accompanist = false;
-                      }
-                    }
-                    markReplacementDraftChanged_({
-                      clearNotice: true
-                    });
-                  });
-                  classLabel.appendChild(classCheckbox);
-                  classLabel.appendChild(ROOMS_UI.el('span', '', classCode));
-                  accompaniedCell.appendChild(classLabel);
-                });
-                }
-              }
+              hourlyPermissionLabel.appendChild(hourlyPermissionCheckbox);
+              hourlyPermissionLabel.appendChild(ROOMS_UI.el('span', '', 'Permesso orario'));
+              flags.appendChild(hourlyPermissionLabel);
 
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var manageButton = ROOMS_UI.el('button', 'button secondary', 'Gestisci');
@@ -2409,7 +2396,6 @@
               return [
                 teacher.teacherName || teacher.teacherEmail || '-',
                 flags,
-                accompaniedCell,
                 actions
               ];
             }),
