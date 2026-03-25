@@ -934,14 +934,7 @@ ROOMS_APP.Replacements = {
     });
 
     var teacherMap = this.indexByTeacherEmail_(teacherList);
-    var hourlyAbsenceMap = {};
-    (hourlySource || []).forEach(function (entry) {
-      var normalizedEntry = ROOMS_APP.Replacements.normalizeHourlyAbsenceEntry_(entry, targetDate);
-      if (!normalizedEntry.teacherEmail || !normalizedEntry.period) {
-        return;
-      }
-      hourlyAbsenceMap[ROOMS_APP.Replacements.buildHourlyAbsenceKey_(normalizedEntry.teacherEmail, normalizedEntry.period)] = normalizedEntry;
-    });
+    var hourlyAbsenceMap = this.buildValidHourlyAbsenceMap_(hourlySource || [], targetDate, teacherMap);
     var hourlyAbsences = Object.keys(hourlyAbsenceMap).map(function (key) {
       return hourlyAbsenceMap[key];
     }).sort(function (left, right) {
@@ -2261,6 +2254,26 @@ ROOMS_APP.Replacements = {
       recoveredByAssignmentKey: ROOMS_APP.normalizeString(entry && (entry.recoveredByAssignmentKey || entry.RecoveredByAssignmentKey)),
       notes: ROOMS_APP.normalizeString(entry && (entry.notes || entry.Notes))
     };
+  },
+
+  buildValidHourlyAbsenceMap_: function (entries, targetDate, teacherMap) {
+    var map = {};
+    (entries || []).forEach(function (entry) {
+      var normalizedEntry = ROOMS_APP.Replacements.normalizeHourlyAbsenceEntry_(entry, targetDate);
+      var teacher = teacherMap && teacherMap[normalizedEntry.teacherEmail] ? teacherMap[normalizedEntry.teacherEmail] : null;
+      var slot = teacher && teacher.periods ? teacher.periods[normalizedEntry.period] : null;
+      if (!normalizedEntry.teacherEmail || !normalizedEntry.period) {
+        return;
+      }
+      if (!teacher || teacher.absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+        return;
+      }
+      if (!normalizedEntry.teacherName) {
+        normalizedEntry.teacherName = teacher.teacherName;
+      }
+      map[ROOMS_APP.Replacements.buildHourlyAbsenceKey_(normalizedEntry.teacherEmail, normalizedEntry.period)] = normalizedEntry;
+    });
+    return map;
   },
 
   readAssignmentRow_: function (row, activeLongAssignmentMap) {

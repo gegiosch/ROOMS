@@ -1231,16 +1231,39 @@
           ].join('|');
         }
 
-        function getReplacementHourlyAbsenceMap_() {
+        function buildReplacementValidHourlyAbsenceMap_() {
           var map = {};
+          var baseMap = buildReplacementBaseTeacherMap_();
+          var draftMap = buildReplacementDraftTeacherMap_();
           safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).forEach(function (entry) {
-            var key = buildReplacementHourlyAbsenceKey_(entry && entry.teacherEmail, entry && entry.period);
-            if (!key) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(entry && entry.teacherEmail);
+            var period = String(entry && entry.period || '');
+            var teacher = baseMap[teacherEmail] || null;
+            var draftTeacher = draftMap[teacherEmail] || {};
+            var slot = teacher && teacher.periods ? teacher.periods[period] : null;
+            var nextEntry;
+            var absent;
+            if (!teacherEmail || !period || !teacher) {
               return;
             }
-            map[key] = entry;
+            absent = Boolean(draftTeacher.absent);
+            if (draftTeacher.accompanist) {
+              absent = true;
+            }
+            if (absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+              return;
+            }
+            nextEntry = Object.assign({}, entry, {
+              teacherEmail: teacherEmail,
+              teacherName: entry && entry.teacherName ? entry.teacherName : (teacher.teacherName || '')
+            });
+            map[buildReplacementHourlyAbsenceKey_(teacherEmail, period)] = nextEntry;
           });
           return map;
+        }
+
+        function getReplacementHourlyAbsenceMap_() {
+          return buildReplacementValidHourlyAbsenceMap_();
         }
 
         function getReplacementEffectiveTeachers_() {
