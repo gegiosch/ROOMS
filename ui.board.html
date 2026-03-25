@@ -1951,6 +1951,144 @@
           });
         }
 
+        function buildReplacementClassFlowForValidation_(classCode) {
+          var targetClassCode = normalizeReplacementClassCode_(classCode);
+          var periodMap = getReplacementPeriodTimeMap_();
+          var periods = Object.keys(periodMap).sort(function (left, right) {
+            return Number(left) - Number(right);
+          });
+          var assignmentsByClassPeriod = {};
+          var scheduledByPeriod = {};
+
+          safeArray(replacementState.localAssignments).forEach(function (assignment) {
+            var key = [normalizeReplacementClassCode_(assignment.classCode), String(assignment.period || '')].join('|');
+            assignmentsByClassPeriod[key] = assignmentsByClassPeriod[key] || [];
+            assignmentsByClassPeriod[key].push(assignment);
+          });
+          safeArray(replacementState.localTeachers).forEach(function (teacher) {
+            Object.keys((teacher && teacher.periods) || {}).forEach(function (period) {
+              var slot = teacher.periods[period];
+              if (!slot || slot.type !== 'CLASS' || normalizeReplacementClassCode_(slot.classCode) !== targetClassCode) {
+                return;
+              }
+              scheduledByPeriod[String(period || '')] = true;
+            });
+          });
+
+          return {
+            classCode: targetClassCode,
+            hasScheduledPeriods: Object.keys(scheduledByPeriod).length > 0,
+            periods: periods.map(function (period) {
+              var key = [targetClassCode, String(period || '')].join('|');
+              var periodAssignments = assignmentsByClassPeriod[key] || [];
+              var classHandlingTypes = periodAssignments.map(function (assignment) {
+                return normalizeReplacementClassHandlingType_(assignment.classHandlingType);
+              }).filter(function (value) {
+                return Boolean(value);
+              });
+              var hasToAssign = periodAssignments.some(function (assignment) {
+                return String(assignment.replacementStatus || '') === 'TO_ASSIGN';
+              });
+              var hasClassOut = isReplacementClassOutAtPeriod_(targetClassCode, period) || periodAssignments.some(function (assignment) {
+                return String(assignment.replacementStatus || '') === 'IN_USCITA';
+              });
+              var state = 'NO_CLASS';
+              if (scheduledByPeriod[String(period || '')]) {
+                state = 'VALID';
+                if (hasClassOut) {
+                  state = 'CLASS_OUT';
+                } else if (classHandlingTypes.indexOf('LATE_ENTRY') >= 0) {
+                  state = 'LATE_ENTRY_BLOCK';
+                } else if (classHandlingTypes.indexOf('EARLY_EXIT') >= 0) {
+                  state = 'EARLY_EXIT_BLOCK';
+                } else if (hasToAssign) {
+                  state = 'UNCOVERED';
+                }
+              }
+              return {
+                period: String(period || ''),
+                scheduled: Boolean(scheduledByPeriod[String(period || '')]),
+                state: state
+              };
+            })
+          };
+        }
+
+        function findNextReplacementClassFlowPeriod_(flow, sourcePeriod, predicate) {
+          var source = Number(sourcePeriod || 0);
+          var match = safeArray(flow && flow.periods).filter(function (entry) {
+            return Number(entry.period || 0) > source && predicate(entry);
+          })[0] || null;
+          return match ? match.period : '';
+        }
+
+        function findPreviousReplacementClassFlowPeriod_(flow, sourcePeriod, predicate) {
+          var source = Number(sourcePeriod || 0);
+          var matches = safeArray(flow && flow.periods).filter(function (entry) {
+            return Number(entry.period || 0) < source && predicate(entry);
+          });
+          return matches.length ? matches[matches.length - 1].period : '';
+        }
+
+        function validateReplacementClassHandlingAssignment_(assignment) {
+          var classHandlingType = normalizeReplacementClassHandlingType_(assignment && assignment.classHandlingType);
+          var classCode = normalizeReplacementClassCode_(assignment && assignment.classCode);
+          var sourcePeriod = String(assignment && assignment.period || '');
+          var flow;
+          var transitionPeriod;
+          var invalidState;
+          if (!classHandlingType || !classCode || !sourcePeriod) {
+            return '';
+          }
+          flow = buildReplacementClassFlowForValidation_(classCode);
+          if (!flow.hasScheduledPeriods) {
+            return 'Gestione classe non valida per ' + classCode + ': nessuna lezione programmata trovata.';
+          }
+          if (classHandlingType === 'LATE_ENTRY') {
+            transitionPeriod = findNextReplacementClassFlowPeriod_(flow, sourcePeriod, function (entry) {
+              return entry.state === 'VALID';
+            });
+            if (!transitionPeriod) {
+              return 'Entrata posticipata non valida per ' + classCode + ': nessuna ora utile di ingresso trovata dopo la ' + sourcePeriod + 'ª ora.';
+            }
+            invalidState = safeArray(flow.periods).filter(function (entry) {
+              return Number(entry.period || 0) < Number(transitionPeriod || 0) &&
+                entry.scheduled &&
+                entry.state !== 'LATE_ENTRY_BLOCK' &&
+                entry.state !== 'CLASS_OUT';
+            })[0] || null;
+            if (invalidState) {
+              return 'Entrata posticipata non valida per ' + classCode + ': la classe ha gia una lezione valida o incoerente prima della ' + transitionPeriod + 'ª ora.';
+            }
+            return '';
+          }
+          transitionPeriod = findPreviousReplacementClassFlowPeriod_(flow, sourcePeriod, function (entry) {
+            return entry.state === 'VALID';
+          });
+          if (!transitionPeriod) {
+            return 'Uscita anticipata non valida per ' + classCode + ': la classe non ha ancora svolto una lezione valida prima della ' + sourcePeriod + 'ª ora.';
+          }
+          invalidState = safeArray(flow.periods).filter(function (entry) {
+            return Number(entry.period || 0) > Number(transitionPeriod || 0) &&
+              entry.scheduled &&
+              entry.state !== 'EARLY_EXIT_BLOCK' &&
+              entry.state !== 'CLASS_OUT';
+          })[0] || null;
+          if (invalidState) {
+            return 'Uscita anticipata non valida per ' + classCode + ': restano lezioni successive non coerentemente chiuse dopo la ' + transitionPeriod + 'ª ora.';
+          }
+          return '';
+        }
+
+        function isReplacementClassHandlingAllowed_(assignment, classHandlingType) {
+          if (!classHandlingType) {
+            return true;
+          }
+          return !validateReplacementClassHandlingAssignment_(Object.assign({}, assignment, {
+            classHandlingType: classHandlingType
+          }));
+        }
+
         function computeReplacementSummaryFromAssignments_(assignments, classes, teachers) {
           var summary = {
             classOutCount: 0,
@@ -2006,6 +2144,13 @@
           safeArray(replacementState.localAssignments).forEach(function (assignment) {
             var recoveryKey;
             var teacherLabel;
+            var classHandlingError;
+            if (assignment && normalizeReplacementClassHandlingType_(assignment.classHandlingType)) {
+              classHandlingError = validateReplacementClassHandlingAssignment_(assignment);
+              if (classHandlingError) {
+                errors.push(classHandlingError);
+              }
+            }
             if (!assignment || normalizeReplacementHandlingType_(assignment.handlingType) !== 'RECOVERY' || assignment.replacementStatus !== 'ASSIGNED') {
               return;
             }
@@ -2616,11 +2761,18 @@
                     actions.appendChild(ROOMS_UI.el('span', 'muted', 'Nessuna sostituzione richiesta.'));
                   } else {
                     var classHandlingSelect = document.createElement('select');
+                    var noneOption = new Option('Gestione classe: nessuna', '');
+                    var lateEntryOption = new Option('Entrata posticipata', 'LATE_ENTRY');
+                    var earlyExitOption = new Option('Uscita anticipata', 'EARLY_EXIT');
                     classHandlingSelect.className = 'select replacement-detail-select';
                     classHandlingSelect.disabled = !isReplacementDateValid_();
-                    classHandlingSelect.appendChild(new Option('Gestione classe: nessuna', ''));
-                    classHandlingSelect.appendChild(new Option('Entrata posticipata', 'LATE_ENTRY'));
-                    classHandlingSelect.appendChild(new Option('Uscita anticipata', 'EARLY_EXIT'));
+                    lateEntryOption.disabled = !isReplacementClassHandlingAllowed_(assignment, 'LATE_ENTRY') &&
+                      normalizeReplacementClassHandlingType_(assignment.classHandlingType || row.classHandlingType) !== 'LATE_ENTRY';
+                    earlyExitOption.disabled = !isReplacementClassHandlingAllowed_(assignment, 'EARLY_EXIT') &&
+                      normalizeReplacementClassHandlingType_(assignment.classHandlingType || row.classHandlingType) !== 'EARLY_EXIT';
+                    classHandlingSelect.appendChild(noneOption);
+                    classHandlingSelect.appendChild(lateEntryOption);
+                    classHandlingSelect.appendChild(earlyExitOption);
                     classHandlingSelect.value = normalizeReplacementClassHandlingType_(assignment.classHandlingType || row.classHandlingType);
                     classHandlingSelect.addEventListener('change', function () {
                       upsertReplacementAssignment_(assignment, {

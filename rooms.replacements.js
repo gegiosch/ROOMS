@@ -1222,7 +1222,9 @@ ROOMS_APP.Replacements = {
         shiftTeacherName: shiftTeacherName,
         notes: ROOMS_APP.normalizeString(legacyState.notes || (meta.hourlyAbsence && meta.hourlyAbsence.notes)),
         startTime: slot.startTime,
-        endTime: slot.endTime
+        endTime: slot.endTime,
+        actualEntryPeriod: '',
+        actualExitPeriod: ''
       };
 
       if (isCoveredByOuting) {
@@ -1273,7 +1275,7 @@ ROOMS_APP.Replacements = {
       return next;
     });
 
-    return assignments.sort(function (left, right) {
+    var normalizedAssignments = assignments.sort(function (left, right) {
       var periodDelta = Number(left.period || 0) - Number(right.period || 0);
       if (periodDelta !== 0) {
         return periodDelta;
@@ -1284,6 +1286,32 @@ ROOMS_APP.Replacements = {
       }
       return left.classCode.localeCompare(right.classCode);
     });
+    var normalizedForFlow = {
+      assignments: normalizedAssignments,
+      teachers: teachers,
+      tripDayState: effectiveTripState
+    };
+    normalizedAssignments.forEach(function (entry) {
+      var classHandlingType = ROOMS_APP.Replacements.normalizeClassHandlingType_(entry.classHandlingType);
+      var flow;
+      if (!classHandlingType) {
+        return;
+      }
+      flow = ROOMS_APP.Replacements.buildClassFlowForValidation_(normalizedForFlow, entry.classCode);
+      if (classHandlingType === ROOMS_APP.Replacements.CLASS_HANDLING_TYPES_.LATE_ENTRY) {
+        entry.actualEntryPeriod = ROOMS_APP.Replacements.findNextClassFlowPeriod_(flow, entry.period, function (flowEntry) {
+          return flowEntry.state === 'VALID';
+        });
+        return;
+      }
+      if (classHandlingType === ROOMS_APP.Replacements.CLASS_HANDLING_TYPES_.EARLY_EXIT) {
+        entry.actualExitPeriod = ROOMS_APP.Replacements.findPreviousClassFlowPeriod_(flow, entry.period, function (flowEntry) {
+          return flowEntry.state === 'VALID';
+        });
+      }
+    });
+
+    return normalizedAssignments;
   },
 
   buildTeacherDetailRows_: function (normalized, teacher) {
@@ -1799,13 +1827,16 @@ ROOMS_APP.Replacements = {
       };
     }
     if (classHandlingType === this.CLASS_HANDLING_TYPES_.LATE_ENTRY) {
-      periodCells[entry.period] = 'Entrata';
-      noteParts.push('Entrata posticipata');
+      var actualEntryPeriod = this.getActualClassTransitionPeriod_(entry, this.CLASS_HANDLING_TYPES_.LATE_ENTRY);
+      if (actualEntryPeriod) {
+        periodCells[actualEntryPeriod] = 'Entrata';
+      }
+      noteParts.push(entry.classCode + ' entrata posticipata');
       if (ROOMS_APP.normalizeString(entry.notes)) {
         noteParts.push(ROOMS_APP.normalizeString(entry.notes));
       }
       return {
-        groupKey: 'CLASS|' + classHandlingType + '|' + noteParts.join(' | '),
+        groupKey: 'CLASS|' + classHandlingType + '|' + entry.classCode + '|' + actualEntryPeriod + '|' + noteParts.join(' | '),
         designatedTeacher: '',
         noteLabel: noteParts.join(' | '),
         noteOnly: true,
@@ -1813,13 +1844,16 @@ ROOMS_APP.Replacements = {
       };
     }
     if (classHandlingType === this.CLASS_HANDLING_TYPES_.EARLY_EXIT) {
-      periodCells[entry.period] = 'Uscita';
-      noteParts.push('Uscita anticipata');
+      var actualExitPeriod = this.getActualClassTransitionPeriod_(entry, this.CLASS_HANDLING_TYPES_.EARLY_EXIT);
+      if (actualExitPeriod) {
+        periodCells[actualExitPeriod] = 'Uscita';
+      }
+      noteParts.push(entry.classCode + ' uscita anticipata');
       if (ROOMS_APP.normalizeString(entry.notes)) {
         noteParts.push(ROOMS_APP.normalizeString(entry.notes));
       }
       return {
-        groupKey: 'CLASS|' + classHandlingType + '|' + noteParts.join(' | '),
+        groupKey: 'CLASS|' + classHandlingType + '|' + entry.classCode + '|' + actualExitPeriod + '|' + noteParts.join(' | '),
         designatedTeacher: '',
         noteLabel: noteParts.join(' | '),
         noteOnly: true,
@@ -1964,7 +1998,17 @@ ROOMS_APP.Replacements = {
       var teacher = normalized.teacherMap[self.normalizeTeacherEmail_(entry.originalTeacherEmail)] || null;
       var candidateInfo;
       var matchFound;
-      if (!teacher || self.normalizeClassHandlingType_(entry.classHandlingType) || entry.replacementStatus === 'IN_USCITA' || entry.replacementStatus === 'TO_ASSIGN') {
+      if (!teacher) {
+        return;
+      }
+      if (self.normalizeClassHandlingType_(entry.classHandlingType)) {
+        var classHandlingError = self.validateClassHandlingAssignment_(normalized, entry);
+        if (classHandlingError) {
+          errors.push(classHandlingError);
+        }
+        return;
+      }
+      if (entry.replacementStatus === 'IN_USCITA' || entry.replacementStatus === 'TO_ASSIGN') {
         return;
       }
       candidateInfo = self.buildCandidateLists_(normalized, teacher, entry.period, entry, assignedByPeriod);
@@ -2018,6 +2062,149 @@ ROOMS_APP.Replacements = {
     });
 
     return errors;
+  },
+
+  validateClassHandlingAssignment_: function (normalized, entry) {
+    var classHandlingType = this.normalizeClassHandlingType_(entry && entry.classHandlingType);
+    var classCode = ROOMS_APP.normalizeString(entry && entry.classCode).toUpperCase();
+    var sourcePeriod = ROOMS_APP.normalizeString(entry && entry.period);
+    var flow;
+    var transitionPeriod;
+    var invalidState;
+    if (!classHandlingType || !classCode || !sourcePeriod) {
+      return '';
+    }
+    flow = this.buildClassFlowForValidation_(normalized, classCode);
+    if (!flow.hasScheduledPeriods) {
+      return 'Gestione classe non valida per ' + classCode + ': nessuna lezione programmata trovata.';
+    }
+    if (classHandlingType === this.CLASS_HANDLING_TYPES_.LATE_ENTRY) {
+      transitionPeriod = this.findNextClassFlowPeriod_(flow, sourcePeriod, function (entryFlow) {
+        return entryFlow.state === 'VALID';
+      });
+      if (!transitionPeriod) {
+        return 'Entrata posticipata non valida per ' + classCode + ': nessuna ora utile di ingresso trovata dopo la ' + sourcePeriod + 'ª ora.';
+      }
+      invalidState = flow.periods.filter(function (entryFlow) {
+        return Number(entryFlow.period || 0) < Number(transitionPeriod || 0) &&
+          entryFlow.scheduled &&
+          entryFlow.state !== 'LATE_ENTRY_BLOCK' &&
+          entryFlow.state !== 'CLASS_OUT';
+      })[0] || null;
+      if (invalidState) {
+        return 'Entrata posticipata non valida per ' + classCode + ': la classe ha gia una lezione valida o incoerente prima della ' + transitionPeriod + 'ª ora.';
+      }
+      return '';
+    }
+    transitionPeriod = this.findPreviousClassFlowPeriod_(flow, sourcePeriod, function (entryFlow) {
+      return entryFlow.state === 'VALID';
+    });
+    if (!transitionPeriod) {
+      return 'Uscita anticipata non valida per ' + classCode + ': la classe non ha ancora svolto una lezione valida prima della ' + sourcePeriod + 'ª ora.';
+    }
+    invalidState = flow.periods.filter(function (entryFlow) {
+      return Number(entryFlow.period || 0) > Number(transitionPeriod || 0) &&
+        entryFlow.scheduled &&
+        entryFlow.state !== 'EARLY_EXIT_BLOCK' &&
+        entryFlow.state !== 'CLASS_OUT';
+    })[0] || null;
+    if (invalidState) {
+      return 'Uscita anticipata non valida per ' + classCode + ': restano lezioni successive non coerentemente chiuse dopo la ' + transitionPeriod + 'ª ora.';
+    }
+    return '';
+  },
+
+  buildClassFlowForValidation_: function (normalized, classCode) {
+    var targetClassCode = ROOMS_APP.normalizeString(classCode).toUpperCase();
+    var periodMap = ROOMS_APP.Timetable.getPeriodTimeMap();
+    var periods = Object.keys(periodMap).sort(function (left, right) {
+      return Number(left) - Number(right);
+    });
+    var assignmentsByClassPeriod = {};
+    var scheduledByPeriod = {};
+    (normalized.assignments || []).forEach(function (entry) {
+      var key = [
+        ROOMS_APP.normalizeString(entry.classCode).toUpperCase(),
+        ROOMS_APP.normalizeString(entry.period)
+      ].join('|');
+      assignmentsByClassPeriod[key] = assignmentsByClassPeriod[key] || [];
+      assignmentsByClassPeriod[key].push(entry);
+    });
+    (normalized.teachers || []).forEach(function (teacher) {
+      Object.keys(teacher.periods || {}).forEach(function (period) {
+        var slot = teacher.periods[period];
+        if (!slot || slot.type !== 'CLASS' || ROOMS_APP.normalizeString(slot.classCode).toUpperCase() !== targetClassCode) {
+          return;
+        }
+        scheduledByPeriod[ROOMS_APP.normalizeString(period)] = true;
+      });
+    });
+    return {
+      classCode: targetClassCode,
+      hasScheduledPeriods: Object.keys(scheduledByPeriod).length > 0,
+      periods: periods.map(function (period) {
+        var key = [targetClassCode, ROOMS_APP.normalizeString(period)].join('|');
+        var periodAssignments = assignmentsByClassPeriod[key] || [];
+        var classHandlingTypes = periodAssignments.map(function (assignment) {
+          return ROOMS_APP.Replacements.normalizeClassHandlingType_(assignment.classHandlingType);
+        }).filter(function (value) {
+          return Boolean(value);
+        });
+        var hasClassHandling = Boolean(classHandlingTypes.length);
+        var hasToAssign = periodAssignments.some(function (assignment) {
+          return ROOMS_APP.normalizeString(assignment.replacementStatus) === 'TO_ASSIGN';
+        });
+        var hasClassOut = ROOMS_APP.Replacements.isClassOutAtPeriod_(normalized, targetClassCode, period) ||
+          periodAssignments.some(function (assignment) {
+            return ROOMS_APP.normalizeString(assignment.replacementStatus) === 'IN_USCITA';
+          });
+        var state = 'NO_CLASS';
+        if (scheduledByPeriod[period]) {
+          state = 'VALID';
+          if (hasClassOut) {
+            state = 'CLASS_OUT';
+          } else if (classHandlingTypes.indexOf(ROOMS_APP.Replacements.CLASS_HANDLING_TYPES_.LATE_ENTRY) >= 0) {
+            state = 'LATE_ENTRY_BLOCK';
+          } else if (classHandlingTypes.indexOf(ROOMS_APP.Replacements.CLASS_HANDLING_TYPES_.EARLY_EXIT) >= 0) {
+            state = 'EARLY_EXIT_BLOCK';
+          } else if (hasToAssign) {
+            state = 'UNCOVERED';
+          }
+        }
+        return {
+          period: period,
+          scheduled: Boolean(scheduledByPeriod[period]),
+          state: state
+        };
+      })
+    };
+  },
+
+  findNextClassFlowPeriod_: function (flow, sourcePeriod, predicate) {
+    var source = Number(sourcePeriod || 0);
+    var match = (flow && flow.periods || []).filter(function (entry) {
+      return Number(entry.period || 0) > source && predicate(entry);
+    })[0] || null;
+    return match ? match.period : '';
+  },
+
+  findPreviousClassFlowPeriod_: function (flow, sourcePeriod, predicate) {
+    var source = Number(sourcePeriod || 0);
+    var matches = (flow && flow.periods || []).filter(function (entry) {
+      return Number(entry.period || 0) < source && predicate(entry);
+    });
+    return matches.length ? matches[matches.length - 1].period : '';
+  },
+
+  getActualClassTransitionPeriod_: function (entry, classHandlingType) {
+    var normalizedHandling = this.normalizeClassHandlingType_(classHandlingType || (entry && entry.classHandlingType));
+    var actualPeriod = ROOMS_APP.normalizeString(entry && (normalizedHandling === this.CLASS_HANDLING_TYPES_.LATE_ENTRY
+      ? entry.actualEntryPeriod
+      : entry.actualExitPeriod));
+    if (actualPeriod) {
+      return actualPeriod;
+    }
+    return ROOMS_APP.normalizeString(entry && entry.period);
   },
 
   buildSummaryFromAssignments_: function (assignments, classes, teachers) {
