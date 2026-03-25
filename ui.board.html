@@ -119,7 +119,7 @@
                 <div class="replacement-detail-header">
                   <div>
                     <h3 id="replacement-detail-title">Dettaglio docente</h3>
-                    <p id="replacement-detail-meta" class="subtitle">Seleziona un docente assente per gestire le sostituzioni.</p>
+                    <p id="replacement-detail-meta" class="subtitle">Seleziona un docente per gestire il dettaglio giornaliero.</p>
                   </div>
                   <span id="replacement-detail-loading" class="status-pill" style="display:none;">Aggiornamento...</span>
                 </div>
@@ -1603,17 +1603,6 @@
           safeArray(replacementState.model && replacementState.model.pendingRecoveryRows).forEach(function (entry) {
             map[buildReplacementHourlyAbsenceDateKey_(entry.date, entry.teacherEmail, entry.period)] = entry;
           });
-          safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).forEach(function (entry) {
-            if (!entry || !entry.recoveryRequired) {
-              return;
-            }
-            map[buildReplacementHourlyAbsenceDateKey_(replacementState.date, entry.teacherEmail, entry.period)] = {
-              date: replacementState.date,
-              teacherEmail: entry.teacherEmail,
-              teacherName: entry.teacherName,
-              period: entry.period
-            };
-          });
           safeArray(replacementState.localAssignments).forEach(function (entry) {
             if (!entry || normalizeReplacementHandlingType_(entry.handlingType) !== 'RECOVERY' || entry.replacementStatus !== 'ASSIGNED') {
               return;
@@ -1864,6 +1853,7 @@
         function computeReplacementValidationErrors_() {
           var byClass = {};
           var errors = [];
+          var recoveryLinkMap = {};
           safeArray(replacementState.localTeachers).forEach(function (teacher) {
             if (!teacher || !teacher.accompanist) {
               return;
@@ -1884,6 +1874,31 @@
             if (classCode && !byClass[classCode]) {
               errors.push('La classe ' + classCode + ' è in uscita ma non ha alcun docente accompagnatore associato.');
             }
+          });
+          safeArray(replacementState.localAssignments).forEach(function (assignment) {
+            var recoveryKey;
+            var teacherLabel;
+            if (!assignment || normalizeReplacementHandlingType_(assignment.handlingType) !== 'RECOVERY' || assignment.replacementStatus !== 'ASSIGNED') {
+              return;
+            }
+            if (String(assignment.recoverySourceDate || '') === String(replacementState.date || '')) {
+              errors.push('Il recupero del docente ' + (assignment.replacementTeacherName || assignment.replacementTeacherEmail || '') + ' deve riferirsi a un altro giorno.');
+              return;
+            }
+            recoveryKey = buildReplacementHourlyAbsenceDateKey_(
+              assignment.recoverySourceDate,
+              assignment.replacementTeacherEmail,
+              assignment.recoverySourcePeriod
+            );
+            if (!recoveryKey) {
+              return;
+            }
+            if (recoveryLinkMap[recoveryKey]) {
+              teacherLabel = assignment.replacementTeacherName || assignment.replacementTeacherEmail || '';
+              errors.push('Il recupero del docente ' + teacherLabel + ' risulta collegato a piu assegnazioni.');
+              return;
+            }
+            recoveryLinkMap[recoveryKey] = true;
           });
           return errors;
         }
@@ -1910,7 +1925,7 @@
           selectedTeacher = safeArray(replacementState.localTeachers).filter(function (teacher) {
             return normalizeReplacementTeacherEmail_(teacher.teacherEmail) === normalizeReplacementTeacherEmail_(replacementState.selectedTeacherEmail);
           })[0] || null;
-          if (!selectedTeacher || !selectedTeacher.absent) {
+          if (!selectedTeacher) {
             replacementState.teacherDetail = null;
             if (!selectedTeacher) {
               replacementState.selectedTeacherEmail = '';
@@ -2414,7 +2429,7 @@
           if (replacementDetailMeta) {
             replacementDetailMeta.textContent = detail && detail.teacherEmail
               ? ('Docente ' + detail.teacherEmail)
-              : 'Seleziona un docente assente per gestire le sostituzioni.';
+              : 'Seleziona un docente per gestire il dettaglio giornaliero.';
           }
           if (!replacementDetailTable) {
             return;

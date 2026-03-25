@@ -1805,6 +1805,7 @@ ROOMS_APP.Replacements = {
     var errors = [];
     var accompanimentByClass = {};
     var assignedByPeriod = this.buildAssignedTeacherSetByPeriod_(normalized.assignments);
+    var recoveryLinkMap = {};
     var self = this;
 
     (normalized && normalized.teachers || []).forEach(function (teacher) {
@@ -1864,6 +1865,19 @@ ROOMS_APP.Replacements = {
         return;
       }
       if (self.normalizeHandlingType_(entry.handlingType) === self.HANDLING_TYPES_.RECOVERY) {
+        var recoveryKey = self.buildHourlyAbsenceDateKey_(
+          entry.recoverySourceDate,
+          entry.replacementTeacherEmail,
+          entry.recoverySourcePeriod
+        );
+        if (entry.recoverySourceDate === normalized.date) {
+          errors.push('Il recupero per ' + entry.classCode + ' alla ' + entry.period + 'ª ora deve riferirsi a un altro giorno.');
+          return;
+        }
+        if (recoveryKey && recoveryLinkMap[recoveryKey]) {
+          errors.push('Il recupero del ' + self.formatShortDate_(entry.recoverySourceDate) + ' ' + entry.recoverySourcePeriod + 'ª ora è già collegato a un\'altra assegnazione.');
+          return;
+        }
         matchFound = candidateInfo.candidates.some(function (candidate) {
           return candidate.teacherEmail === self.normalizeTeacherEmail_(entry.replacementTeacherEmail) &&
             ROOMS_APP.toIsoDate(candidate.recoverySourceDate) === ROOMS_APP.toIsoDate(entry.recoverySourceDate) &&
@@ -1871,7 +1885,9 @@ ROOMS_APP.Replacements = {
         });
         if (!matchFound) {
           errors.push('Recupero non valido per ' + entry.classCode + ' alla ' + entry.period + 'ª ora.');
+          return;
         }
+        recoveryLinkMap[recoveryKey] = true;
         return;
       }
       if (entry.replacementStatus === 'ASSIGNED') {
@@ -2188,21 +2204,6 @@ ROOMS_APP.Replacements = {
     var map = {};
     (persistedRows || []).forEach(function (entry) {
       map[ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(entry.date, entry.teacherEmail, entry.period)] = entry;
-    });
-    (hourlyAbsences || []).forEach(function (entry) {
-      if (!entry.recoveryRequired) {
-        return;
-      }
-      map[ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(targetDate, entry.teacherEmail, entry.period)] = {
-        date: targetDate,
-        teacherEmail: entry.teacherEmail,
-        teacherName: entry.teacherName,
-        period: entry.period,
-        reason: entry.reason,
-        recoveryRequired: true,
-        recoveryStatus: entry.recoveryStatus || ROOMS_APP.Replacements.RECOVERY_STATUSES_.PENDING,
-        notes: entry.notes
-      };
     });
     (assignments || []).forEach(function (entry) {
       if (ROOMS_APP.Replacements.normalizeHandlingType_(entry.handlingType) !== ROOMS_APP.Replacements.HANDLING_TYPES_.RECOVERY ||
