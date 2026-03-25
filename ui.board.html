@@ -113,7 +113,26 @@
 
               <section class="panel table-card replacement-section">
                 <h3>Docenti</h3>
-                <div id="replacement-teachers-table"></div>
+                <div class="grid grid-3" style="align-items:end;">
+                  <div>
+                    <label for="replacement-teacher-select">Seleziona docente</label>
+                    <select id="replacement-teacher-select" class="select"></select>
+                  </div>
+                  <div>
+                    <label for="replacement-teacher-event-type">Tipo evento</label>
+                    <select id="replacement-teacher-event-type" class="select">
+                      <option value="DAILY_ABSENCE">Assenza giornaliera</option>
+                      <option value="HOURLY_PERMISSION">Permesso orario</option>
+                    </select>
+                  </div>
+                  <div>
+                    <button id="replacement-teacher-add-button" class="button" type="button">Aggiungi</button>
+                  </div>
+                </div>
+                <div style="margin-top:12px;">
+                  <h3 style="margin:0 0 8px 0;">Docenti da gestire</h3>
+                  <div id="replacement-teachers-table"></div>
+                </div>
               </section>
             </div>
 
@@ -513,6 +532,9 @@
         var replacementLongActionsBottom = document.getElementById('replacement-long-actions-bottom');
         var replacementDateInput = document.getElementById('replacement-date-input');
         var replacementQuickSummary = document.getElementById('replacement-quick-summary');
+        var replacementTeacherSelect = document.getElementById('replacement-teacher-select');
+        var replacementTeacherEventType = document.getElementById('replacement-teacher-event-type');
+        var replacementTeacherAddButton = document.getElementById('replacement-teacher-add-button');
         var replacementTeachersTable = document.getElementById('replacement-teachers-table');
         var replacementDetailSection = replacementModal ? replacementModal.querySelector('.replacement-detail-section') : null;
         var replacementDetailTitle = document.getElementById('replacement-detail-title');
@@ -2558,56 +2580,224 @@
           return ROOMS_UI.el('span', cssClass, label);
         }
 
+        function getReplacementTeacherPickerOptions_() {
+          return safeArray(replacementState.localTeachers).slice().sort(function (left, right) {
+            return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
+          });
+        }
+
+        function getReplacementManagedTeacherType_(teacher) {
+          var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+          var hasHourlyEntries = safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).some(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) === teacherEmail;
+          });
+          var hasHourlyAssignments = safeArray(replacementState.localAssignments).some(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === teacherEmail &&
+              String(entry && entry.originalStatus || '') === 'HOURLY_ABSENCE';
+          });
+          var hasDailyAssignments = safeArray(replacementState.localAssignments).some(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === teacherEmail &&
+              String(entry && entry.originalStatus || '') === 'ABSENT';
+          });
+          if (teacher && teacher.absent) {
+            return 'DAILY_ABSENCE';
+          }
+          if (teacher && teacher.hourlyPermission) {
+            return 'HOURLY_PERMISSION';
+          }
+          if (hasHourlyEntries || hasHourlyAssignments) {
+            return 'HOURLY_PERMISSION';
+          }
+          if (hasDailyAssignments) {
+            return 'DAILY_ABSENCE';
+          }
+          return '';
+        }
+
+        function getReplacementManagedTeachers_() {
+          return safeArray(replacementState.localTeachers).filter(function (teacher) {
+            return Boolean(getReplacementManagedTeacherType_(teacher));
+          }).sort(function (left, right) {
+            return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
+          });
+        }
+
+        function getReplacementManagementRelevantAssignments_(teacher, managedType) {
+          var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+          return safeArray(replacementState.localAssignments).filter(function (entry) {
+            if (normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) !== teacherEmail) {
+              return false;
+            }
+            if (managedType === 'HOURLY_PERMISSION') {
+              return String(entry && entry.originalStatus || '') === 'HOURLY_ABSENCE';
+            }
+            return String(entry && entry.originalStatus || '') === 'ABSENT';
+          });
+        }
+
+        function getReplacementManagementStatus_(teacher) {
+          var managedType = getReplacementManagedTeacherType_(teacher);
+          var relevantAssignments = getReplacementManagementRelevantAssignments_(teacher, managedType);
+          var unresolvedCount = relevantAssignments.filter(function (entry) {
+            return String(entry && entry.replacementStatus || '') === 'TO_ASSIGN';
+          }).length;
+          var resolvedCount = relevantAssignments.length - unresolvedCount;
+          var hasHourlyEntries = safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).some(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) === normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+          });
+
+          if (managedType === 'HOURLY_PERMISSION' && !hasHourlyEntries && !relevantAssignments.length) {
+            return {
+              code: 'TO_MANAGE',
+              label: 'Da gestire'
+            };
+          }
+          if (!relevantAssignments.length) {
+            return {
+              code: 'COMPLETED',
+              label: 'Completato'
+            };
+          }
+          if (!resolvedCount) {
+            return {
+              code: 'TO_MANAGE',
+              label: 'Da gestire'
+            };
+          }
+          if (unresolvedCount) {
+            return {
+              code: 'PARTIAL',
+              label: 'Parziale'
+            };
+          }
+          return {
+            code: 'COMPLETED',
+            label: 'Completato'
+          };
+        }
+
+        function createReplacementManagementBadge_(teacher) {
+          var status = getReplacementManagementStatus_(teacher);
+          var badge = document.createElement('span');
+          badge.className = 'replacement-status-tag';
+          if (status.code === 'TO_MANAGE') {
+            badge.className += ' to-assign';
+          } else if (status.code === 'PARTIAL') {
+            badge.className += ' in-uscita';
+          } else {
+            badge.className += ' assigned';
+          }
+          badge.textContent = status.label;
+          return badge;
+        }
+
+        function getReplacementManagedTypeLabel_(managedType) {
+          if (managedType === 'HOURLY_PERMISSION') {
+            return 'Permesso orario';
+          }
+          return 'Assenza giornaliera';
+        }
+
+        function clearReplacementTeacherDailyAbsence_(teacherEmail) {
+          var draft = replacementState.draft || buildReplacementDraftFromModel_(replacementState.model || {});
+          var targetEmail = normalizeReplacementTeacherEmail_(teacherEmail);
+          draft.teachers = safeArray(draft.teachers).map(function (entry) {
+            if (normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) !== targetEmail) {
+              return entry;
+            }
+            return Object.assign({}, entry, {
+              absent: false
+            });
+          });
+          draft.assignments = safeArray(draft.assignments).filter(function (entry) {
+            return !(normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === targetEmail &&
+              String(entry && entry.originalStatus || '') === 'ABSENT');
+          });
+          replacementState.draft = draft;
+        }
+
+        function removeReplacementTeacherFromManagement_(teacherEmail) {
+          var draftTeacher = getReplacementTeacher_(teacherEmail);
+          clearReplacementTeacherDailyAbsence_(teacherEmail);
+          clearReplacementTeacherHourlyPermission_(teacherEmail);
+          replacementState.draft.assignments = safeArray(replacementState.draft && replacementState.draft.assignments).filter(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) !== normalizeReplacementTeacherEmail_(teacherEmail);
+          });
+          replacementState.draft.teachers = safeArray(replacementState.draft && replacementState.draft.teachers).map(function (entry) {
+            if (normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) !== normalizeReplacementTeacherEmail_(teacherEmail)) {
+              return entry;
+            }
+            return Object.assign({}, entry, {
+              absent: false,
+              hourlyPermission: false,
+              notes: draftTeacher && draftTeacher.notes ? draftTeacher.notes : ''
+            });
+          });
+          if (normalizeReplacementTeacherEmail_(replacementState.selectedTeacherEmail) === normalizeReplacementTeacherEmail_(teacherEmail)) {
+            replacementState.selectedTeacherEmail = '';
+            replacementState.teacherDetail = null;
+          }
+        }
+
+        function addReplacementTeacherToManagement_() {
+          var teacherEmail = replacementTeacherSelect ? replacementTeacherSelect.value : '';
+          var managedType = replacementTeacherEventType ? replacementTeacherEventType.value : 'DAILY_ABSENCE';
+          var draftTeacher = getReplacementTeacher_(teacherEmail);
+          if (!teacherEmail || !draftTeacher) {
+            setReplacementNotice_('Seleziona un docente valido da aggiungere.', 'error');
+            return;
+          }
+          if (managedType === 'DAILY_ABSENCE') {
+            draftTeacher.absent = true;
+            draftTeacher.hourlyPermission = false;
+            clearReplacementTeacherHourlyPermission_(teacherEmail);
+            draftTeacher = getReplacementTeacher_(teacherEmail) || draftTeacher;
+            draftTeacher.absent = true;
+          } else {
+            draftTeacher.absent = false;
+            draftTeacher.hourlyPermission = true;
+          }
+          replacementState.selectedTeacherEmail = teacherEmail;
+          markReplacementDraftChanged_({
+            clearNotice: true
+          });
+          loadReplacementTeacherDetail_(teacherEmail, {});
+          scrollReplacementModalToDetail_();
+        }
+
+        function renderReplacementTeacherPicker_() {
+          var options = getReplacementTeacherPickerOptions_();
+          var currentValue = replacementTeacherSelect ? replacementTeacherSelect.value : '';
+          if (!replacementTeacherSelect) {
+            return;
+          }
+          ROOMS_UI.clearNode(replacementTeacherSelect);
+          replacementTeacherSelect.appendChild(new Option('Seleziona docente', ''));
+          options.forEach(function (teacher) {
+            var option = new Option(teacher.teacherName || teacher.teacherEmail || '', teacher.teacherEmail || '');
+            if ((teacher.teacherEmail || '') === currentValue) {
+              option.selected = true;
+            }
+            replacementTeacherSelect.appendChild(option);
+          });
+          if (replacementTeacherAddButton) {
+            replacementTeacherAddButton.disabled = !isReplacementDateValid_() || !replacementTeacherSelect.value;
+          }
+        }
+
         function renderReplacementTeachers_() {
-          var teachers = safeArray(replacementState.localTeachers);
+          var teachers = getReplacementManagedTeachers_();
           var isDisabled = !isReplacementDateValid_();
+          renderReplacementTeacherPicker_();
 
           renderTable(
             'replacement-teachers-table',
-            ['Docente', 'Stato', 'Azioni'],
+            ['Docente', 'Evento', 'Stato', 'Azioni'],
             teachers.map(function (teacher) {
-              var draftTeacher = getReplacementTeacher_(teacher.teacherEmail) || teacher;
-              var flags = ROOMS_UI.el('div', 'replacement-teacher-flags');
-              var absentLabel = document.createElement('label');
-              var absentCheckbox = document.createElement('input');
-              absentCheckbox.type = 'checkbox';
-              absentCheckbox.checked = Boolean(teacher.absent);
-              absentCheckbox.disabled = isDisabled;
-              absentCheckbox.addEventListener('change', function () {
-                draftTeacher.absent = absentCheckbox.checked;
-                if (draftTeacher.absent) {
-                  draftTeacher.hourlyPermission = false;
-                  clearReplacementTeacherHourlyPermission_(teacher.teacherEmail);
-                }
-                markReplacementDraftChanged_({
-                  clearNotice: true
-                });
-              });
-              absentLabel.appendChild(absentCheckbox);
-              absentLabel.appendChild(ROOMS_UI.el('span', '', 'Assenza giornaliera'));
-              flags.appendChild(absentLabel);
-
-              var hourlyPermissionLabel = document.createElement('label');
-              var hourlyPermissionCheckbox = document.createElement('input');
-              hourlyPermissionCheckbox.type = 'checkbox';
-              hourlyPermissionCheckbox.checked = Boolean(teacher.hourlyPermission);
-              hourlyPermissionCheckbox.disabled = isDisabled;
-              hourlyPermissionCheckbox.addEventListener('change', function () {
-                draftTeacher.absent = false;
-                draftTeacher.hourlyPermission = hourlyPermissionCheckbox.checked;
-                if (!hourlyPermissionCheckbox.checked) {
-                  clearReplacementTeacherHourlyPermission_(teacher.teacherEmail);
-                }
-                markReplacementDraftChanged_({
-                  clearNotice: true
-                });
-              });
-              hourlyPermissionLabel.appendChild(hourlyPermissionCheckbox);
-              hourlyPermissionLabel.appendChild(ROOMS_UI.el('span', '', 'Permesso orario'));
-              flags.appendChild(hourlyPermissionLabel);
-
+              var managedType = getReplacementManagedTeacherType_(teacher);
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var manageButton = ROOMS_UI.el('button', 'button secondary', 'Gestisci');
+              var removeButton = ROOMS_UI.el('button', 'button secondary', 'Rimuovi');
               var hasClassSlots = Object.keys(teacher.periods || {}).some(function (period) {
                 var slot = teacher.periods[period];
                 return slot && slot.type === 'CLASS' && slot.classCode;
@@ -2623,13 +2813,24 @@
               });
               actions.appendChild(manageButton);
 
+              removeButton.type = 'button';
+              removeButton.disabled = isDisabled;
+              removeButton.addEventListener('click', function () {
+                removeReplacementTeacherFromManagement_(teacher.teacherEmail);
+                markReplacementDraftChanged_({
+                  clearNotice: true
+                });
+              });
+              actions.appendChild(removeButton);
+
               return [
                 teacher.teacherName || teacher.teacherEmail || '-',
-                flags,
+                getReplacementManagedTypeLabel_(managedType),
+                createReplacementManagementBadge_(teacher),
                 actions
               ];
             }),
-            isReplacementDateValid_() ? 'Nessun docente disponibile per il giorno selezionato.' : 'Data non valida. Correggere la data per proseguire.',
+            isReplacementDateValid_() ? 'Nessun docente selezionato per la gestione giornaliera.' : 'Data non valida. Correggere la data per proseguire.',
             'replacement-teachers-layout'
           );
         }
@@ -5262,6 +5463,14 @@
         }
         if (replacementDateInput) {
           replacementDateInput.addEventListener('change', handleReplacementDateChange_);
+        }
+        if (replacementTeacherSelect) {
+          replacementTeacherSelect.addEventListener('change', function () {
+            renderReplacementTeacherPicker_();
+          });
+        }
+        if (replacementTeacherAddButton) {
+          replacementTeacherAddButton.addEventListener('click', addReplacementTeacherToManagement_);
         }
         if (replacementTabDaily) {
           replacementTabDaily.addEventListener('click', function () {
