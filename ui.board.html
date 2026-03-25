@@ -1127,7 +1127,6 @@
                 teacherEmail: entry.teacherEmail || '',
                 teacherName: entry.teacherName || '',
                 period: entry.period || '',
-                reason: entry.reason || '',
                 recoveryRequired: Boolean(entry.recoveryRequired),
                 recoveryStatus: entry.recoveryStatus || '',
                 recoveredOnDate: entry.recoveredOnDate || '',
@@ -2509,7 +2508,6 @@
                       teacherEmail: detail.teacherEmail,
                       teacherName: detail.teacherName,
                       period: row.period,
-                      reason: '',
                       recoveryRequired: false,
                       recoveryStatus: 'PENDING',
                       recoveredOnDate: '',
@@ -2527,22 +2525,6 @@
                 }
 
                 if (row.hourlyAbsence && !selectedTeacher.absent) {
-                  var hourlyReason = document.createElement('input');
-                  hourlyReason.type = 'text';
-                  hourlyReason.className = 'input';
-                  hourlyReason.placeholder = 'Motivo assenza oraria';
-                  hourlyReason.value = row.hourlyAbsence.reason || '';
-                  hourlyReason.disabled = !isReplacementDateValid_();
-                  hourlyReason.addEventListener('change', function () {
-                    upsertReplacementHourlyAbsence_(row.hourlyAbsence, {
-                      reason: hourlyReason.value || ''
-                    });
-                    markReplacementDraftChanged_({
-                      clearNotice: true
-                    });
-                  });
-                  actions.appendChild(hourlyReason);
-
                   var recoveryToggleWrap = ROOMS_UI.el('div', 'replacement-class-toggle');
                   var recoveryToggleLabel = document.createElement('label');
                   var recoveryCheckbox = document.createElement('input');
