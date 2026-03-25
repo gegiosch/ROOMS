@@ -420,13 +420,17 @@ ROOMS_APP.Schema = {
 
   ensureSheetStructure_: function (sheetName, headers) {
     var sheet = ROOMS_APP.DB.getOrCreateSheet(sheetName);
+    var hadRows = sheet.getLastRow() > 0;
     if (sheet.getMaxColumns() < headers.length) {
       sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
     }
 
-    this.setPlainTextSheet_(sheet, sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    this.applyManagedSheetFormatting_(sheet, headers);
+    SpreadsheetApp.flush();
+    this.setPlainTextSheet_(sheet, sheetName, headers.length);
+    this.applyManagedSheetFormatting_(sheet, headers, {
+      autoResizeColumns: !hadRows
+    });
     ROOMS_APP.DB.invalidateSheetCache_(sheetName);
   },
 
@@ -445,6 +449,7 @@ ROOMS_APP.Schema = {
         sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
       }
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      SpreadsheetApp.flush();
       currentHeaders = headers.slice();
       changed = true;
     } else {
@@ -463,15 +468,18 @@ ROOMS_APP.Schema = {
       }
     }
 
-    this.setPlainTextSheet_(sheet, sheetName);
-    this.applyManagedSheetFormatting_(sheet, currentHeaders);
+    this.setPlainTextSheet_(sheet, sheetName, currentHeaders.length);
+    this.applyManagedSheetFormatting_(sheet, currentHeaders, {
+      autoResizeColumns: changed
+    });
     if (changed) {
       ROOMS_APP.DB.invalidateSheetCache_(sheetName);
     }
   },
 
-  applyManagedSheetFormatting_: function (sheet, headers) {
+  applyManagedSheetFormatting_: function (sheet, headers, options) {
     var headerCount = headers && headers.length ? headers.length : 0;
+    var settings = options || {};
     var index;
     if (!sheet || !headerCount) {
       return;
@@ -483,7 +491,9 @@ ROOMS_APP.Schema = {
       .setBackground('#dbeafe')
       .setWrap(true)
       .setVerticalAlignment('middle');
-    sheet.autoResizeColumns(1, headerCount);
+    if (settings.autoResizeColumns !== false) {
+      sheet.autoResizeColumns(1, headerCount);
+    }
 
     for (index = 0; index < headerCount; index += 1) {
       this.applyMinimumColumnWidth_(sheet, index + 1, headers[index]);
@@ -668,12 +678,16 @@ ROOMS_APP.Schema = {
     return /^\d{2}:\d{2}$/.test(normalized) ? normalized : '';
   },
 
-  setPlainTextSheet_: function (sheet, sheetName) {
+  setPlainTextSheet_: function (sheet, sheetName, columnCount) {
+    var effectiveColumnCount;
+    var effectiveRowCount;
     if (!this.PLAIN_TEXT_SHEETS_[sheetName]) {
       return;
     }
 
-    sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setNumberFormat('@');
+    effectiveColumnCount = Math.max(Number(columnCount) || 0, sheet.getLastColumn(), 1);
+    effectiveRowCount = Math.max(sheet.getLastRow(), 1);
+    sheet.getRange(1, 1, effectiveRowCount, effectiveColumnCount).setNumberFormat('@');
   },
 
   buildResourceRows_: function () {
