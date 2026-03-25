@@ -58,6 +58,8 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIPS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIP_TEACHERS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS] = true;
@@ -78,6 +80,8 @@ ROOMS_APP.Schema = {
     this.ensureAulaMagnaEvents();
     this.ensureReplacementClassOut();
     this.ensureReplacementDayTeachers();
+    this.ensureReplacementFieldTrips();
+    this.ensureReplacementFieldTripTeachers();
     this.ensureReplacementHourlyAbsences();
     this.ensureReplacementAssignments();
     this.ensureReplacementLongAssignments();
@@ -256,6 +260,35 @@ ROOMS_APP.Schema = {
       'Absent',
       'Accompanist',
       'AccompaniedClasses',
+      'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementFieldTrips: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIPS, [
+      'TripId',
+      'TripType',
+      'ClassCode',
+      'Title',
+      'StartDate',
+      'EndDate',
+      'StartTime',
+      'EndTime',
+      'Notes',
+      'Enabled',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementFieldTripTeachers: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIP_TEACHERS, [
+      'TripId',
+      'TeacherEmail',
+      'TeacherName',
+      'Role',
       'Notes',
       'UpdatedAtISO',
       'UpdatedBy'

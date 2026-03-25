@@ -79,13 +79,14 @@
         </div>
 
         <div class="notice replacement-instructions">
-          1. Seleziona prima le classi in uscita. 2. Imposta docenti assenti o accompagnatori. 3. Apri Gestisci per assegnare le sostituzioni.
+          Prima di procedere con la gestione delle sostituzioni, verificare che eventuali uscite didattiche per la giornata siano state inserite.
         </div>
         <div id="replacement-notice" class="notice" style="display:none;"></div>
         <div id="replacement-date-state" class="notice" style="display:none;"></div>
 
         <div class="replacement-tabs">
           <button id="replacement-tab-daily" class="button secondary replacement-tab-button" type="button" data-tab="daily">Sostituzioni giornaliere</button>
+          <button id="replacement-tab-trips" class="button secondary replacement-tab-button" type="button" data-tab="trips">Uscite didattiche</button>
           <button id="replacement-tab-long" class="button secondary replacement-tab-button" type="button" data-tab="long">Supplenze lunghe</button>
         </div>
 
@@ -103,9 +104,11 @@
                 </div>
               </section>
 
-              <section class="panel table-card replacement-section">
-                <h3>Classi in uscita</h3>
-                <div id="replacement-classes-table"></div>
+              <section class="panel form-card replacement-section">
+                <h3>Uscite didattiche</h3>
+                <div class="notice">
+                  Le classi in uscita e i docenti accompagnatori vengono letti automaticamente dalla tab dedicata "Uscite didattiche".
+                </div>
               </section>
 
               <section class="panel table-card replacement-section">
@@ -136,6 +139,91 @@
                 <div id="replacement-report-preview"></div>
               </section>
             </div>
+          </div>
+        </div>
+
+        <div id="replacement-trips-tab" class="replacement-tab-panel" style="display:none;">
+          <div class="replacement-column">
+            <section class="panel table-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3>Uscite didattiche</h3>
+                  <p class="subtitle">Gestione centralizzata di uscite giornaliere, viaggi di istruzione e uscite orarie.</p>
+                </div>
+              </div>
+              <div id="replacement-trip-list-table"></div>
+            </section>
+
+            <section class="panel form-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3 id="replacement-trip-form-title">Nuova uscita didattica</h3>
+                  <p class="subtitle">Gli accompagnatori proposti derivano dalle associazioni docente-classe del timetable.</p>
+                </div>
+              </div>
+              <div class="grid grid-2">
+                <div>
+                  <label for="replacement-trip-type">Tipo uscita</label>
+                  <select id="replacement-trip-type" class="select">
+                    <option value="DAILY">Uscita giornaliera</option>
+                    <option value="MULTI_DAY">Uscita di piu giorni</option>
+                    <option value="HOURLY">Uscita oraria</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="replacement-trip-class">Classe</label>
+                  <select id="replacement-trip-class" class="select"></select>
+                </div>
+                <div>
+                  <label for="replacement-trip-date">Giorno</label>
+                  <input id="replacement-trip-date" class="input" type="date">
+                </div>
+                <div>
+                  <label for="replacement-trip-end-date">Data fine</label>
+                  <input id="replacement-trip-end-date" class="input" type="date">
+                </div>
+                <div>
+                  <label for="replacement-trip-start-time">Dalle</label>
+                  <input id="replacement-trip-start-time" class="input" type="time">
+                </div>
+                <div>
+                  <label for="replacement-trip-end-time">Alle</label>
+                  <input id="replacement-trip-end-time" class="input" type="time">
+                </div>
+                <div>
+                  <label for="replacement-trip-title-input">Titolo / descrizione breve</label>
+                  <input id="replacement-trip-title-input" class="input" type="text" placeholder="Titolo opzionale">
+                </div>
+                <div>
+                  <label for="replacement-trip-enabled">Stato</label>
+                  <label id="replacement-trip-enabled-wrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                    <input id="replacement-trip-enabled" type="checkbox">
+                    <span>Enabled</span>
+                  </label>
+                </div>
+              </div>
+              <div style="margin-top:12px;">
+                <label for="replacement-trip-notes">Note</label>
+                <textarea id="replacement-trip-notes" class="textarea" placeholder="Note opzionali"></textarea>
+              </div>
+              <div style="margin-top:12px;">
+                <div class="replacement-detail-header">
+                  <div>
+                    <h3 style="margin:0;">Accompagnatori</h3>
+                    <p class="subtitle">Proposti in base alla classe selezionata.</p>
+                  </div>
+                </div>
+                <div id="replacement-trip-teacher-options"></div>
+                <div style="margin-top:12px;">
+                  <label for="replacement-trip-extra-teacher">Aggiungi altro docente</label>
+                  <select id="replacement-trip-extra-teacher" class="select"></select>
+                </div>
+              </div>
+              <div class="toolbar replacement-toolbar replacement-long-form-actions">
+                <button id="replacement-trip-save" class="button" type="button">Salva uscita didattica</button>
+                <button id="replacement-trip-cancel" class="button secondary" type="button">Annulla</button>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -205,6 +293,10 @@
 
         <div id="replacement-long-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom" style="display:none;">
           <button class="button secondary" id="replacement-close-button-long-bottom" type="button">Chiudi</button>
+        </div>
+
+        <div id="replacement-trips-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom" style="display:none;">
+          <button class="button secondary" id="replacement-close-button-trips-bottom" type="button">Chiudi</button>
         </div>
 
         <div id="replacement-confirm-modal" class="room-panel-unsaved-confirm" style="display:none;">
@@ -411,14 +503,16 @@
         var replacementDateState = document.getElementById('replacement-date-state');
         var replacementSelectedDate = document.getElementById('replacement-selected-date');
         var replacementTabDaily = document.getElementById('replacement-tab-daily');
+        var replacementTabTrips = document.getElementById('replacement-tab-trips');
         var replacementTabLong = document.getElementById('replacement-tab-long');
         var replacementDailyTab = document.getElementById('replacement-daily-tab');
+        var replacementTripsTab = document.getElementById('replacement-trips-tab');
         var replacementLongTab = document.getElementById('replacement-long-tab');
         var replacementDailyActionsBottom = document.getElementById('replacement-daily-actions-bottom');
+        var replacementTripsActionsBottom = document.getElementById('replacement-trips-actions-bottom');
         var replacementLongActionsBottom = document.getElementById('replacement-long-actions-bottom');
         var replacementDateInput = document.getElementById('replacement-date-input');
         var replacementQuickSummary = document.getElementById('replacement-quick-summary');
-        var replacementClassesTable = document.getElementById('replacement-classes-table');
         var replacementTeachersTable = document.getElementById('replacement-teachers-table');
         var replacementDetailSection = replacementModal ? replacementModal.querySelector('.replacement-detail-section') : null;
         var replacementDetailTitle = document.getElementById('replacement-detail-title');
@@ -430,8 +524,24 @@
         var replacementReportPill = document.getElementById('replacement-report-pill');
         var replacementCloseButton = document.getElementById('replacement-close-button');
         var replacementCloseButtonBottom = document.getElementById('replacement-close-button-bottom');
+        var replacementCloseButtonTripsBottom = document.getElementById('replacement-close-button-trips-bottom');
         var replacementCloseButtonLongBottom = document.getElementById('replacement-close-button-long-bottom');
         var replacementActionButtons = Array.prototype.slice.call(document.querySelectorAll('.replacement-action-button'));
+        var replacementTripListTable = document.getElementById('replacement-trip-list-table');
+        var replacementTripFormTitle = document.getElementById('replacement-trip-form-title');
+        var replacementTripType = document.getElementById('replacement-trip-type');
+        var replacementTripClass = document.getElementById('replacement-trip-class');
+        var replacementTripDate = document.getElementById('replacement-trip-date');
+        var replacementTripEndDate = document.getElementById('replacement-trip-end-date');
+        var replacementTripStartTime = document.getElementById('replacement-trip-start-time');
+        var replacementTripEndTime = document.getElementById('replacement-trip-end-time');
+        var replacementTripTitleInput = document.getElementById('replacement-trip-title-input');
+        var replacementTripEnabled = document.getElementById('replacement-trip-enabled');
+        var replacementTripNotes = document.getElementById('replacement-trip-notes');
+        var replacementTripTeacherOptions = document.getElementById('replacement-trip-teacher-options');
+        var replacementTripExtraTeacher = document.getElementById('replacement-trip-extra-teacher');
+        var replacementTripSave = document.getElementById('replacement-trip-save');
+        var replacementTripCancel = document.getElementById('replacement-trip-cancel');
         var replacementLongListTable = document.getElementById('replacement-long-list-table');
         var replacementLongFormTitle = document.getElementById('replacement-long-form-title');
         var replacementLongOriginalTeacher = document.getElementById('replacement-long-original-teacher');
@@ -537,7 +647,8 @@
           preview: null,
           pendingManualAssignmentKeys: {},
           confirmAction: null,
-          longForm: null
+          longForm: null,
+          tripForm: null
         };
         var pendingDiscardAction = null;
         var pendingDiscardRollbackDate = '';
@@ -1206,6 +1317,26 @@
           return set;
         }
 
+        function getReplacementTripDayState_() {
+          return replacementState.model && replacementState.model.tripDayState ? replacementState.model.tripDayState : {};
+        }
+
+        function isReplacementClassOutAtPeriod_(classCode, period) {
+          var tripState = getReplacementTripDayState_();
+          var classPeriods = tripState && tripState.classOutPeriodsByClass
+            ? tripState.classOutPeriodsByClass[normalizeReplacementClassCode_(classCode)]
+            : null;
+          return Boolean(classPeriods && classPeriods[String(period || '')]);
+        }
+
+        function isReplacementTeacherAccompanyingAtPeriod_(teacherEmail, period) {
+          var tripState = getReplacementTripDayState_();
+          var teacherPeriods = tripState && tripState.teacherTripPeriodsByTeacher
+            ? tripState.teacherTripPeriodsByTeacher[normalizeReplacementTeacherEmail_(teacherEmail)]
+            : null;
+          return Boolean(teacherPeriods && teacherPeriods[String(period || '')]);
+        }
+
         function buildReplacementHourlyAbsenceKey_(teacherEmail, period) {
           return [
             normalizeReplacementTeacherEmail_(teacherEmail),
@@ -1246,9 +1377,6 @@
               return;
             }
             absent = Boolean(draftTeacher.absent);
-            if (draftTeacher.accompanist) {
-              absent = true;
-            }
             if (absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
               return;
             }
@@ -1274,20 +1402,13 @@
           return Object.keys(baseMap).map(function (teacherEmail) {
             var baseTeacher = baseMap[teacherEmail] || {};
             var draftTeacher = draftMap[teacherEmail] || {};
-            var accompaniedClasses = safeArray(draftTeacher.accompaniedClasses).map(function (classCode) {
+            var accompaniedClasses = safeArray(baseTeacher.accompaniedClasses).map(function (classCode) {
               return normalizeReplacementClassCode_(classCode);
             }).filter(function (classCode) {
               return Boolean(validOutClasses[classCode]);
             });
             var absent = Boolean(draftTeacher.absent);
-            var accompanist = Boolean(draftTeacher.accompanist);
-            if (accompanist) {
-              absent = true;
-            }
-            if (!absent) {
-              accompanist = false;
-              accompaniedClasses = [];
-            }
+            var accompanist = Boolean(baseTeacher.accompanist || accompaniedClasses.length);
             return {
               teacherEmail: teacherEmail,
               teacherName: draftTeacher.teacherName || baseTeacher.teacherName || teacherEmail,
@@ -1370,7 +1491,7 @@
                 teacher: teacher,
                 period: String(period || ''),
                 slot: slot,
-                originalStatus: teacher.accompanist ? 'ACCOMPANIST' : 'ABSENT'
+                originalStatus: teacher.absent ? 'ABSENT' : 'ACCOMPANIST'
               };
             });
           });
@@ -1404,9 +1525,8 @@
             var handlingType = normalizeReplacementHandlingType_(draftEntry.handlingType);
             var hourlyAbsenceEntry = hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacher.teacherEmail, meta.period)] || null;
             var isCoveredByOuting = Boolean(
-              teacher.accompanist &&
-              classOutSet[classCode] &&
-              safeArray(teacher.accompaniedClasses).indexOf(classCode) >= 0
+              isReplacementTeacherAccompanyingAtPeriod_(teacher.teacherEmail, meta.period) &&
+              isReplacementClassOutAtPeriod_(classCode, meta.period)
             );
             var next = {
               date: replacementState.date,
@@ -1562,10 +1682,10 @@
             if (hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacherEmail, period)]) {
               return;
             }
-            if (slot.type === 'CLASS' && teacher.accompanist && safeArray(teacher.accompaniedClasses).indexOf(slotClassCode) >= 0 && classOutSet[slotClassCode]) {
+            if (isReplacementTeacherAccompanyingAtPeriod_(teacherEmail, period)) {
               return;
             }
-            if (slot.type === 'CLASS' && classOutSet[slotClassCode]) {
+            if (slot.type === 'CLASS' && isReplacementClassOutAtPeriod_(slotClassCode, period)) {
               classOutCandidates.push(buildReplacementCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita'));
               return;
             }
@@ -1649,7 +1769,7 @@
           var usedTeachers = Object.assign({}, assignedByPeriod[String(period || '')] || {});
           var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
           var slot = teacher && teacher.periods ? teacher.periods[period] : null;
-          if (!teacherEmail || !teacher || teacher.absent || teacher.accompanist) {
+          if (!teacherEmail || !teacher || teacher.absent || isReplacementTeacherAccompanyingAtPeriod_(teacherEmail, period)) {
             return false;
           }
           if (currentAssignment && normalizeReplacementTeacherEmail_(currentAssignment.replacementTeacherEmail) === teacherEmail) {
@@ -1708,7 +1828,7 @@
           var usedTeachers = Object.assign({}, assignedByPeriod[String(targetPeriod || '')] || {});
           var hourlyAbsenceMap = getReplacementHourlyAbsenceMap_();
           var targetSlot = teacher && teacher.periods ? teacher.periods[targetPeriod] : null;
-          if (!teacherEmail || !teacher || teacher.absent || teacher.accompanist) {
+          if (!teacherEmail || !teacher || teacher.absent || isReplacementTeacherAccompanyingAtPeriod_(teacherEmail, targetPeriod)) {
             return false;
           }
           if (currentAssignment && normalizeReplacementTeacherEmail_(currentAssignment.shiftTeacherEmail) === teacherEmail) {
@@ -1881,30 +2001,8 @@
         }
 
         function computeReplacementValidationErrors_() {
-          var byClass = {};
           var errors = [];
           var recoveryLinkMap = {};
-          safeArray(replacementState.localTeachers).forEach(function (teacher) {
-            if (!teacher || !teacher.accompanist) {
-              return;
-            }
-            safeArray(teacher.accompaniedClasses).forEach(function (classCode) {
-              var normalizedClassCode = normalizeReplacementClassCode_(classCode);
-              if (normalizedClassCode) {
-                byClass[normalizedClassCode] = true;
-              }
-            });
-          });
-          safeArray(replacementState.draft && replacementState.draft.classOut).forEach(function (entry) {
-            var classCode;
-            if (!entry || !entry.isOut) {
-              return;
-            }
-            classCode = normalizeReplacementClassCode_(entry.classCode);
-            if (classCode && !byClass[classCode]) {
-              errors.push('La classe ' + classCode + ' è in uscita ma non ha alcun docente accompagnatore associato.');
-            }
-          });
           safeArray(replacementState.localAssignments).forEach(function (assignment) {
             var recoveryKey;
             var teacherLabel;
@@ -2315,37 +2413,6 @@
           return ROOMS_UI.el('span', cssClass, label);
         }
 
-        function renderReplacementClasses_() {
-          var classes = safeArray(replacementState.draft && replacementState.draft.classOut);
-          var isDisabled = !isReplacementDateValid_();
-          renderTable(
-            'replacement-classes-table',
-            ['Classe', 'In uscita'],
-            classes.map(function (entry) {
-              var toggleWrap = ROOMS_UI.el('div', 'replacement-class-toggle');
-              var label = document.createElement('label');
-              var checkbox = document.createElement('input');
-              checkbox.type = 'checkbox';
-              checkbox.checked = Boolean(entry.isOut);
-              checkbox.disabled = isDisabled;
-              checkbox.addEventListener('change', function () {
-                entry.isOut = checkbox.checked;
-                markReplacementDraftChanged_({
-                  clearNotice: true
-                });
-              });
-              label.appendChild(checkbox);
-              label.appendChild(ROOMS_UI.el('span', '', entry.isOut ? 'Selezionata' : 'Non selezionata'));
-              toggleWrap.appendChild(label);
-              return [
-                entry.classCode || '',
-                toggleWrap
-              ];
-            }),
-            isReplacementDateValid_() ? 'Nessuna classe disponibile per il giorno selezionato.' : 'Data non valida. Correggere la data per proseguire.'
-          );
-        }
-
         function renderReplacementTeachers_() {
           var teachers = safeArray(replacementState.localTeachers);
           var isDisabled = !isReplacementDateValid_();
@@ -2363,8 +2430,6 @@
               absentCheckbox.disabled = isDisabled;
               absentCheckbox.addEventListener('change', function () {
                 draftTeacher.absent = absentCheckbox.checked;
-                draftTeacher.accompanist = false;
-                draftTeacher.accompaniedClasses = [];
                 if (draftTeacher.absent) {
                   draftTeacher.hourlyPermission = false;
                   clearReplacementTeacherHourlyPermission_(teacher.teacherEmail);
@@ -2384,8 +2449,6 @@
               hourlyPermissionCheckbox.disabled = isDisabled;
               hourlyPermissionCheckbox.addEventListener('change', function () {
                 draftTeacher.absent = false;
-                draftTeacher.accompanist = false;
-                draftTeacher.accompaniedClasses = [];
                 draftTeacher.hourlyPermission = hourlyPermissionCheckbox.checked;
                 if (!hourlyPermissionCheckbox.checked) {
                   clearReplacementTeacherHourlyPermission_(teacher.teacherEmail);
@@ -2818,6 +2881,382 @@
           }
         }
 
+        function buildEmptyReplacementTripForm_() {
+          return {
+            tripId: '',
+            tripType: 'DAILY',
+            classCode: '',
+            title: '',
+            startDate: replacementState.date || getDefaultPanelDate_(),
+            endDate: replacementState.date || getDefaultPanelDate_(),
+            startTime: '',
+            endTime: '',
+            notes: '',
+            enabled: true,
+            teachers: []
+          };
+        }
+
+        function resetReplacementTripForm_() {
+          replacementState.tripForm = buildEmptyReplacementTripForm_();
+        }
+
+        function setReplacementTripForm_(entry) {
+          if (!entry) {
+            resetReplacementTripForm_();
+            return;
+          }
+          replacementState.tripForm = {
+            tripId: entry.tripId || '',
+            tripType: entry.tripType || 'DAILY',
+            classCode: entry.classCode || '',
+            title: entry.title || '',
+            startDate: entry.startDate || (replacementState.date || getDefaultPanelDate_()),
+            endDate: entry.endDate || entry.startDate || (replacementState.date || getDefaultPanelDate_()),
+            startTime: entry.startTime || '',
+            endTime: entry.endTime || '',
+            notes: entry.notes || '',
+            enabled: entry.enabled !== false,
+            teachers: safeArray(entry.teachers).map(function (teacher) {
+              return {
+                teacherEmail: normalizeReplacementTeacherEmail_(teacher.teacherEmail),
+                teacherName: teacher.teacherName || teacher.teacherEmail || '',
+                role: teacher.role || 'ACCOMPANIST',
+                notes: teacher.notes || ''
+              };
+            })
+          };
+        }
+
+        function getReplacementTripTeacherDirectory_() {
+          var byClass = replacementState.model && replacementState.model.tripTeacherOptionsByClass
+            ? replacementState.model.tripTeacherOptionsByClass
+            : {};
+          var map = {};
+          Object.keys(byClass || {}).forEach(function (classCode) {
+            safeArray(byClass[classCode]).forEach(function (teacher) {
+              var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+              if (!teacherEmail || map[teacherEmail]) {
+                return;
+              }
+              map[teacherEmail] = {
+                teacherEmail: teacherEmail,
+                teacherName: teacher.teacherName || teacherEmail
+              };
+            });
+          });
+          safeArray(replacementState.model && replacementState.model.longTeacherOptions).forEach(function (teacher) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+            if (!teacherEmail || map[teacherEmail]) {
+              return;
+            }
+            map[teacherEmail] = {
+              teacherEmail: teacherEmail,
+              teacherName: teacher.teacherName || teacherEmail
+            };
+          });
+          return Object.keys(map).map(function (key) {
+            return map[key];
+          }).sort(function (left, right) {
+            return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
+          });
+        }
+
+        function syncReplacementTripFormFromInputs_() {
+          var current = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          replacementState.tripForm = Object.assign({}, current, {
+            tripType: replacementTripType ? replacementTripType.value : current.tripType,
+            classCode: replacementTripClass ? replacementTripClass.value : current.classCode,
+            title: replacementTripTitleInput ? replacementTripTitleInput.value : current.title,
+            startDate: replacementTripDate ? replacementTripDate.value : current.startDate,
+            endDate: replacementTripEndDate ? replacementTripEndDate.value : current.endDate,
+            startTime: replacementTripStartTime ? replacementTripStartTime.value : current.startTime,
+            endTime: replacementTripEndTime ? replacementTripEndTime.value : current.endTime,
+            notes: replacementTripNotes ? replacementTripNotes.value : current.notes,
+            enabled: replacementTripEnabled ? Boolean(replacementTripEnabled.checked) : current.enabled
+          });
+        }
+
+        function toggleReplacementTripTeacher_(teacherEmail, teacherName, enabled) {
+          var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          var normalizedEmail = normalizeReplacementTeacherEmail_(teacherEmail);
+          var teachers = safeArray(form.teachers).filter(function (teacher) {
+            return normalizeReplacementTeacherEmail_(teacher.teacherEmail) !== normalizedEmail;
+          });
+          if (enabled && normalizedEmail) {
+            teachers.push({
+              teacherEmail: normalizedEmail,
+              teacherName: teacherName || normalizedEmail,
+              role: 'ACCOMPANIST',
+              notes: ''
+            });
+          }
+          form.teachers = teachers.sort(function (left, right) {
+            return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
+          });
+          replacementState.tripForm = form;
+          renderReplacementTripForm_();
+        }
+
+        function renderReplacementTripForm_() {
+          var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          var classOptions = safeArray(replacementState.model && replacementState.model.tripClassOptions);
+          var teacherOptionsByClass = replacementState.model && replacementState.model.tripTeacherOptionsByClass
+            ? replacementState.model.tripTeacherOptionsByClass
+            : {};
+          var suggestedTeachers = safeArray(teacherOptionsByClass[form.classCode]);
+          var selectedTeacherMap = {};
+          var allTeachers = getReplacementTripTeacherDirectory_();
+          var showEndDate = form.tripType === 'MULTI_DAY';
+          var showTimes = form.tripType === 'HOURLY';
+
+          if (replacementTripFormTitle) {
+            replacementTripFormTitle.textContent = form.tripId ? 'Modifica uscita didattica' : 'Nuova uscita didattica';
+          }
+          if (replacementTripType) {
+            replacementTripType.value = form.tripType || 'DAILY';
+          }
+          if (replacementTripClass) {
+            ROOMS_UI.clearNode(replacementTripClass);
+            replacementTripClass.appendChild(new Option('Seleziona classe', ''));
+            classOptions.forEach(function (classCode) {
+              var option = new Option(classCode, classCode);
+              if (classCode === form.classCode) {
+                option.selected = true;
+              }
+              replacementTripClass.appendChild(option);
+            });
+          }
+          if (replacementTripDate) {
+            replacementTripDate.value = form.startDate || '';
+          }
+          if (replacementTripEndDate) {
+            replacementTripEndDate.value = form.endDate || '';
+            replacementTripEndDate.disabled = !showEndDate;
+            replacementTripEndDate.parentNode.style.opacity = showEndDate ? '1' : '0.65';
+          }
+          if (replacementTripStartTime) {
+            replacementTripStartTime.value = form.startTime || '';
+            replacementTripStartTime.disabled = !showTimes;
+            replacementTripStartTime.parentNode.style.opacity = showTimes ? '1' : '0.65';
+          }
+          if (replacementTripEndTime) {
+            replacementTripEndTime.value = form.endTime || '';
+            replacementTripEndTime.disabled = !showTimes;
+            replacementTripEndTime.parentNode.style.opacity = showTimes ? '1' : '0.65';
+          }
+          if (replacementTripTitleInput) {
+            replacementTripTitleInput.value = form.title || '';
+          }
+          if (replacementTripEnabled) {
+            replacementTripEnabled.checked = Boolean(form.enabled);
+          }
+          if (replacementTripNotes) {
+            replacementTripNotes.value = form.notes || '';
+          }
+          safeArray(form.teachers).forEach(function (teacher) {
+            selectedTeacherMap[normalizeReplacementTeacherEmail_(teacher.teacherEmail)] = teacher;
+          });
+          if (replacementTripTeacherOptions) {
+            ROOMS_UI.clearNode(replacementTripTeacherOptions);
+            if (!form.classCode) {
+              replacementTripTeacherOptions.appendChild(ROOMS_UI.el('div', 'muted', 'Seleziona prima una classe per vedere i docenti suggeriti.'));
+            } else if (!suggestedTeachers.length) {
+              replacementTripTeacherOptions.appendChild(ROOMS_UI.el('div', 'muted', 'Nessun docente associato alla classe trovato nel timetable.'));
+            } else {
+              suggestedTeachers.forEach(function (teacher) {
+                var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+                var wrap = document.createElement('label');
+                var checkbox = document.createElement('input');
+                wrap.style.display = 'flex';
+                wrap.style.gap = '8px';
+                wrap.style.alignItems = 'center';
+                checkbox.type = 'checkbox';
+                checkbox.checked = Boolean(selectedTeacherMap[teacherEmail]);
+                checkbox.addEventListener('change', function () {
+                  syncReplacementTripFormFromInputs_();
+                  toggleReplacementTripTeacher_(teacherEmail, teacher.teacherName || teacherEmail, checkbox.checked);
+                });
+                wrap.appendChild(checkbox);
+                wrap.appendChild(ROOMS_UI.el('span', '', teacher.teacherName || teacherEmail));
+                replacementTripTeacherOptions.appendChild(wrap);
+              });
+            }
+            safeArray(form.teachers).filter(function (teacher) {
+              return !safeArray(suggestedTeachers).some(function (candidate) {
+                return normalizeReplacementTeacherEmail_(candidate.teacherEmail) === normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+              });
+            }).forEach(function (teacher) {
+              var extra = ROOMS_UI.el('div', 'muted', 'Altro docente selezionato: ' + (teacher.teacherName || teacher.teacherEmail || '-'));
+              replacementTripTeacherOptions.appendChild(extra);
+            });
+          }
+          if (replacementTripExtraTeacher) {
+            ROOMS_UI.clearNode(replacementTripExtraTeacher);
+            replacementTripExtraTeacher.appendChild(new Option('Seleziona docente aggiuntivo', ''));
+            allTeachers.forEach(function (teacher) {
+              if (selectedTeacherMap[normalizeReplacementTeacherEmail_(teacher.teacherEmail)]) {
+                return;
+              }
+              replacementTripExtraTeacher.appendChild(new Option(teacher.teacherName || teacher.teacherEmail, teacher.teacherEmail));
+            });
+            replacementTripExtraTeacher.value = '';
+          }
+        }
+
+        function renderReplacementTripList_() {
+          var rows = safeArray(replacementState.model && replacementState.model.trips);
+          renderTable(
+            'replacement-trip-list-table',
+            ['Tipo', 'Classe', 'Periodo', 'Accompagnatori', 'Stato', 'Azioni'],
+            rows.map(function (entry) {
+              var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
+              var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
+              var toggleButton = ROOMS_UI.el('button', 'button secondary', entry.enabled ? 'Disabilita' : 'Abilita');
+              var deleteButton = ROOMS_UI.el('button', 'button warn', 'Elimina');
+              var periodLabel = formatReplacementDate_(entry.startDate);
+              var statusNode = createReplacementStatusNode_(entry.enabled ? 'ASSIGNED' : 'NONE');
+
+              if (entry.tripType === 'MULTI_DAY') {
+                periodLabel = formatReplacementDate_(entry.startDate) + ' - ' + formatReplacementDate_(entry.endDate);
+              } else if (entry.tripType === 'HOURLY') {
+                periodLabel = formatReplacementDate_(entry.startDate) + ' ' + (entry.startTime || '--:--') + ' - ' + (entry.endTime || '--:--');
+              }
+              statusNode.textContent = entry.enabled ? 'ATTIVA' : 'DISABILITATA';
+
+              editButton.type = 'button';
+              editButton.addEventListener('click', function () {
+                setReplacementTripForm_(entry);
+                replacementState.activeTab = 'trips';
+                renderReplacementModal_();
+              });
+              actions.appendChild(editButton);
+
+              toggleButton.type = 'button';
+              toggleButton.addEventListener('click', function () {
+                toggleEducationalTrip_(entry.tripId, !entry.enabled);
+              });
+              actions.appendChild(toggleButton);
+
+              deleteButton.type = 'button';
+              deleteButton.addEventListener('click', function () {
+                deleteEducationalTrip_(entry.tripId);
+              });
+              actions.appendChild(deleteButton);
+
+              return [
+                entry.tripType === 'MULTI_DAY' ? 'Uscita di piu giorni' : (entry.tripType === 'HOURLY' ? 'Uscita oraria' : 'Uscita giornaliera'),
+                entry.classCode || '',
+                periodLabel,
+                safeArray(entry.teachers).map(function (teacher) {
+                  return teacher.teacherName || teacher.teacherEmail || '';
+                }).join(', ') || '-',
+                statusNode,
+                actions
+              ];
+            }),
+            'Nessuna uscita didattica configurata.'
+          );
+        }
+
+        function getReplacementTripFormPayload_() {
+          syncReplacementTripFormFromInputs_();
+          var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          return {
+            tripId: form.tripId || '',
+            tripType: form.tripType || 'DAILY',
+            classCode: form.classCode || '',
+            title: form.title || '',
+            startDate: form.startDate || '',
+            endDate: form.tripType === 'MULTI_DAY' ? (form.endDate || '') : (form.startDate || ''),
+            startTime: form.tripType === 'HOURLY' ? (form.startTime || '') : '',
+            endTime: form.tripType === 'HOURLY' ? (form.endTime || '') : '',
+            notes: form.notes || '',
+            enabled: form.enabled !== false,
+            teachers: safeArray(form.teachers).map(function (teacher) {
+              return {
+                teacherEmail: normalizeReplacementTeacherEmail_(teacher.teacherEmail),
+                teacherName: teacher.teacherName || teacher.teacherEmail || '',
+                role: teacher.role || 'ACCOMPANIST',
+                notes: teacher.notes || ''
+              };
+            })
+          };
+        }
+
+        function saveEducationalTrip_() {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
+            return;
+          }
+          setReplacementLoading_(true, 'Salvataggio uscita didattica...');
+          ROOMS_UI.call('saveEducationalTrip', getReplacementTripFormPayload_(), replacementState.date)
+            .then(function (result) {
+              applyReplacementModel_(result && result.model ? result.model : null, {
+                keepDirty: false
+              });
+              resetReplacementTripForm_();
+              replacementState.activeTab = 'trips';
+              setReplacementNotice_('Uscita didattica salvata.', 'success');
+              refresh({ skipPanelRefresh: false });
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore salvataggio uscita didattica.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
+        }
+
+        function toggleEducationalTrip_(tripId, enabled) {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
+            return;
+          }
+          setReplacementLoading_(true, enabled ? 'Abilitazione uscita didattica...' : 'Disabilitazione uscita didattica...');
+          ROOMS_UI.call('toggleEducationalTrip', tripId, enabled, replacementState.date)
+            .then(function (result) {
+              applyReplacementModel_(result && result.model ? result.model : null, {
+                keepDirty: false
+              });
+              replacementState.activeTab = 'trips';
+              setReplacementNotice_('Uscita didattica aggiornata.', 'success');
+              refresh({ skipPanelRefresh: false });
+            })
+            .catch(function (error) {
+              setReplacementNotice_(error && error.message ? error.message : 'Errore aggiornamento uscita didattica.', 'error');
+            })
+            .then(function () {
+              setReplacementLoading_(false);
+              renderReplacementModal_();
+            });
+        }
+
+        function deleteEducationalTrip_(tripId) {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
+            return;
+          }
+          openReplacementConfirm_('Elimina uscita didattica', 'Confermare eliminazione dell\'uscita didattica selezionata?', function () {
+            setReplacementLoading_(true, 'Eliminazione uscita didattica...');
+            ROOMS_UI.call('deleteEducationalTrip', tripId, replacementState.date)
+              .then(function (result) {
+                applyReplacementModel_(result && result.model ? result.model : null, {
+                  keepDirty: false
+                });
+                resetReplacementTripForm_();
+                replacementState.activeTab = 'trips';
+                setReplacementNotice_('Uscita didattica eliminata.', 'success');
+                refresh({ skipPanelRefresh: false });
+              })
+              .catch(function (error) {
+                setReplacementNotice_(error && error.message ? error.message : 'Errore eliminazione uscita didattica.', 'error');
+              })
+              .then(function () {
+                setReplacementLoading_(false);
+                renderReplacementModal_();
+              });
+          });
+        }
+
         function buildEmptyReplacementLongForm_() {
           return {
             matchKey: '',
@@ -2940,24 +3379,35 @@
         }
 
         function updateReplacementTabUi_() {
-          var isDaily = replacementState.activeTab !== 'long';
+          var isDaily = replacementState.activeTab === 'daily';
+          var isTrips = replacementState.activeTab === 'trips';
+          var isLong = replacementState.activeTab === 'long';
           if (replacementDailyTab) {
             replacementDailyTab.style.display = isDaily ? 'block' : 'none';
           }
+          if (replacementTripsTab) {
+            replacementTripsTab.style.display = isTrips ? 'block' : 'none';
+          }
           if (replacementLongTab) {
-            replacementLongTab.style.display = isDaily ? 'none' : 'block';
+            replacementLongTab.style.display = isLong ? 'block' : 'none';
           }
           if (replacementDailyActionsBottom) {
             replacementDailyActionsBottom.style.display = isDaily ? 'flex' : 'none';
           }
+          if (replacementTripsActionsBottom) {
+            replacementTripsActionsBottom.style.display = isTrips ? 'flex' : 'none';
+          }
           if (replacementLongActionsBottom) {
-            replacementLongActionsBottom.style.display = isDaily ? 'none' : 'flex';
+            replacementLongActionsBottom.style.display = isLong ? 'flex' : 'none';
           }
           if (replacementTabDaily) {
             replacementTabDaily.classList.toggle('active', isDaily);
           }
+          if (replacementTabTrips) {
+            replacementTabTrips.classList.toggle('active', isTrips);
+          }
           if (replacementTabLong) {
-            replacementTabLong.classList.toggle('active', !isDaily);
+            replacementTabLong.classList.toggle('active', isLong);
           }
           replacementActionButtons.forEach(function (button) {
             button.style.display = isDaily ? 'inline-flex' : 'none';
@@ -2967,16 +3417,22 @@
           }
         }
 
-        function ensureCleanDailyDraftForLongAction_() {
+        function ensureCleanDailyDraftForNonDailyAction_(message) {
           if (!replacementState.dirty) {
             return true;
           }
-          setReplacementNotice_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le supplenze lunghe.', 'error');
+          setReplacementNotice_(message || 'Salva o annulla prima la bozza delle sostituzioni giornaliere prima di continuare.', 'error');
           return false;
         }
 
         function switchReplacementTab_(tabName) {
-          replacementState.activeTab = tabName === 'long' ? 'long' : 'daily';
+          if (tabName === 'long') {
+            replacementState.activeTab = 'long';
+          } else if (tabName === 'trips') {
+            replacementState.activeTab = 'trips';
+          } else {
+            replacementState.activeTab = 'daily';
+          }
           renderReplacementModal_();
         }
 
@@ -2999,7 +3455,7 @@
         }
 
         function saveLongReplacement_() {
-          if (!ensureCleanDailyDraftForLongAction_()) {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le supplenze lunghe.')) {
             return;
           }
           setReplacementLoading_(true, 'Salvataggio supplenza lunga...');
@@ -3024,7 +3480,7 @@
         }
 
         function toggleLongReplacement_(matchKey, enabled) {
-          if (!ensureCleanDailyDraftForLongAction_()) {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le supplenze lunghe.')) {
             return;
           }
           setReplacementLoading_(true, enabled ? 'Abilitazione supplenza lunga...' : 'Disabilitazione supplenza lunga...');
@@ -3047,7 +3503,7 @@
         }
 
         function deleteLongReplacement_(matchKey) {
-          if (!ensureCleanDailyDraftForLongAction_()) {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le supplenze lunghe.')) {
             return;
           }
           openReplacementConfirm_('Elimina supplenza lunga', 'Confermare eliminazione della supplenza lunga selezionata?', function () {
@@ -3085,10 +3541,11 @@
           }
           renderReplacementStatus_();
           renderReplacementQuickSummary_();
-          renderReplacementClasses_();
           renderReplacementTeachers_();
           renderReplacementDetail_();
           renderReplacementPreview_();
+          renderReplacementTripList_();
+          renderReplacementTripForm_();
           renderReplacementLongList_();
           renderReplacementLongForm_();
           updateReplacementTabUi_();
@@ -3114,6 +3571,9 @@
           replacementState.draft = buildReplacementDraftFromModel_(replacementState.model);
           if (!replacementState.longForm) {
             resetReplacementLongForm_();
+          }
+          if (!replacementState.tripForm) {
+            resetReplacementTripForm_();
           }
           if (!settings.keepDirty) {
             replacementState.dirty = false;
@@ -3193,6 +3653,7 @@
           replacementState.preview = null;
           replacementState.pendingManualAssignmentKeys = {};
           replacementState.longForm = null;
+          replacementState.tripForm = null;
           closeReplacementConfirm_();
           setReplacementNotice_('', '');
           setReplacementDateStateMessage_('', '');
@@ -3221,6 +3682,7 @@
           replacementState.teacherDetail = null;
           replacementState.selectedTeacherEmail = '';
           resetReplacementLongForm_();
+          resetReplacementTripForm_();
           loadReplacementModel_(getDefaultPanelDate_(), null, {
             allowAutoShift: true,
             keepDirty: false,
@@ -4654,6 +5116,11 @@
             switchReplacementTab_('daily');
           });
         }
+        if (replacementTabTrips) {
+          replacementTabTrips.addEventListener('click', function () {
+            switchReplacementTab_('trips');
+          });
+        }
         if (replacementTabLong) {
           replacementTabLong.addEventListener('click', function () {
             switchReplacementTab_('long');
@@ -4677,8 +5144,48 @@
         if (replacementCloseButtonBottom) {
           replacementCloseButtonBottom.addEventListener('click', closeReplacementModal_);
         }
+        if (replacementCloseButtonTripsBottom) {
+          replacementCloseButtonTripsBottom.addEventListener('click', closeReplacementModal_);
+        }
         if (replacementCloseButtonLongBottom) {
           replacementCloseButtonLongBottom.addEventListener('click', closeReplacementModal_);
+        }
+        if (replacementTripType) {
+          replacementTripType.addEventListener('change', function () {
+            syncReplacementTripFormFromInputs_();
+            renderReplacementTripForm_();
+          });
+        }
+        if (replacementTripClass) {
+          replacementTripClass.addEventListener('change', function () {
+            syncReplacementTripFormFromInputs_();
+            renderReplacementTripForm_();
+          });
+        }
+        [replacementTripDate, replacementTripEndDate, replacementTripStartTime, replacementTripEndTime, replacementTripTitleInput, replacementTripNotes, replacementTripEnabled].forEach(function (field) {
+          if (!field) {
+            return;
+          }
+          field.addEventListener('change', syncReplacementTripFormFromInputs_);
+        });
+        if (replacementTripExtraTeacher) {
+          replacementTripExtraTeacher.addEventListener('change', function () {
+            var selectedOption = replacementTripExtraTeacher.options[replacementTripExtraTeacher.selectedIndex] || null;
+            if (!replacementTripExtraTeacher.value) {
+              return;
+            }
+            syncReplacementTripFormFromInputs_();
+            toggleReplacementTripTeacher_(replacementTripExtraTeacher.value, selectedOption ? selectedOption.textContent : replacementTripExtraTeacher.value, true);
+          });
+        }
+        if (replacementTripSave) {
+          replacementTripSave.addEventListener('click', saveEducationalTrip_);
+        }
+        if (replacementTripCancel) {
+          replacementTripCancel.addEventListener('click', function () {
+            resetReplacementTripForm_();
+            renderReplacementTripForm_();
+          });
         }
         if (replacementLongSave) {
           replacementLongSave.addEventListener('click', saveLongReplacement_);
