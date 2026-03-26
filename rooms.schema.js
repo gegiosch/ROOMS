@@ -216,7 +216,7 @@ ROOMS_APP.Schema = {
   },
 
   ensureTimetableDocentiSostegno: function () {
-    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO, [
+    this.ensureFlatHeaderSheet_(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO, [
       'Cognome',
       'Nome',
       'classi',
@@ -556,6 +556,46 @@ ROOMS_APP.Schema = {
       autoResizeColumns: changed
     });
     if (changed) {
+      ROOMS_APP.DB.invalidateSheetCache_(sheetName);
+    }
+  },
+
+  ensureFlatHeaderSheet_: function (sheetName, headers) {
+    var sheet = ROOMS_APP.DB.getOrCreateSheet(sheetName);
+    var headerCount = headers && headers.length ? headers.length : 0;
+    var trailingCount = Math.max(sheet.getLastColumn() - headerCount, 0);
+    var existingHeaders = sheet.getLastRow() >= 1 && sheet.getLastColumn() > 0
+      ? sheet.getRange(1, 1, 1, Math.min(sheet.getLastColumn(), headerCount || 1)).getValues()[0]
+      : [];
+    var trailingHeaders = trailingCount && sheet.getLastRow() >= 1
+      ? sheet.getRange(1, headerCount + 1, 1, trailingCount).getValues()[0]
+      : [];
+    var matches = headerCount === existingHeaders.length;
+    var index;
+
+    if (!headerCount) {
+      return;
+    }
+    if (sheet.getMaxColumns() < headerCount) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), headerCount - sheet.getMaxColumns());
+    }
+
+    for (index = 0; index < headerCount; index += 1) {
+      if (existingHeaders[index] !== headers[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches && trailingHeaders.some(function (value) { return ROOMS_APP.normalizeString(value); })) {
+      matches = false;
+    }
+
+    if (!matches) {
+      sheet.getRange(1, 1, 1, headerCount).setValues([headers]);
+      if (sheet.getLastColumn() > headerCount) {
+        sheet.getRange(1, headerCount + 1, 1, sheet.getLastColumn() - headerCount).clearContent();
+      }
+      SpreadsheetApp.flush();
       ROOMS_APP.DB.invalidateSheetCache_(sheetName);
     }
   },
