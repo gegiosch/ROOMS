@@ -54,6 +54,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.ADMINS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_OCCUPANCY] = true;
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_RAW] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO] = true;
     sheets[ROOMS_APP.SHEET_NAMES.TIMETABLE_SPACES_RAW] = true;
     sheets[ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT] = true;
@@ -78,6 +79,7 @@ ROOMS_APP.Schema = {
     this.ensureAudit_();
     this.ensureTimetableOccupancy();
     this.ensureTimetableDocentiRaw();
+    this.ensureTimetableDocentiSostegno();
     this.ensureTimetableSpacesRaw();
     this.ensureAulaMagnaEvents();
     this.ensureReplacementClassOut();
@@ -211,6 +213,47 @@ ROOMS_APP.Schema = {
       'UpdatedAtISO'
     ];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_RAW, headers);
+  },
+
+  ensureTimetableDocentiSostegno: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO, [
+      'Cognome',
+      'Nome',
+      'classi',
+      'LUN_8',
+      'LUN_9',
+      'LUN_10',
+      'LUN_11',
+      'LUN_12',
+      'LUN_13',
+      'LUN_14',
+      'MAR_8',
+      'MAR_9',
+      'MAR_10',
+      'MAR_11',
+      'MAR_12',
+      'MAR_13',
+      'MER_8',
+      'MER_9',
+      'MER_10',
+      'MER_11',
+      'MER_12',
+      'MER_13',
+      'MER_14',
+      'MER_15',
+      'GIO_8',
+      'GIO_9',
+      'GIO_10',
+      'GIO_11',
+      'GIO_12',
+      'GIO_13',
+      'VEN_8',
+      'VEN_9',
+      'VEN_10',
+      'VEN_11',
+      'VEN_12',
+      'VEN_13'
+    ]);
   },
 
   ensureTimetableSpacesRaw: function () {
