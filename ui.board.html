@@ -2052,6 +2052,23 @@
           return matches.length ? matches[matches.length - 1].period : '';
         }
 
+        function getReplacementClassScheduledPeriods_(classCode) {
+          var targetClassCode = normalizeReplacementClassCode_(classCode);
+          var seen = {};
+          safeArray(replacementState.localTeachers).forEach(function (teacher) {
+            Object.keys((teacher && teacher.periods) || {}).forEach(function (period) {
+              var slot = teacher.periods[period];
+              if (!slot || slot.type !== 'CLASS' || normalizeReplacementClassCode_(slot.classCode) !== targetClassCode) {
+                return;
+              }
+              seen[String(period || '')] = true;
+            });
+          });
+          return Object.keys(seen).sort(function (left, right) {
+            return Number(left) - Number(right);
+          });
+        }
+
         function validateReplacementClassHandlingAssignment_(assignment) {
           var classHandlingType = normalizeReplacementClassHandlingType_(assignment && assignment.classHandlingType);
           var classCode = normalizeReplacementClassCode_(assignment && assignment.classCode);
@@ -2103,12 +2120,27 @@
         }
 
         function isReplacementClassHandlingAllowed_(assignment, classHandlingType) {
+          var classCode = normalizeReplacementClassCode_(assignment && assignment.classCode);
+          var sourcePeriod = Number(assignment && assignment.period || 0);
+          var scheduledPeriods;
           if (!classHandlingType) {
             return true;
           }
-          return !validateReplacementClassHandlingAssignment_(Object.assign({}, assignment, {
-            classHandlingType: classHandlingType
-          }));
+          if (!classCode || !sourcePeriod) {
+            return false;
+          }
+          scheduledPeriods = getReplacementClassScheduledPeriods_(classCode);
+          if (classHandlingType === 'LATE_ENTRY') {
+            return scheduledPeriods.some(function (period) {
+              return Number(period || 0) > sourcePeriod;
+            });
+          }
+          if (classHandlingType === 'EARLY_EXIT') {
+            return scheduledPeriods.some(function (period) {
+              return Number(period || 0) < sourcePeriod;
+            });
+          }
+          return true;
         }
 
         function computeReplacementSummaryFromAssignments_(assignments, classes, teachers) {
