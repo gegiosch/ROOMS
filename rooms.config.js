@@ -23,6 +23,8 @@ ROOMS_APP.SHEET_NAMES = {
   REPL_LONG_ASSIGNMENTS: 'REPL_LONG_ASSIGNMENTS',
   REPORT_RECIPIENTS: 'ROOMS_REPORT_RECIPIENTS',
   REPORT_LOG: 'ROOMS_REPORT_LOG',
+  REPORT_ARCHIVE: 'ROOMS_REPORT_ARCHIVE',
+  REPORT_ARCHIVE_HISTORY: 'ROOMS_REPORT_ARCHIVE_HISTORY',
   HOLIDAYS: 'ROOMS_HOLIDAYS',
   CLOSURES: 'ROOMS_CLOSURES',
   WEEK_SCHEDULE: 'ROOMS_WEEK_SCHEDULE',
@@ -142,8 +144,20 @@ ROOMS_APP.buildMonitorWebappUrl = function (baseUrl) {
   return ROOMS_APP.appendQueryParam(normalizedBaseUrl, 'mode', 'monitor');
 };
 
+ROOMS_APP.buildSubstitutionReportsWebappUrl = function (baseUrl) {
+  var normalizedBaseUrl = ROOMS_APP.normalizeString(baseUrl || ROOMS_APP.getWebappExecUrl());
+  if (!normalizedBaseUrl) {
+    return '';
+  }
+  return ROOMS_APP.appendQueryParam(normalizedBaseUrl, 'fn', 'substitutionReports');
+};
+
 ROOMS_APP.isMonitorHost = function (host) {
   return ROOMS_APP.normalizeString(host).toLowerCase().indexOf('rooms-monitor') >= 0;
+};
+
+ROOMS_APP.isSubstitutionReportsHost = function (host) {
+  return ROOMS_APP.normalizeString(host).toLowerCase().indexOf('sostituzioni') >= 0;
 };
 
 ROOMS_APP.buildRedirectTargetForHost = function (host, baseUrl) {
@@ -151,9 +165,13 @@ ROOMS_APP.buildRedirectTargetForHost = function (host, baseUrl) {
   if (!normalizedBaseUrl) {
     return '';
   }
-  return ROOMS_APP.isMonitorHost(host)
-    ? ROOMS_APP.buildMonitorWebappUrl(normalizedBaseUrl)
-    : normalizedBaseUrl;
+  if (ROOMS_APP.isMonitorHost(host)) {
+    return ROOMS_APP.buildMonitorWebappUrl(normalizedBaseUrl);
+  }
+  if (ROOMS_APP.isSubstitutionReportsHost(host)) {
+    return ROOMS_APP.buildSubstitutionReportsWebappUrl(normalizedBaseUrl);
+  }
+  return normalizedBaseUrl;
 };
 
 ROOMS_APP.getCurrentUserEmail = function () {

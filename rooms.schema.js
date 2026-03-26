@@ -65,6 +65,8 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_LOG] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE_HISTORY] = true;
     return sheets;
   }()),
 
@@ -87,6 +89,8 @@ ROOMS_APP.Schema = {
     this.ensureReplacementLongAssignments();
     this.ensureReportRecipients();
     this.ensureReportLog();
+    this.ensureReportArchive();
+    this.ensureReportArchiveHistory();
     this.ensureWeekSchedule();
     this.ensureHolidays();
     this.ensureClosures();
@@ -373,6 +377,42 @@ ROOMS_APP.Schema = {
       'SentBy',
       'Recipients',
       'Subject',
+      'Status',
+      'Notes'
+    ]);
+  },
+
+  ensureReportArchive: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE, [
+      'ReportKey',
+      'ReportType',
+      'ReferenceDate',
+      'Subject',
+      'HtmlSnapshot',
+      'PdfFileId',
+      'Version',
+      'VisibleToTeachers',
+      'CreatedAtISO',
+      'CreatedBy',
+      'UpdatedAtISO',
+      'UpdatedBy',
+      'Status',
+      'Notes'
+    ]);
+  },
+
+  ensureReportArchiveHistory: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE_HISTORY, [
+      'HistoryId',
+      'ReportKey',
+      'ReportType',
+      'ReferenceDate',
+      'Subject',
+      'HtmlSnapshot',
+      'PdfFileId',
+      'Version',
+      'ArchivedAtISO',
+      'ArchivedBy',
       'Status',
       'Notes'
     ]);

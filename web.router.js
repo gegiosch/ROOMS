@@ -3,11 +3,30 @@ var ROOMS_APP = ROOMS_APP || {};
 function doGet(e) {
   var startedAt = Date.now();
   var params = (e && e.parameter) || {};
+  var fn = ROOMS_APP.normalizeString(params.fn);
   var page = params.page || 'board';
   var isMonitorMode = isMonitorModeRequest_(params);
 
   try {
     var response;
+    if (fn === 'substitutionReports') {
+      response = renderSubstitutionReportsPage_(params);
+      logTiming_('doGet', startedAt, {
+        fn: fn,
+        mode: 'render-substitution-reports'
+      });
+      return response;
+    }
+
+    if (fn === 'substitutionReportView') {
+      response = renderSubstitutionReportViewPage_(params);
+      logTiming_('doGet', startedAt, {
+        fn: fn,
+        mode: 'render-substitution-report-view'
+      });
+      return response;
+    }
+
     if (page === 'api') {
       response = jsonResponse_(withRuntimeContext_(extractRuntimeContext_(params), function () {
         return routeApiRequest_(params);
@@ -392,6 +411,36 @@ function renderTemplate_(filename, viewModel) {
   return template.evaluate()
     .setTitle(ROOMS_APP.getConfigValue('APP_NAME', 'ROOMS') + ' | ' + (viewModel.pageTitle || ''))
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function renderSubstitutionReportsPage_(params) {
+  var actor = ROOMS_APP.Auth.getUserContext();
+  ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+  return renderTemplate_('ui.substitution.reports', {
+    pageTitle: 'Report sostituzioni',
+    viewerMode: 'list',
+    viewerUser: actor,
+    reports: ROOMS_APP.Replacements.listVisibleArchivedReports_(),
+    report: null
+  });
+}
+
+function renderSubstitutionReportViewPage_(params) {
+  var actor = ROOMS_APP.Auth.getUserContext();
+  var reportKey = ROOMS_APP.normalizeString(params && params.reportKey);
+  var report;
+  ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+  report = ROOMS_APP.Replacements.getVisibleArchivedReportByKey_(reportKey);
+  if (!report) {
+    throw new Error('Report non trovato o non disponibile.');
+  }
+  return renderTemplate_('ui.substitution.reports', {
+    pageTitle: report.subject || 'Report sostituzioni',
+    viewerMode: 'detail',
+    viewerUser: actor,
+    reports: [],
+    report: report
+  });
 }
 
 function routeApiRequest_(payload) {

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include_('ui.common.css.html'); ?>
+    <style>
+      .reports-viewer-shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 24px 18px 40px;
+      }
+      .reports-viewer-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 20px;
+      }
+      .reports-viewer-header h1 {
+        margin: 4px 0 6px;
+      }
+      .reports-viewer-meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .reports-list-card,
+      .reports-detail-card {
+        padding: 0;
+        overflow: hidden;
+      }
+      .reports-list-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .reports-list-table th,
+      .reports-list-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+        text-align: left;
+        vertical-align: middle;
+      }
+      .reports-list-table th {
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: rgba(15, 23, 42, 0.72);
+      }
+      .reports-list-table tr:last-child td {
+        border-bottom: 0;
+      }
+      .reports-list-table a {
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .reports-list-table a:hover {
+        color: var(--accent);
+      }
+      .reports-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        background: rgba(96, 165, 250, 0.16);
+        color: #bfdbfe;
+        border: 1px solid rgba(96, 165, 250, 0.3);
+      }
+      .reports-detail-toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 16px 18px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .reports-detail-body {
+        padding: 18px;
+        background: rgba(15, 23, 42, 0.68);
+      }
+      .reports-snapshot-frame {
+        background: #ffffff;
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 22px 44px rgba(2, 6, 23, 0.32);
+      }
+      .reports-empty {
+        padding: 28px 18px;
+        color: var(--muted);
+      }
+      @media (max-width: 720px) {
+        .reports-viewer-header,
+        .reports-detail-toolbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .reports-list-table {
+          min-width: 760px;
+        }
+      }
+    </style>
+  </head>
+  <body class="board-monitor">
+    <div class="page-shell">
+      <div class="reports-viewer-shell">
+        <header class="reports-viewer-header">
+          <div>
+            <div class="eyebrow">Consultazione docenti</div>
+            <? if (viewerMode === 'detail' && report) { ?>
+              <h1><?= report.subject || 'Report sostituzioni' ?></h1>
+              <div class="reports-viewer-meta">
+                <?= report.referenceDateLabel ?> · Versione <?= report.version ?> · <?= report.status ?>
+              </div>
+            <? } else { ?>
+              <h1>Archivio report sostituzioni</h1>
+              <div class="reports-viewer-meta">Sono visibili solo i report ufficiali correnti pubblicati.</div>
+            <? } ?>
+          </div>
+          <div class="reports-viewer-meta">
+            <?= viewerUser && viewerUser.email ? viewerUser.email : '' ?>
+          </div>
+        </header>
+
+        <? if (viewerMode === 'detail' && report) { ?>
+          <section class="panel reports-detail-card">
+            <div class="reports-detail-toolbar">
+              <a class="button secondary" href="?fn=substitutionReports">Torna all'archivio</a>
+              <div class="reports-viewer-meta">
+                Aggiornato il <?= report.updatedAtISO || '-' ?>
+              </div>
+            </div>
+            <div class="reports-detail-body">
+              <div class="reports-snapshot-frame">
+                <?!= report.htmlSnapshot || '<div style="padding:24px;font-family:Arial,sans-serif;color:#111827;">Snapshot non disponibile.</div>' ?>
+              </div>
+            </div>
+          </section>
+        <? } else { ?>
+          <section class="panel reports-list-card">
+            <? if (reports && reports.length) { ?>
+              <div style="overflow-x:auto;">
+                <table class="reports-list-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Oggetto</th>
+                      <th>Aggiornato</th>
+                      <th>Versione</th>
+                      <th>Stato</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <? for (var index = 0; index < reports.length; index += 1) { var entry = reports[index]; ?>
+                      <tr>
+                        <td><?= entry.referenceDateLabel ?></td>
+                        <td>
+                          <a href="?fn=substitutionReportView&reportKey=<?= encodeURIComponent(entry.reportKey) ?>"><?= entry.subject || ('Report sostituzioni ' + entry.referenceDate) ?></a>
+                        </td>
+                        <td><?= entry.updatedAtISO || '-' ?></td>
+                        <td><?= entry.version ?></td>
+                        <td><span class="reports-badge"><?= entry.status ?></span></td>
+                        <td><a class="button secondary" href="?fn=substitutionReportView&reportKey=<?= encodeURIComponent(entry.reportKey) ?>">Apri</a></td>
+                      </tr>
+                    <? } ?>
+                  </tbody>
+                </table>
+              </div>
+            <? } else { ?>
+              <div class="reports-empty">Nessun report pubblicato disponibile.</div>
+            <? } ?>
+          </section>
+        <? } ?>
+      </div>
+    </div>
+  </body>
+</html>

@@ -38,6 +38,8 @@ ROOMS_APP.Replacements = {
     ROOMS_APP.Schema.ensureReplacementLongAssignments();
     ROOMS_APP.Schema.ensureReportRecipients();
     ROOMS_APP.Schema.ensureReportLog();
+    ROOMS_APP.Schema.ensureReportArchive();
+    ROOMS_APP.Schema.ensureReportArchiveHistory();
   },
 
   getModalModel: function (dateString, draft, options) {
@@ -247,6 +249,17 @@ ROOMS_APP.Replacements = {
         subject: payload.subject,
         textBody: payload.textBody,
         htmlBody: payload.htmlBody
+      });
+      this.archivePublishedReportSnapshot_(this.REPORT_TYPE_, targetDate, payload, {
+        actorEmail: actor.email,
+        status: 'PUBLISHED',
+        visibleToTeachers: true,
+        notes: senderInfo
+          ? ('mode=' + senderInfo.senderMode +
+            '; name=' + senderInfo.fromName +
+            (senderInfo.replyTo ? '; replyTo=' + senderInfo.replyTo : '') +
+            (senderInfo.noReply ? '; noReply=true' : ''))
+          : ''
       });
       this.appendReportLog_({
         ReportType: this.REPORT_TYPE_,
@@ -2269,6 +2282,166 @@ ROOMS_APP.Replacements = {
       subject: latest ? ROOMS_APP.normalizeString(latest.Subject) : '',
       recipients: latest ? ROOMS_APP.normalizeString(latest.Recipients) : '',
       notes: latest ? ROOMS_APP.normalizeString(latest.Notes) : ''
+    };
+  },
+
+  buildReportArchiveKey_: function (reportType, referenceDate) {
+    return ROOMS_APP.normalizeString(reportType).toUpperCase() + '|' + ROOMS_APP.toIsoDate(referenceDate);
+  },
+
+  archivePublishedReportSnapshot_: function (reportType, referenceDate, payload, options) {
+    var archiveSheetName = ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE;
+    var historySheetName = ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE_HISTORY;
+    var targetDate = ROOMS_APP.toIsoDate(referenceDate);
+    var normalizedType = ROOMS_APP.normalizeString(reportType).toUpperCase();
+    var reportKey = this.buildReportArchiveKey_(normalizedType, targetDate);
+    var actorEmail = ROOMS_APP.normalizeEmail(options && options.actorEmail);
+    var status = ROOMS_APP.normalizeString(options && options.status) || 'PUBLISHED';
+    var visibleToTeachers = options && Object.prototype.hasOwnProperty.call(options, 'visibleToTeachers')
+      ? Boolean(options.visibleToTeachers)
+      : true;
+    var notes = ROOMS_APP.normalizeString(options && options.notes);
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var archiveHeaders = ROOMS_APP.DB.getHeaders(archiveSheetName);
+    var currentRows = ROOMS_APP.DB.readRows(archiveSheetName);
+    var matchingRows = currentRows.filter(function (row) {
+      return ROOMS_APP.normalizeString(row.ReportKey) === reportKey;
+    });
+    var historyRows = matchingRows.map(function (row, index) {
+      var version = Math.max(1, ROOMS_APP.asNumber(row.Version, index + 1));
+      return {
+        HistoryId: reportKey + '|V' + version + '|' + nowIso + '|' + index,
+        ReportKey: reportKey,
+        ReportType: normalizedType,
+        ReferenceDate: targetDate,
+        Subject: ROOMS_APP.normalizeString(row.Subject),
+        HtmlSnapshot: String(row.HtmlSnapshot || ''),
+        PdfFileId: ROOMS_APP.normalizeString(row.PdfFileId),
+        Version: version,
+        ArchivedAtISO: nowIso,
+        ArchivedBy: actorEmail,
+        Status: ROOMS_APP.normalizeString(row.Status) || 'ARCHIVED',
+        Notes: ROOMS_APP.normalizeString(row.Notes)
+      };
+    });
+    var nextVersion = 1;
+    var createdAtISO = nowIso;
+    var createdBy = actorEmail;
+    var nextCurrentRows;
+    var currentRow;
+
+    if (matchingRows.length) {
+      nextVersion = matchingRows.reduce(function (maxVersion, row) {
+        return Math.max(maxVersion, ROOMS_APP.asNumber(row.Version, 0));
+      }, 0) + 1;
+      createdAtISO = ROOMS_APP.normalizeString(matchingRows[0].CreatedAtISO) || nowIso;
+      createdBy = ROOMS_APP.normalizeEmail(matchingRows[0].CreatedBy) || actorEmail;
+    }
+
+    currentRow = {
+      ReportKey: reportKey,
+      ReportType: normalizedType,
+      ReferenceDate: targetDate,
+      Subject: ROOMS_APP.normalizeString(payload && payload.subject),
+      HtmlSnapshot: String(payload && payload.htmlBody || ''),
+      PdfFileId: '',
+      Version: nextVersion,
+      VisibleToTeachers: visibleToTeachers ? 'TRUE' : 'FALSE',
+      CreatedAtISO: createdAtISO,
+      CreatedBy: createdBy,
+      UpdatedAtISO: nowIso,
+      UpdatedBy: actorEmail,
+      Status: status,
+      Notes: notes
+    };
+
+    nextCurrentRows = currentRows.filter(function (row) {
+      return ROOMS_APP.normalizeString(row.ReportKey) !== reportKey;
+    }).concat([currentRow]);
+
+    if (historyRows.length) {
+      ROOMS_APP.DB.appendRows(historySheetName, historyRows);
+    }
+    ROOMS_APP.DB.replaceRows(archiveSheetName, archiveHeaders, nextCurrentRows);
+
+    return {
+      reportKey: reportKey,
+      version: nextVersion,
+      updatedAtISO: nowIso
+    };
+  },
+
+  listVisibleArchivedReports_: function () {
+    if (!ROOMS_APP.DB.getSheet(ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE)) {
+      return [];
+    }
+    return ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE)
+      .filter(function (row) {
+        return ROOMS_APP.asBoolean(row.VisibleToTeachers);
+      })
+      .map(function (row) {
+        var referenceDate = ROOMS_APP.toIsoDate(row.ReferenceDate);
+        var version = Math.max(1, ROOMS_APP.asNumber(row.Version, 1));
+        return {
+          reportKey: ROOMS_APP.normalizeString(row.ReportKey),
+          reportType: ROOMS_APP.normalizeString(row.ReportType).toUpperCase(),
+          referenceDate: referenceDate,
+          referenceDateLabel: ROOMS_APP.formatItalianExtendedDate(referenceDate) || referenceDate,
+          subject: ROOMS_APP.normalizeString(row.Subject),
+          version: version,
+          status: version > 1 ? 'Aggiornato' : 'Pubblicato',
+          updatedAtISO: ROOMS_APP.normalizeString(row.UpdatedAtISO),
+          updatedBy: ROOMS_APP.normalizeEmail(row.UpdatedBy)
+        };
+      })
+      .sort(function (left, right) {
+        if (left.referenceDate > right.referenceDate) {
+          return -1;
+        }
+        if (left.referenceDate < right.referenceDate) {
+          return 1;
+        }
+        if (left.updatedAtISO > right.updatedAtISO) {
+          return -1;
+        }
+        if (left.updatedAtISO < right.updatedAtISO) {
+          return 1;
+        }
+        return 0;
+      });
+  },
+
+  getVisibleArchivedReportByKey_: function (reportKey) {
+    var targetKey = ROOMS_APP.normalizeString(reportKey);
+    if (!targetKey) {
+      return null;
+    }
+    if (!ROOMS_APP.DB.getSheet(ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE)) {
+      return null;
+    }
+    var row = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE).filter(function (entry) {
+      return ROOMS_APP.normalizeString(entry.ReportKey) === targetKey &&
+        ROOMS_APP.asBoolean(entry.VisibleToTeachers);
+    })[0] || null;
+    var referenceDate;
+    var version;
+    if (!row) {
+      return null;
+    }
+    referenceDate = ROOMS_APP.toIsoDate(row.ReferenceDate);
+    version = Math.max(1, ROOMS_APP.asNumber(row.Version, 1));
+    return {
+      reportKey: targetKey,
+      reportType: ROOMS_APP.normalizeString(row.ReportType).toUpperCase(),
+      referenceDate: referenceDate,
+      referenceDateLabel: ROOMS_APP.formatItalianExtendedDate(referenceDate) || referenceDate,
+      subject: ROOMS_APP.normalizeString(row.Subject),
+      htmlSnapshot: String(row.HtmlSnapshot || ''),
+      pdfFileId: ROOMS_APP.normalizeString(row.PdfFileId),
+      version: version,
+      status: version > 1 ? 'Aggiornato' : 'Pubblicato',
+      updatedAtISO: ROOMS_APP.normalizeString(row.UpdatedAtISO),
+      updatedBy: ROOMS_APP.normalizeEmail(row.UpdatedBy)
     };
   },
 
