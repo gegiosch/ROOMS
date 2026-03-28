@@ -18,6 +18,15 @@ function doGet(e) {
       return response;
     }
 
+    if (fn === 'substitutionDaily') {
+      response = Mod.Substitution.handleDaily(params);
+      logTiming_('doGet', startedAt, {
+        fn: fn,
+        mode: 'render-substitution-daily'
+      });
+      return response;
+    }
+
     if (fn === 'substitution') {
       response = Mod.Substitution.handlePage(params);
       logTiming_('doGet', startedAt, {

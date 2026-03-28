@@ -4,7 +4,7 @@
     <base target="_top">
     <?!= include_('ui.common.css.html'); ?>
   </head>
-  <body class="board-monitor">
+  <body class="board-monitor substitution-standalone">
     <div id="board-shell" class="page-shell board-shell">
       <header class="app-header">
         <div class="title-block">
@@ -17,6 +17,9 @@
             <span class="legend-pill"><span class="dot free"></span> Libera</span>
             <span class="legend-pill"><span class="dot occupied"></span> Occupata</span>
             <span class="legend-pill"><span class="dot next"></span> Prossima prenotazione</span>
+          </div>
+          <div class="chip-row">
+            <button id="board-replacements-button" class="button secondary" type="button" style="display:none;">Gestisci sostituzioni</button>
           </div>
           <span class="status-pill simulation-indicator" id="board-simulation-indicator" style="display:none;"></span>
           <span class="status-pill" id="board-page-indicator">Pagina 1/1</span>
@@ -46,6 +49,284 @@
           <button id="simulation-apply" class="button" type="button">Applica</button>
           <button id="simulation-reset" class="button secondary" type="button">Reset</button>
           <button id="simulation-cancel" class="button secondary" type="button">Chiudi</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="replacement-modal" class="replacement-modal" style="display:none;">
+      <div class="replacement-dialog panel" role="dialog" aria-modal="true" aria-label="Gestione sostituzioni">
+        <div id="replacement-loading" class="replacement-loading" style="display:none;" aria-live="polite" aria-busy="true">
+          <div class="room-panel-spinner"></div>
+          <div class="room-panel-loading-text" id="replacement-loading-text">Caricamento sostituzioni...</div>
+        </div>
+
+        <div class="replacement-header">
+          <div>
+            <div class="eyebrow">Workflow sostituzioni</div>
+            <h2>Gestione sostituzioni</h2>
+            <p class="subtitle">Data selezionata: <span id="replacement-selected-date">-</span></p>
+          </div>
+          <div class="replacement-header-actions">
+            <span id="replacement-status-pill" class="status-pill">Bozza non salvata</span>
+            <span id="replacement-report-pill" class="status-pill" style="display:none;"></span>
+            <div class="toolbar replacement-toolbar replacement-toolbar-top">
+              <button class="button secondary replacement-action-button" data-replacement-action="preview" type="button">Anteprima report</button>
+              <button class="button secondary replacement-action-button" data-replacement-action="send" type="button" disabled>Invia report</button>
+              <button class="button replacement-action-button" data-replacement-action="save" type="button" disabled>Salva</button>
+              <button id="replacement-close-button" class="button secondary" type="button">Chiudi</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="notice replacement-instructions">
+          Prima di procedere con la gestione delle sostituzioni, verificare che eventuali uscite didattiche per la giornata siano state inserite.
+        </div>
+        <div id="replacement-notice" class="notice" style="display:none;"></div>
+        <div id="replacement-date-state" class="notice" style="display:none;"></div>
+
+        <div class="replacement-tabs">
+          <button id="replacement-tab-daily" class="button secondary replacement-tab-button" type="button" data-tab="daily">Sostituzioni giornaliere</button>
+          <button id="replacement-tab-trips" class="button secondary replacement-tab-button" type="button" data-tab="trips">Uscite didattiche</button>
+          <button id="replacement-tab-long" class="button secondary replacement-tab-button" type="button" data-tab="long">Supplenze lunghe</button>
+        </div>
+
+        <div id="replacement-daily-tab" class="replacement-tab-panel">
+          <div class="replacement-layout">
+            <div class="replacement-column replacement-column-left">
+              <section class="panel form-card replacement-section">
+                <h3>Data</h3>
+                <div class="grid grid-2 replacement-date-grid">
+                  <div>
+                    <label for="replacement-date-input">Giorno</label>
+                    <input id="replacement-date-input" class="input" type="date">
+                  </div>
+                  <div class="replacement-quick-summary" id="replacement-quick-summary"></div>
+                </div>
+              </section>
+
+              <section class="panel form-card replacement-section">
+                <h3>Uscite didattiche</h3>
+                <div class="notice">
+                  Le classi in uscita e i docenti accompagnatori vengono letti automaticamente dalla tab dedicata "Uscite didattiche".
+                </div>
+              </section>
+
+              <section class="panel table-card replacement-section">
+                <h3>Docenti</h3>
+                <div class="grid grid-3" style="align-items:end;">
+                  <div>
+                    <label for="replacement-teacher-select">Seleziona docente</label>
+                    <select id="replacement-teacher-select" class="select"></select>
+                  </div>
+                  <div>
+                    <label for="replacement-teacher-event-type">Tipo evento</label>
+                    <select id="replacement-teacher-event-type" class="select">
+                      <option value="DAILY_ABSENCE">Assenza giornaliera</option>
+                      <option value="HOURLY_PERMISSION">Permesso orario</option>
+                    </select>
+                  </div>
+                  <div>
+                    <button id="replacement-teacher-add-button" class="button" type="button">Aggiungi</button>
+                  </div>
+                </div>
+                <div style="margin-top:12px;">
+                  <h3 style="margin:0 0 8px 0;">Docenti da gestire</h3>
+                  <div id="replacement-teachers-table"></div>
+                </div>
+              </section>
+            </div>
+
+            <div class="replacement-column replacement-column-right">
+              <section class="panel table-card replacement-section replacement-detail-section">
+                <div class="replacement-detail-header">
+                  <div>
+                    <h3 id="replacement-detail-title">Dettaglio docente</h3>
+                    <p id="replacement-detail-meta" class="subtitle">Seleziona un docente per gestire il dettaglio giornaliero.</p>
+                  </div>
+                  <span id="replacement-detail-loading" class="status-pill" style="display:none;">Aggiornamento...</span>
+                </div>
+                <div id="replacement-detail-table"></div>
+              </section>
+
+              <section class="panel table-card replacement-section">
+                <div class="replacement-detail-header">
+                  <div>
+                    <h3>Anteprima report</h3>
+                    <p class="subtitle">Generata solo su richiesta. L'invio usa sempre i dati salvati.</p>
+                  </div>
+                </div>
+                <div id="replacement-report-preview"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div id="replacement-trips-tab" class="replacement-tab-panel" style="display:none;">
+          <div class="replacement-column">
+            <section class="panel table-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3>Uscite didattiche</h3>
+                  <p class="subtitle">Gestione centralizzata di uscite giornaliere, viaggi di istruzione e uscite orarie.</p>
+                </div>
+              </div>
+              <div id="replacement-trip-list-table"></div>
+            </section>
+
+            <section class="panel form-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3 id="replacement-trip-form-title">Nuova uscita didattica</h3>
+                  <p class="subtitle">Gli accompagnatori proposti derivano dalle associazioni docente-classe del timetable.</p>
+                </div>
+              </div>
+              <div class="grid grid-2">
+                <div>
+                  <label for="replacement-trip-type">Tipo uscita</label>
+                  <select id="replacement-trip-type" class="select">
+                    <option value="DAILY">Uscita giornaliera</option>
+                    <option value="MULTI_DAY">Uscita di piu giorni</option>
+                    <option value="HOURLY">Uscita oraria</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="replacement-trip-class">Classe</label>
+                  <select id="replacement-trip-class" class="select"></select>
+                </div>
+                <div>
+                  <label for="replacement-trip-date">Giorno</label>
+                  <input id="replacement-trip-date" class="input" type="date">
+                </div>
+                <div>
+                  <label for="replacement-trip-end-date">Data fine</label>
+                  <input id="replacement-trip-end-date" class="input" type="date">
+                </div>
+                <div>
+                  <label for="replacement-trip-start-time">Dalle</label>
+                  <input id="replacement-trip-start-time" class="input" type="time">
+                </div>
+                <div>
+                  <label for="replacement-trip-end-time">Alle</label>
+                  <input id="replacement-trip-end-time" class="input" type="time">
+                </div>
+                <div>
+                  <label for="replacement-trip-title-input">Titolo / descrizione breve</label>
+                  <input id="replacement-trip-title-input" class="input" type="text" placeholder="Titolo opzionale">
+                </div>
+                <div>
+                  <label for="replacement-trip-enabled">Stato</label>
+                  <label id="replacement-trip-enabled-wrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                    <input id="replacement-trip-enabled" type="checkbox">
+                    <span>Enabled</span>
+                  </label>
+                </div>
+              </div>
+              <div style="margin-top:12px;">
+                <label for="replacement-trip-notes">Note</label>
+                <textarea id="replacement-trip-notes" class="textarea" placeholder="Note opzionali"></textarea>
+              </div>
+              <div style="margin-top:12px;">
+                <div class="replacement-detail-header">
+                  <div>
+                    <h3 style="margin:0;">Accompagnatori</h3>
+                    <p class="subtitle">Proposti in base alla classe selezionata.</p>
+                  </div>
+                </div>
+                <div id="replacement-trip-teacher-options"></div>
+                <div style="margin-top:12px;">
+                  <label for="replacement-trip-extra-teacher">Aggiungi altro docente</label>
+                  <select id="replacement-trip-extra-teacher" class="select"></select>
+                </div>
+              </div>
+              <div class="toolbar replacement-toolbar replacement-long-form-actions">
+                <button id="replacement-trip-save" class="button" type="button">Salva uscita didattica</button>
+                <button id="replacement-trip-cancel" class="button secondary" type="button">Annulla</button>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div id="replacement-long-tab" class="replacement-tab-panel" style="display:none;">
+          <div class="replacement-column">
+            <section class="panel table-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3>Supplenze lunghe</h3>
+                  <p class="subtitle">Override manuale del docente effettivo su intervallo date.</p>
+                </div>
+              </div>
+              <div id="replacement-long-list-table"></div>
+            </section>
+
+            <section class="panel form-card replacement-section">
+              <div class="replacement-detail-header">
+                <div>
+                  <h3 id="replacement-long-form-title">Nuova supplenza lunga</h3>
+                  <p class="subtitle">Il supplente puo non appartenere al dominio. Nessuna sovrapposizione ammessa sullo stesso docente originale.</p>
+                </div>
+              </div>
+              <div class="grid grid-2">
+                <div>
+                  <label for="replacement-long-original-teacher">Docente originale</label>
+                  <select id="replacement-long-original-teacher" class="select"></select>
+                </div>
+                <div>
+                  <label for="replacement-long-reason">Motivo</label>
+                  <input id="replacement-long-reason" class="input" type="text" placeholder="Malattia, maternita, aspettativa...">
+                </div>
+                <div>
+                  <label for="replacement-long-surname">Cognome supplente</label>
+                  <input id="replacement-long-surname" class="input" type="text" placeholder="Cognome">
+                </div>
+                <div>
+                  <label for="replacement-long-name">Nome supplente</label>
+                  <input id="replacement-long-name" class="input" type="text" placeholder="Nome">
+                </div>
+                <div>
+                  <label for="replacement-long-start">Data iniziale</label>
+                  <input id="replacement-long-start" class="input" type="date">
+                </div>
+                <div>
+                  <label for="replacement-long-end">Data finale</label>
+                  <input id="replacement-long-end" class="input" type="date">
+                </div>
+              </div>
+              <div style="margin-top:12px;">
+                <label for="replacement-long-notes">Note</label>
+                <textarea id="replacement-long-notes" class="textarea" placeholder="Note interne"></textarea>
+              </div>
+              <div class="toolbar replacement-toolbar replacement-long-form-actions">
+                <button id="replacement-long-save" class="button" type="button">Salva supplenza lunga</button>
+                <button id="replacement-long-cancel" class="button secondary" type="button">Annulla</button>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div id="replacement-daily-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom">
+          <button class="button secondary replacement-action-button" data-replacement-action="preview" type="button">Anteprima report</button>
+          <button class="button secondary replacement-action-button" data-replacement-action="send" type="button" disabled>Invia report</button>
+          <button class="button replacement-action-button" data-replacement-action="save" type="button" disabled>Salva</button>
+          <button class="button secondary" id="replacement-close-button-bottom" type="button">Chiudi</button>
+        </div>
+
+        <div id="replacement-long-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom" style="display:none;">
+          <button class="button secondary" id="replacement-close-button-long-bottom" type="button">Chiudi</button>
+        </div>
+
+        <div id="replacement-trips-actions-bottom" class="toolbar replacement-toolbar replacement-toolbar-bottom" style="display:none;">
+          <button class="button secondary" id="replacement-close-button-trips-bottom" type="button">Chiudi</button>
+        </div>
+
+        <div id="replacement-confirm-modal" class="room-panel-unsaved-confirm" style="display:none;">
+          <div class="room-panel-unsaved-dialog">
+            <h3 id="replacement-confirm-title">Modifiche non salvate</h3>
+            <p id="replacement-confirm-message">Sono presenti modifiche non salvate. Chiudere senza salvare?</p>
+            <div class="toolbar">
+              <button id="replacement-confirm-yes" class="button warn" type="button">Conferma</button>
+              <button id="replacement-confirm-no" class="button secondary" type="button">Annulla</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2021,7 +2302,7 @@
         }
 
         function canOpenReplacementModal_() {
-          return false;
+          return !isMonitorModeEffective_(state) && canManageReplacementUser_(state);
         }
 
         function isReplacementDateValid_() {
@@ -5227,8 +5508,8 @@
             });
         }
 
-        replacementStandaloneMode = getQueryParamLocal_('substitutionStandalone').toLowerCase() === 'true';
-        replacementStandaloneTab = getStandaloneReplacementTab_();
+        replacementStandaloneMode = true;
+        replacementStandaloneTab = 'daily';
 
         if (replacementStandaloneMode) {
           document.body.classList.add('substitution-standalone');
