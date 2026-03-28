@@ -53,6 +53,7 @@
       </div>
     </div>
 
+    <!-- SUBSTITUTION_DAILY_CONTENT_START -->
     <div id="replacement-modal" class="replacement-modal" style="display:none;">
       <div class="replacement-dialog panel" role="dialog" aria-modal="true" aria-label="Gestione sostituzioni">
         <div id="replacement-loading" class="replacement-loading" style="display:none;" aria-live="polite" aria-busy="true">
@@ -330,6 +331,7 @@
         </div>
       </div>
     </div>
+    <!-- SUBSTITUTION_DAILY_CONTENT_END -->
 
     <div id="room-panel-overlay" class="room-panel-overlay" style="display:none;">
       <aside class="room-panel" role="dialog" aria-modal="true" aria-label="Dettaglio aula">
@@ -490,6 +492,7 @@
       </div>
     </div>
 
+    <!-- SUBSTITUTION_DAILY_SCRIPTS_START -->
     <script>
       window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
       window.ROOMS_INITIAL_ROOM_ID = <?!= JSON.stringify(initialRoomId || '') ?>;
@@ -5878,5 +5881,6 @@
         }
       }());
     </script>
+    <!-- SUBSTITUTION_DAILY_SCRIPTS_END -->
   </body>
 </html>

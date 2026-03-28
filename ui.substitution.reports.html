@@ -112,7 +112,8 @@
   </head>
   <body class="board-monitor<? if (viewerEmbedded) { ?> reports-embedded<? } ?>">
     <div class="page-shell">
-      <div class="reports-viewer-shell">
+      <!-- SUBSTITUTION_REPORTS_FRAGMENT_START -->
+      <div class="reports-viewer-shell" data-substitution-reports-fragment="true">
         <? if (!viewerEmbedded) { ?>
           <header class="reports-viewer-header">
             <div>
@@ -184,6 +185,7 @@
           </section>
         <? } ?>
       </div>
+      <!-- SUBSTITUTION_REPORTS_FRAGMENT_END -->
     </div>
   </body>
 </html>

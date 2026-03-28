@@ -27,16 +27,15 @@
       .substitution-tab-content.active {
         display: block;
       }
-      .substitution-iframe-card {
+      .substitution-embedded-card {
         padding: 0;
         overflow: hidden;
       }
-      .substitution-iframe {
-        display: block;
-        width: 100%;
-        min-height: 78vh;
-        border: 0;
-        background: rgba(2, 6, 23, 0.96);
+      .substitution-tab-content .replacement-modal {
+        display: flex !important;
+      }
+      .substitution-tab-content .replacement-dialog {
+        min-height: 0;
       }
       .substitution-placeholder {
         padding: 28px;
@@ -56,9 +55,6 @@
           padding-left: 12px;
           padding-right: 12px;
         }
-        .substitution-iframe {
-          min-height: 72vh;
-        }
       }
     </style>
   </head>
@@ -74,85 +70,122 @@
           <div class="status-pill substitution-user-pill" id="substitution-user-pill"></div>
         </header>
 
-        <div class="substitution-tab-strip" id="substitution-tab-strip"></div>
-        <div id="substitution-root"></div>
+        <div class="substitution-tab-strip" id="substitution-tab-strip">
+          <button class="button secondary substitution-tab-button active" type="button" data-tab="daily">Sostituzioni giornaliere</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="absences">Inserimento assenze</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="trips">Uscite didattiche</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="long">Supplenze lunghe</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="reports">Report giornalieri</button>
+        </div>
+
+        <div id="substitution-root">
+          <section class="substitution-tab-content active" data-tab-panel="daily">
+            <?!= dailyContentHtml ?>
+          </section>
+
+          <section class="panel substitution-placeholder substitution-tab-content" data-tab-panel="absences">
+            <h3>Sezione in costruzione</h3>
+            <p>Inserimento assenze sarà integrato in un passaggio successivo.</p>
+          </section>
+
+          <section class="panel substitution-placeholder substitution-tab-content" data-tab-panel="trips">
+            <h3>Sezione in costruzione</h3>
+            <p>Uscite didattiche saranno integrate qui in un passaggio successivo.</p>
+          </section>
+
+          <section class="panel substitution-placeholder substitution-tab-content" data-tab-panel="long">
+            <h3>Sezione in costruzione</h3>
+            <p>Supplenze lunghe saranno integrate qui in un passaggio successivo.</p>
+          </section>
+
+          <section class="panel substitution-embedded-card substitution-tab-content" data-tab-panel="reports">
+            <div id="substitution-reports-root">
+              <?!= reportsHtml ?>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 
     <script>
-      window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+      window.ROOMS_SUBSTITUTION_SHELL_MODEL = <?!= initialModelJson ?>;
     </script>
-    <?!= include_('ui.common.js.html'); ?>
+    <?!= dailyScriptsHtml ?>
     <script>
       (function () {
-        var model = window.ROOMS_INITIAL_MODEL || {};
-        var root = document.getElementById('substitution-root');
-        var tabStrip = document.getElementById('substitution-tab-strip');
-        var panelsById = {};
-        var buttonsById = {};
+        var model = window.ROOMS_SUBSTITUTION_SHELL_MODEL || {};
+        var reportsRoot = document.getElementById('substitution-reports-root');
+        var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
+        var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var activeTabId = 'daily';
 
-        function createIframePanel(tab) {
-          var section = ROOMS_UI.el('section', 'panel substitution-iframe-card substitution-tab-content');
-          var frame = document.createElement('iframe');
-          frame.className = 'substitution-iframe';
-          frame.title = tab.label;
-          frame.dataset.src = tab.src || '';
-          section.appendChild(frame);
-          return section;
-        }
-
-        function createPlaceholderPanel() {
-          var section = ROOMS_UI.el('section', 'panel substitution-placeholder substitution-tab-content');
-          section.appendChild(ROOMS_UI.el('h3', '', 'Sezione in costruzione'));
-          section.appendChild(ROOMS_UI.el('p', '', 'Inserimento assenze sarà integrato qui in un passaggio successivo.'));
-          return section;
-        }
-
-        function ensurePanelLoaded_(tabId) {
-          var panel = panelsById[tabId];
-          var frame = panel ? panel.querySelector('iframe[data-src]') : null;
-          if (!frame || frame.src) {
-            return;
-          }
-          frame.src = frame.dataset.src;
-        }
-
         function activateTab_(tabId) {
-          activeTabId = panelsById[tabId] ? tabId : 'daily';
-          Object.keys(panelsById).forEach(function (key) {
-            panelsById[key].classList.toggle('active', key === activeTabId);
+          activeTabId = tabId || 'daily';
+          tabPanels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === activeTabId);
           });
-          Object.keys(buttonsById).forEach(function (key) {
-            buttonsById[key].classList.toggle('active', key === activeTabId);
+          tabButtons.forEach(function (button) {
+            button.classList.toggle('active', button.getAttribute('data-tab') === activeTabId);
           });
-          ensurePanelLoaded_(activeTabId);
         }
 
-        function render() {
-          var tabs = Array.isArray(model.tabs) ? model.tabs : [];
+        function setHeader_() {
           document.getElementById('substitution-subtitle').textContent = model.subtitle || '';
           document.getElementById('substitution-user-pill').textContent = model.user && model.user.email ? model.user.email : 'ROOMS';
-          ROOMS_UI.clearNode(tabStrip);
-          ROOMS_UI.clearNode(root);
-
-          tabs.forEach(function (tab) {
-            var button = ROOMS_UI.el('button', 'button secondary', tab.label);
-            var panel = tab.kind === 'placeholder' ? createPlaceholderPanel() : createIframePanel(tab);
-            button.type = 'button';
-            button.addEventListener('click', function () {
-              activateTab_(tab.id);
-            });
-            buttonsById[tab.id] = button;
-            panelsById[tab.id] = panel;
-            tabStrip.appendChild(button);
-            root.appendChild(panel);
-          });
-
-          activateTab_(activeTabId);
         }
 
-        render();
+        function swapReportsContent_(htmlText) {
+          var parser = new DOMParser();
+          var parsed = parser.parseFromString(String(htmlText || ''), 'text/html');
+          var fragment = parsed.querySelector('[data-substitution-reports-fragment]');
+          if (!fragment || !reportsRoot) {
+            return;
+          }
+          reportsRoot.innerHTML = fragment.outerHTML;
+        }
+
+        function loadReportsUrl_(url) {
+          return fetch(url, {
+            credentials: 'same-origin'
+          }).then(function (response) {
+            if (!response.ok) {
+              throw new Error('Errore caricamento report.');
+            }
+            return response.text();
+          }).then(function (html) {
+            swapReportsContent_(html);
+          }).catch(function (error) {
+            if (!reportsRoot) {
+              return;
+            }
+            reportsRoot.innerHTML = '<div class="notice error">' + (error && error.message ? error.message : 'Errore caricamento report.') + '</div>';
+          });
+        }
+
+        tabButtons.forEach(function (button) {
+          button.addEventListener('click', function () {
+            activateTab_(button.getAttribute('data-tab'));
+          });
+        });
+
+        if (reportsRoot) {
+          reportsRoot.addEventListener('click', function (event) {
+            var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+            var href;
+            if (!link) {
+              return;
+            }
+            href = link.getAttribute('href') || '';
+            if (href.indexOf('?fn=substitutionReports') !== 0 && href.indexOf('?fn=substitutionReportView') !== 0) {
+              return;
+            }
+            event.preventDefault();
+            loadReportsUrl_(href);
+          });
+        }
+
+        setHeader_();
+        activateTab_(activeTabId);
       }());
     </script>
   </body>
