@@ -150,7 +150,7 @@ ROOMS_APP.buildSubstitutionReportsWebappUrl = function (baseUrl) {
   if (!normalizedBaseUrl) {
     return '';
   }
-  return ROOMS_APP.appendQueryParam(normalizedBaseUrl, 'fn', 'substitutionReports');
+  return ROOMS_APP.appendQueryParam(normalizedBaseUrl, 'fn', 'substitution');
 };
 
 ROOMS_APP.isMonitorHost = function (host) {

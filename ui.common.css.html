@@ -702,6 +702,40 @@ body.board-monitor #board-root {
   gap: 14px;
 }
 
+body.substitution-standalone {
+  background: var(--bg-main);
+}
+
+body.substitution-standalone #board-shell,
+body.substitution-standalone .board-floating-controls {
+  display: none !important;
+}
+
+body.substitution-standalone .replacement-modal {
+  position: static;
+  inset: auto;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+body.substitution-standalone .replacement-dialog {
+  width: 100%;
+  max-height: none;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 18px;
+}
+
+body.substitution-standalone #replacement-close-button,
+body.substitution-standalone #replacement-close-button-bottom,
+body.substitution-standalone #replacement-close-button-trips-bottom,
+body.substitution-standalone #replacement-close-button-long-bottom {
+  display: none !important;
+}
+
 .replacement-dialog.is-loading {
   cursor: wait;
   overflow: hidden;

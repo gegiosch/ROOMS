@@ -503,6 +503,7 @@
         var refreshTimer;
         var visiblePages = [];
         var boardShell = document.getElementById('board-shell');
+        var boardFloatingControls = document.querySelector('.board-floating-controls');
         var fullscreenButton = document.getElementById('board-fullscreen-toggle');
         var adminButton = document.getElementById('board-admin-button');
         var replacementsButton = document.getElementById('board-replacements-button');
@@ -609,6 +610,8 @@
         var occupantEditorSave = document.getElementById('panel-occupant-editor-save');
         var occupantEditorCancel = document.getElementById('panel-occupant-editor-cancel');
         var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
+        var replacementStandaloneMode = false;
+        var replacementStandaloneTab = 'daily';
 
         var aulaEditorModal = document.getElementById('aula-magna-editor-modal');
         var aulaEditorDate = document.getElementById('aula-editor-date');
@@ -765,6 +768,22 @@
             ('0' + String(dateObj.getMonth() + 1)).slice(-2),
             ('0' + String(dateObj.getDate())).slice(-2)
           ].join('-');
+        }
+
+        function getQueryParamLocal_(key) {
+          try {
+            return String(new URLSearchParams(window.location.search).get(key) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function getStandaloneReplacementTab_() {
+          var normalized = getQueryParamLocal_('substitutionTab').toLowerCase();
+          if (normalized === 'trips' || normalized === 'long') {
+            return normalized;
+          }
+          return 'daily';
         }
 
         function getBranchLabel(model, branchKey) {
@@ -1059,7 +1078,7 @@
             adminButton.style.display = !isMonitorModeEffective_(state) && canAccessAdminUser_(state) ? 'inline-flex' : 'none';
           }
           if (replacementsButton) {
-            replacementsButton.style.display = !isMonitorModeEffective_(state) && canManageReplacementUser_(state) ? 'inline-flex' : 'none';
+            replacementsButton.style.display = 'none';
           }
           updateSimulationUi_(state);
 
@@ -4050,6 +4069,9 @@
         }
 
         function closeReplacementModal_() {
+          if (replacementStandaloneMode) {
+            return;
+          }
           ensureCanDiscardReplacementDraft_(function () {
             closeReplacementModalImmediate_();
           }, 'Modifiche non salvate', 'Sono presenti modifiche non salvate. Chiudere la gestione sostituzioni senza salvare?');
@@ -4072,6 +4094,28 @@
             allowAutoShift: true,
             keepDirty: false,
             loadingMessage: 'Caricamento sostituzioni...'
+          });
+        }
+
+        function openReplacementStandalone_() {
+          if (!replacementModal) {
+            return;
+          }
+          replacementState.isOpen = true;
+          replacementState.activeTab = replacementStandaloneTab;
+          replacementModal.style.display = 'flex';
+          replacementState.preview = null;
+          replacementState.pendingManualAssignmentKeys = {};
+          replacementState.teacherDetail = null;
+          replacementState.selectedTeacherEmail = '';
+          resetReplacementLongForm_();
+          resetReplacementTripForm_();
+          loadReplacementModel_(getDefaultPanelDate_(), null, {
+            allowAutoShift: true,
+            keepDirty: false,
+            loadingMessage: 'Caricamento sostituzioni...'
+          }).then(function () {
+            switchReplacementTab_(replacementStandaloneTab);
           });
         }
 
@@ -5464,9 +5508,23 @@
             });
         }
 
-        render(state);
-        refresh({ skipPanelRefresh: true });
-        window.addEventListener('resize', applyFitScale);
+        replacementStandaloneMode = getQueryParamLocal_('substitutionStandalone').toLowerCase() === 'true';
+        replacementStandaloneTab = getStandaloneReplacementTab_();
+
+        if (replacementStandaloneMode) {
+          document.body.classList.add('substitution-standalone');
+          if (boardShell) {
+            boardShell.style.display = 'none';
+          }
+          if (boardFloatingControls) {
+            boardFloatingControls.style.display = 'none';
+          }
+          openReplacementStandalone_();
+        } else {
+          render(state);
+          refresh({ skipPanelRefresh: true });
+          window.addEventListener('resize', applyFitScale);
+        }
 
         if (fullscreenButton) {
           fullscreenButton.addEventListener('click', toggleFullscreen);
@@ -5608,7 +5666,7 @@
         }
         if (replacementModal) {
           replacementModal.addEventListener('click', function (event) {
-            if (event.target === replacementModal) {
+            if (!replacementStandaloneMode && event.target === replacementModal) {
               closeReplacementModal_();
             }
           });

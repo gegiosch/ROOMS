@@ -1,13 +1,20 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <base target="_top">
+    <base target="<? if (viewerEmbedded) { ?>_self<? } else { ?>_top<? } ?>">
     <?!= include_('ui.common.css.html'); ?>
     <style>
       .reports-viewer-shell {
         max-width: 1180px;
         margin: 0 auto;
         padding: 24px 18px 40px;
+      }
+      body.reports-embedded .reports-viewer-shell {
+        max-width: none;
+        padding: 0;
+      }
+      body.reports-embedded .page-shell {
+        padding: 0;
       }
       .reports-viewer-header {
         display: flex;
@@ -103,31 +110,33 @@
       }
     </style>
   </head>
-  <body class="board-monitor">
+  <body class="board-monitor<? if (viewerEmbedded) { ?> reports-embedded<? } ?>">
     <div class="page-shell">
       <div class="reports-viewer-shell">
-        <header class="reports-viewer-header">
-          <div>
-            <div class="eyebrow">Consultazione docenti</div>
-            <? if (viewerMode === 'detail' && report) { ?>
-              <h1><?= report.subject || 'Report sostituzioni' ?></h1>
-              <div class="reports-viewer-meta">
-                <?= report.referenceDateLabel ?> · Versione <?= report.version ?> · <?= report.status ?>
-              </div>
-            <? } else { ?>
-              <h1>Archivio report sostituzioni</h1>
-              <div class="reports-viewer-meta">Sono visibili solo i report ufficiali correnti pubblicati.</div>
-            <? } ?>
-          </div>
-          <div class="reports-viewer-meta">
-            <?= viewerUser && viewerUser.email ? viewerUser.email : '' ?>
-          </div>
-        </header>
+        <? if (!viewerEmbedded) { ?>
+          <header class="reports-viewer-header">
+            <div>
+              <div class="eyebrow">Consultazione docenti</div>
+              <? if (viewerMode === 'detail' && report) { ?>
+                <h1><?= report.subject || 'Report sostituzioni' ?></h1>
+                <div class="reports-viewer-meta">
+                  <?= report.referenceDateLabel ?> · Versione <?= report.version ?> · <?= report.status ?>
+                </div>
+              <? } else { ?>
+                <h1>Archivio report sostituzioni</h1>
+                <div class="reports-viewer-meta">Sono visibili solo i report ufficiali correnti pubblicati.</div>
+              <? } ?>
+            </div>
+            <div class="reports-viewer-meta">
+              <?= viewerUser && viewerUser.email ? viewerUser.email : '' ?>
+            </div>
+          </header>
+        <? } ?>
 
         <? if (viewerMode === 'detail' && report) { ?>
           <section class="panel reports-detail-card">
             <div class="reports-detail-toolbar">
-              <a class="button secondary" href="?fn=substitutionReports">Torna all'archivio</a>
+              <a class="button secondary" href="?fn=substitutionReports<? if (viewerEmbedded) { ?>&embedded=true<? } ?>">Torna all'archivio</a>
               <div class="reports-viewer-meta">
                 Aggiornato il <?= report.updatedAtISO || '-' ?>
               </div>
@@ -158,12 +167,12 @@
                       <tr>
                         <td><?= entry.referenceDateLabel ?></td>
                         <td>
-                          <a href="?fn=substitutionReportView&reportKey=<?= encodeURIComponent(entry.reportKey) ?>"><?= entry.subject || ('Report sostituzioni ' + entry.referenceDate) ?></a>
+                          <a href="?fn=substitutionReportView&reportKey=<?= encodeURIComponent(entry.reportKey) ?><? if (viewerEmbedded) { ?>&embedded=true<? } ?>"><?= entry.subject || ('Report sostituzioni ' + entry.referenceDate) ?></a>
                         </td>
                         <td><?= entry.updatedAtISO || '-' ?></td>
                         <td><?= entry.version ?></td>
                         <td><span class="reports-badge"><?= entry.status ?></span></td>
-                        <td><a class="button secondary" href="?fn=substitutionReportView&reportKey=<?= encodeURIComponent(entry.reportKey) ?>">Apri</a></td>
+                        <td><a class="button secondary" href="?fn=substitutionReportView&reportKey=<?= encodeURIComponent(entry.reportKey) ?><? if (viewerEmbedded) { ?>&embedded=true<? } ?>">Apri</a></td>
                       </tr>
                     <? } ?>
                   </tbody>

@@ -18,6 +18,15 @@ function doGet(e) {
       return response;
     }
 
+    if (fn === 'substitution') {
+      response = Mod.Substitution.handlePage(params);
+      logTiming_('doGet', startedAt, {
+        fn: fn,
+        mode: 'render-substitution'
+      });
+      return response;
+    }
+
     if (fn === 'substitutionReportView') {
       response = renderSubstitutionReportViewPage_(params);
       logTiming_('doGet', startedAt, {
@@ -415,10 +424,12 @@ function renderTemplate_(filename, viewModel) {
 
 function renderSubstitutionReportsPage_(params) {
   var actor = ROOMS_APP.Auth.getUserContext();
+  var embedded = ROOMS_APP.normalizeString(params && params.embedded).toLowerCase() === 'true';
   ROOMS_APP.Auth.assertAllowedDomain(actor.email);
   return renderTemplate_('ui.substitution.reports', {
     pageTitle: 'Report sostituzioni',
     viewerMode: 'list',
+    viewerEmbedded: embedded,
     viewerUser: actor,
     reports: ROOMS_APP.Replacements.listVisibleArchivedReports_(),
     report: null
@@ -428,6 +439,7 @@ function renderSubstitutionReportsPage_(params) {
 function renderSubstitutionReportViewPage_(params) {
   var actor = ROOMS_APP.Auth.getUserContext();
   var reportKey = ROOMS_APP.normalizeString(params && params.reportKey);
+  var embedded = ROOMS_APP.normalizeString(params && params.embedded).toLowerCase() === 'true';
   var report;
   ROOMS_APP.Auth.assertAllowedDomain(actor.email);
   report = ROOMS_APP.Replacements.getVisibleArchivedReportByKey_(reportKey);
@@ -437,6 +449,7 @@ function renderSubstitutionReportViewPage_(params) {
   return renderTemplate_('ui.substitution.reports', {
     pageTitle: report.subject || 'Report sostituzioni',
     viewerMode: 'detail',
+    viewerEmbedded: embedded,
     viewerUser: actor,
     reports: [],
     report: report

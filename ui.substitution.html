@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include_('ui.common.css.html'); ?>
+    <style>
+      .substitution-page {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 24px 18px 32px;
+      }
+      .substitution-page-header {
+        margin-bottom: 18px;
+      }
+      .substitution-page-header h1 {
+        margin: 4px 0 6px;
+      }
+      .substitution-tab-strip {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .substitution-tab-content {
+        display: none;
+      }
+      .substitution-tab-content.active {
+        display: block;
+      }
+      .substitution-iframe-card {
+        padding: 0;
+        overflow: hidden;
+      }
+      .substitution-iframe {
+        display: block;
+        width: 100%;
+        min-height: 78vh;
+        border: 0;
+        background: rgba(2, 6, 23, 0.96);
+      }
+      .substitution-placeholder {
+        padding: 28px;
+      }
+      .substitution-placeholder h3 {
+        margin-top: 0;
+      }
+      .substitution-placeholder p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+      .substitution-user-pill {
+        margin-left: auto;
+      }
+      @media (max-width: 720px) {
+        .substitution-page {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+        .substitution-iframe {
+          min-height: 72vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="substitution-page">
+        <header class="app-header substitution-page-header">
+          <div class="title-block">
+            <div class="eyebrow">Modulo unificato</div>
+            <h1>Sostituzioni</h1>
+            <p class="subtitle" id="substitution-subtitle"></p>
+          </div>
+          <div class="status-pill substitution-user-pill" id="substitution-user-pill"></div>
+        </header>
+
+        <div class="substitution-tab-strip" id="substitution-tab-strip"></div>
+        <div id="substitution-root"></div>
+      </div>
+    </div>
+
+    <script>
+      window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+    </script>
+    <?!= include_('ui.common.js.html'); ?>
+    <script>
+      (function () {
+        var model = window.ROOMS_INITIAL_MODEL || {};
+        var root = document.getElementById('substitution-root');
+        var tabStrip = document.getElementById('substitution-tab-strip');
+        var panelsById = {};
+        var buttonsById = {};
+        var activeTabId = 'daily';
+
+        function createIframePanel(tab) {
+          var section = ROOMS_UI.el('section', 'panel substitution-iframe-card substitution-tab-content');
+          var frame = document.createElement('iframe');
+          frame.className = 'substitution-iframe';
+          frame.title = tab.label;
+          frame.dataset.src = tab.src || '';
+          section.appendChild(frame);
+          return section;
+        }
+
+        function createPlaceholderPanel() {
+          var section = ROOMS_UI.el('section', 'panel substitution-placeholder substitution-tab-content');
+          section.appendChild(ROOMS_UI.el('h3', '', 'Sezione in costruzione'));
+          section.appendChild(ROOMS_UI.el('p', '', 'Inserimento assenze sarà integrato qui in un passaggio successivo.'));
+          return section;
+        }
+
+        function ensurePanelLoaded_(tabId) {
+          var panel = panelsById[tabId];
+          var frame = panel ? panel.querySelector('iframe[data-src]') : null;
+          if (!frame || frame.src) {
+            return;
+          }
+          frame.src = frame.dataset.src;
+        }
+
+        function activateTab_(tabId) {
+          activeTabId = panelsById[tabId] ? tabId : 'daily';
+          Object.keys(panelsById).forEach(function (key) {
+            panelsById[key].classList.toggle('active', key === activeTabId);
+          });
+          Object.keys(buttonsById).forEach(function (key) {
+            buttonsById[key].classList.toggle('active', key === activeTabId);
+          });
+          ensurePanelLoaded_(activeTabId);
+        }
+
+        function render() {
+          var tabs = Array.isArray(model.tabs) ? model.tabs : [];
+          document.getElementById('substitution-subtitle').textContent = model.subtitle || '';
+          document.getElementById('substitution-user-pill').textContent = model.user && model.user.email ? model.user.email : 'ROOMS';
+          ROOMS_UI.clearNode(tabStrip);
+          ROOMS_UI.clearNode(root);
+
+          tabs.forEach(function (tab) {
+            var button = ROOMS_UI.el('button', 'button secondary', tab.label);
+            var panel = tab.kind === 'placeholder' ? createPlaceholderPanel() : createIframePanel(tab);
+            button.type = 'button';
+            button.addEventListener('click', function () {
+              activateTab_(tab.id);
+            });
+            buttonsById[tab.id] = button;
+            panelsById[tab.id] = panel;
+            tabStrip.appendChild(button);
+            root.appendChild(panel);
+          });
+
+          activateTab_(activeTabId);
+        }
+
+        render();
+      }());
+    </script>
+  </body>
+</html>
