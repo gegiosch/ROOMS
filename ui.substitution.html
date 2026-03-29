@@ -59,9 +59,6 @@
       .substitution-user-pill {
         margin-left: auto;
       }
-      .substitution-workbench-error {
-        margin-top: 12px;
-      }
       @media (max-width: 720px) {
         .substitution-page {
           padding-left: 12px;
@@ -70,7 +67,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="substitution-unified">
     <div class="page-shell">
       <div class="substitution-page">
         <header class="app-header substitution-page-header">
@@ -83,19 +80,16 @@
         </header>
 
         <div class="substitution-tab-strip" id="substitution-tab-strip">
-          <button class="button secondary substitution-tab-button active" type="button" data-tab="daily" data-panel="workbench">Sostituzioni giornaliere</button>
+          <button class="button secondary substitution-tab-button active" type="button" data-tab="daily" data-panel="workbench" data-replacement-tab="daily">Sostituzioni giornaliere</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="absences">Inserimento assenze</button>
-          <button class="button secondary substitution-tab-button" type="button" data-tab="trips" data-panel="workbench">Uscite didattiche</button>
-          <button class="button secondary substitution-tab-button" type="button" data-tab="long" data-panel="workbench">Supplenze lunghe</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="trips" data-panel="workbench" data-replacement-tab="trips">Uscite didattiche</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="long" data-panel="workbench" data-replacement-tab="long">Supplenze lunghe</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="reports">Report giornalieri</button>
         </div>
 
         <div id="substitution-root">
           <section class="substitution-tab-content active substitution-workbench-shell" data-tab-panel="workbench">
-            <?!= dailyContentHtml ?>
-            <template id="substitution-workbench-scripts-template">
-              <?!= dailyScriptsHtml ?>
-            </template>
+            <?!= include_('ui.substitution.workbench.content.html'); ?>
           </section>
 
           <section class="panel substitution-placeholder substitution-tab-content" data-tab-panel="absences">
@@ -113,13 +107,13 @@
     </div>
 
     <script>
-      window.ROOMS_SUBSTITUTION_SHELL_MODEL = <?!= initialModelJson ?>;
+      window.ROOMS_SUBSTITUTION_SHELL_MODEL = <?!= shellModelJson ?>;
     </script>
+    <?!= include_('ui.substitution.workbench.scripts.html'); ?>
     <script>
       (function () {
         var model = window.ROOMS_SUBSTITUTION_SHELL_MODEL || {};
         var reportsRoot = document.getElementById('substitution-reports-root');
-        var workbenchRoot = document.querySelector('[data-tab-panel="workbench"]');
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var activeTabId = 'daily';
@@ -131,86 +125,6 @@
           return button && button.getAttribute('data-panel') ? button.getAttribute('data-panel') : tabId;
         }
 
-        function setWorkbenchError_(message) {
-          var existing = document.getElementById('substitution-workbench-error');
-          if (!workbenchRoot) {
-            return;
-          }
-          if (!message) {
-            if (existing) {
-              existing.remove();
-            }
-            return;
-          }
-          if (!existing) {
-            existing = document.createElement('div');
-            existing.id = 'substitution-workbench-error';
-            existing.className = 'notice error substitution-workbench-error';
-            workbenchRoot.appendChild(existing);
-          }
-          existing.textContent = message;
-        }
-
-        function runEmbeddedScripts_(container) {
-          var scripts;
-          if (!container) {
-            return;
-          }
-          scripts = Array.prototype.slice.call(container.querySelectorAll('script'));
-          scripts.forEach(function (oldScript) {
-            var newScript = document.createElement('script');
-            Array.prototype.slice.call(oldScript.attributes || []).forEach(function (attribute) {
-              newScript.setAttribute(attribute.name, attribute.value);
-            });
-            if (oldScript.src) {
-              newScript.src = oldScript.src;
-            } else {
-              newScript.text = oldScript.text || oldScript.textContent || '';
-            }
-            document.body.appendChild(newScript);
-            oldScript.remove();
-          });
-        }
-
-        function hydrateWorkbenchScripts_() {
-          var template = document.getElementById('substitution-workbench-scripts-template');
-          var holder;
-          if (!workbenchRoot || !template || template.dataset.hydrated === 'true') {
-            return;
-          }
-          holder = document.createElement('div');
-          holder.style.display = 'none';
-          holder.setAttribute('data-substitution-workbench-scripts', 'true');
-          holder.innerHTML = template.innerHTML;
-          workbenchRoot.appendChild(holder);
-          runEmbeddedScripts_(holder);
-          template.dataset.hydrated = 'true';
-          template.remove();
-        }
-
-        function syncReplacementWorkbench_(tabId) {
-          var api = window.ROOMS_SUBSTITUTION_WORKBENCH;
-          if (tabId !== 'daily' && tabId !== 'trips' && tabId !== 'long') {
-            return;
-          }
-          setWorkbenchError_('');
-          if (workbenchRoot) {
-            workbenchRoot.style.display = 'block';
-          }
-          if (api && typeof api.activateTab === 'function') {
-            api.activateTab(tabId);
-            return;
-          }
-          document.dispatchEvent(new CustomEvent('rooms:replacement-tab-change', {
-            detail: {
-              tab: tabId
-            }
-          }));
-          if (!(window.ROOMS_SUBSTITUTION_WORKBENCH && typeof window.ROOMS_SUBSTITUTION_WORKBENCH.activateTab === 'function')) {
-            setWorkbenchError_('Workbench sostituzioni non disponibile.');
-          }
-        }
-
         function activateTab_(tabId) {
           activeTabId = tabId || 'daily';
           var activePanelId = getPanelId_(activeTabId);
@@ -220,7 +134,6 @@
           tabButtons.forEach(function (button) {
             button.classList.toggle('active', button.getAttribute('data-tab') === activeTabId);
           });
-          syncReplacementWorkbench_(activeTabId);
         }
 
         function setHeader_() {
@@ -278,7 +191,6 @@
           });
         }
 
-        hydrateWorkbenchScripts_();
         setHeader_();
         activateTab_(activeTabId);
       }());

@@ -4,11 +4,6 @@ Mod.Substitution = {
   handlePage: function () {
     var actor = ROOMS_APP.Auth.getUserContext();
     var dailyBootstrap = this.buildDailyBootstrap_(actor);
-    var dailyHtml = this.renderTemplateToString_('ui.substitution.daily', {
-      pageTitle: 'Sostituzioni giornaliere',
-      initialModelJson: JSON.stringify(dailyBootstrap),
-      initialRoomId: ''
-    });
     var reportsHtml = this.renderTemplateToString_('ui.substitution.reports', {
       pageTitle: 'Report sostituzioni',
       viewerMode: 'list',
@@ -20,13 +15,13 @@ Mod.Substitution = {
 
     return renderTemplate_('ui.substitution', {
       pageTitle: 'Sostituzioni',
-      initialModelJson: JSON.stringify({
+      shellModelJson: JSON.stringify({
         title: 'Sostituzioni',
         subtitle: 'Modulo unificato delle sostituzioni.',
         user: actor
       }),
-      dailyContentHtml: this.extractFragment_(dailyHtml, 'SUBSTITUTION_DAILY_CONTENT_START', 'SUBSTITUTION_DAILY_CONTENT_END'),
-      dailyScriptsHtml: this.extractFragment_(dailyHtml, 'SUBSTITUTION_DAILY_SCRIPTS_START', 'SUBSTITUTION_DAILY_SCRIPTS_END'),
+      initialModelJson: JSON.stringify(dailyBootstrap),
+      initialRoomId: '',
       reportsHtml: this.extractFragment_(reportsHtml, 'SUBSTITUTION_REPORTS_FRAGMENT_START', 'SUBSTITUTION_REPORTS_FRAGMENT_END')
     });
   },
