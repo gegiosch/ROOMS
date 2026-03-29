@@ -27,12 +27,7 @@ Mod.Substitution = {
   },
 
   handleDaily: function () {
-    var actor = ROOMS_APP.Auth.getUserContext();
-    return renderTemplate_('ui.substitution.daily', {
-      pageTitle: 'Sostituzioni giornaliere',
-      initialModelJson: JSON.stringify(this.buildDailyBootstrap_(actor)),
-      initialRoomId: ''
-    });
+    return this.handlePage();
   },
 
   buildDailyBootstrap_: function (actor) {
