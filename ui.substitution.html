@@ -565,6 +565,7 @@
                   <button id="substitution-absence-add" class="button secondary" type="button">Aggiungi assenza</button>
                   <button id="substitution-absence-save" class="button" type="button">Salva</button>
                 </div>
+                <div id="substitution-absence-draft-pill" class="status-pill" style="margin-top:10px;display:inline-flex;">Archivio assenze allineato</div>
                 <div id="substitution-absence-mode-description" class="substitution-absence-meta">
                   Le modifiche restano in bozza fino a Salva.
                 </div>
@@ -6106,6 +6107,7 @@
         var absenceNotesInput = document.getElementById('substitution-absence-notes');
         var absenceAddButton = document.getElementById('substitution-absence-add');
         var absenceSaveButton = document.getElementById('substitution-absence-save');
+        var absenceDraftPill = document.getElementById('substitution-absence-draft-pill');
         var absenceModeDescription = document.getElementById('substitution-absence-mode-description');
         var absenceOperationalDate = document.getElementById('substitution-absence-operational-date');
         var absenceDayTable = document.getElementById('substitution-day-absence-table');
@@ -6235,6 +6237,26 @@
           absenceNotice.textContent = message;
         }
 
+        function updateAbsenceDraftStatus_() {
+          if (absenceSaveButton) {
+            absenceSaveButton.disabled = !absenceState.draftDirty;
+          }
+          if (!absenceDraftPill) {
+            return;
+          }
+          if (absenceState.draftDirty) {
+            absenceDraftPill.textContent = 'Bozza assenze non salvata';
+            absenceDraftPill.style.background = 'rgba(251, 191, 36, 0.16)';
+            absenceDraftPill.style.borderColor = 'rgba(251, 191, 36, 0.38)';
+            absenceDraftPill.style.color = '#fde68a';
+            return;
+          }
+          absenceDraftPill.textContent = 'Archivio assenze allineato';
+          absenceDraftPill.style.background = '';
+          absenceDraftPill.style.borderColor = '';
+          absenceDraftPill.style.color = '';
+        }
+
         function getAbsenceTeacherName_(teacherEmail) {
           var option;
           if (!absenceTeacherSelect || !teacherEmail) {
@@ -6362,6 +6384,7 @@
           }
           renderAbsenceTables_();
           absenceState.initialized = true;
+          updateAbsenceDraftStatus_();
           updateAbsenceFormLayout_();
         }
 
@@ -6565,6 +6588,7 @@
           absenceState.draftDirty = true;
           clearAbsenceForm_(true);
           renderAbsenceTables_();
+          updateAbsenceDraftStatus_();
           setAbsenceNotice_('Assenza aggiunta alla bozza corrente. Premere Salva per persistire le modifiche.', 'success');
         }
 
@@ -6645,6 +6669,7 @@
           }
           absenceState.draftDirty = true;
           renderAbsenceTables_();
+          updateAbsenceDraftStatus_();
           setAbsenceNotice_('Assenza rimossa dalla bozza corrente. Premere Salva per confermare.', 'success');
         }
 
@@ -6814,6 +6839,7 @@
         setHeader_();
         setAbsenceMode_('DAY');
         clearAbsenceForm_(true);
+        updateAbsenceDraftStatus_();
         loadAbsenceRegistry_(getReplacementCurrentDate_() || '');
         activateTab_(activeTabId);
       }());
