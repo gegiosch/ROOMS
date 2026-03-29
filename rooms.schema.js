@@ -61,6 +61,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIPS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIP_TEACHERS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_ABSENCES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS] = true;
@@ -86,6 +87,7 @@ ROOMS_APP.Schema = {
     this.ensureReplacementDayTeachers();
     this.ensureReplacementFieldTrips();
     this.ensureReplacementFieldTripTeachers();
+    this.ensureReplacementAbsences();
     this.ensureReplacementHourlyAbsences();
     this.ensureReplacementAssignments();
     this.ensureReplacementLongAssignments();
@@ -349,6 +351,27 @@ ROOMS_APP.Schema = {
       'TeacherName',
       'Role',
       'Notes',
+      'UpdatedAtISO',
+      'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementAbsences: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES, [
+      'AbsenceId',
+      'TeacherEmail',
+      'TeacherName',
+      'AbsenceMode',
+      'AbsenceType',
+      'StartDate',
+      'EndDate',
+      'HourlyPeriodsJson',
+      'RecoveryRequired',
+      'Notes',
+      'Status',
+      'Enabled',
+      'CreatedAtISO',
+      'CreatedBy',
       'UpdatedAtISO',
       'UpdatedBy'
     ]);

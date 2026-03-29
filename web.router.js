@@ -260,6 +260,30 @@ function previewReplacementReport(dateString, draft, requestContext) {
   });
 }
 
+function getReplacementAbsenceRegistryModel(referenceDate, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.getAbsenceRegistryModel(referenceDate);
+  });
+}
+
+function getReplacementAbsenceTeacherPeriods(teacherEmail, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.getAbsenceTeacherPeriods(teacherEmail, dateString);
+  });
+}
+
+function saveReplacementAbsence(payload, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.saveAbsence(payload || {});
+  });
+}
+
+function deleteReplacementAbsence(absenceId, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.deleteAbsence(absenceId);
+  });
+}
+
 function saveReplacementDay(dateString, draft, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.Replacements.saveDay(dateString, draft);
@@ -500,6 +524,18 @@ function routeApiRequest_(payload) {
   }
   if (action === 'previewReplacementReport') {
     return ROOMS_APP.Replacements.previewReport(payload.date, payload.draft);
+  }
+  if (action === 'getReplacementAbsenceRegistryModel') {
+    return ROOMS_APP.Replacements.getAbsenceRegistryModel(payload.referenceDate || payload.date);
+  }
+  if (action === 'getReplacementAbsenceTeacherPeriods') {
+    return ROOMS_APP.Replacements.getAbsenceTeacherPeriods(payload.teacherEmail, payload.date);
+  }
+  if (action === 'saveReplacementAbsence') {
+    return ROOMS_APP.Replacements.saveAbsence(payload.absence || payload);
+  }
+  if (action === 'deleteReplacementAbsence') {
+    return ROOMS_APP.Replacements.deleteAbsence(payload.absenceId);
   }
   if (action === 'saveReplacementDay') {
     return ROOMS_APP.Replacements.saveDay(payload.date, payload.draft);
