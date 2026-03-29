@@ -278,6 +278,12 @@ function saveReplacementAbsence(payload, requestContext) {
   });
 }
 
+function saveReplacementAbsenceRegistry(rows, referenceDate, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.saveAbsenceRegistry(rows || [], referenceDate);
+  });
+}
+
 function deleteReplacementAbsence(absenceId, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.Replacements.deleteAbsence(absenceId);
@@ -533,6 +539,9 @@ function routeApiRequest_(payload) {
   }
   if (action === 'saveReplacementAbsence') {
     return ROOMS_APP.Replacements.saveAbsence(payload.absence || payload);
+  }
+  if (action === 'saveReplacementAbsenceRegistry') {
+    return ROOMS_APP.Replacements.saveAbsenceRegistry(payload.rows || [], payload.referenceDate || payload.date);
   }
   if (action === 'deleteReplacementAbsence') {
     return ROOMS_APP.Replacements.deleteAbsence(payload.absenceId);

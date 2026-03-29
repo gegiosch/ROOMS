@@ -170,6 +170,70 @@ ROOMS_APP.Replacements = {
     };
   },
 
+  saveAbsenceRegistry: function (rows, referenceDate) {
+    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var dateState;
+    var persistedRows;
+    var persistedById = {};
+    var candidateRows = Array.isArray(rows) ? rows : [];
+    var normalizedRows = [];
+    var seen = {};
+    this.ensureSchema_();
+    dateState = this.resolveSelectedDate_(referenceDate || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()), true);
+    persistedRows = this.listAbsenceRows_();
+    persistedRows.forEach(function (row) {
+      persistedById[row.absenceId] = row;
+    });
+
+    candidateRows.forEach(function (entry) {
+      var candidate = ROOMS_APP.Replacements.normalizeAbsencePayload_(entry || {});
+      var existing = persistedById[candidate.absenceId] || null;
+      if (candidate.absenceId.indexOf('draft-') === 0) {
+        candidate.absenceId = ROOMS_APP.Replacements.buildAbsenceId_();
+      }
+      if (candidate.absenceMode === ROOMS_APP.Replacements.ABSENCE_MODES_.DAY) {
+        candidate.startDate = dateState.selectedDate;
+        candidate.endDate = '';
+        candidate.isMultiDay = false;
+      }
+      if (candidate.absenceType !== ROOMS_APP.Replacements.ABSENCE_TYPES_.DAILY) {
+        candidate.endDate = '';
+        candidate.isMultiDay = false;
+      }
+      ROOMS_APP.Replacements.validateAbsenceCandidate_(candidate);
+      if (seen[candidate.absenceId]) {
+        return;
+      }
+      seen[candidate.absenceId] = true;
+      normalizedRows.push({
+        AbsenceId: candidate.absenceId,
+        TeacherEmail: candidate.teacherEmail,
+        TeacherName: candidate.teacherName,
+        AbsenceMode: candidate.absenceMode,
+        AbsenceType: candidate.absenceType,
+        StartDate: candidate.startDate,
+        EndDate: candidate.endDate,
+        HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
+        RecoveryRequired: candidate.recoveryRequired ? 'TRUE' : 'FALSE',
+        Notes: candidate.notes,
+        Status: 'ACTIVE',
+        Enabled: 'TRUE',
+        CreatedAtISO: existing && existing.createdAtISO ? existing.createdAtISO : nowIso,
+        CreatedBy: existing && existing.createdBy ? existing.createdBy : actor.email,
+        UpdatedAtISO: nowIso,
+        UpdatedBy: actor.email
+      });
+    });
+
+    ROOMS_APP.DB.replaceRows(
+      ROOMS_APP.SHEET_NAMES.REPL_ABSENCES,
+      ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
+      normalizedRows
+    );
+    return this.getAbsenceRegistryModel(dateState.selectedDate);
+  },
+
   saveAbsence: function (payload) {
     var actor = ROOMS_APP.Auth.requireCanManageReplacement();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
