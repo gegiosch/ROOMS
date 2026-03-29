@@ -3843,6 +3843,28 @@
           renderReplacementModal_();
         }
 
+        window.ROOMS_SUBSTITUTION_WORKBENCH = {
+          activateTab: function (tabName) {
+            var nextTab = tabName === 'long' || tabName === 'trips' ? tabName : 'daily';
+            if (replacementModal) {
+              replacementModal.style.display = 'flex';
+            }
+            if (!replacementState.isOpen) {
+              replacementStandaloneTab = nextTab;
+              openReplacementStandalone_();
+              return;
+            }
+            switchReplacementTab_(nextTab);
+          }
+        };
+
+        document.addEventListener('rooms:replacement-tab-change', function (event) {
+          var detail = event && event.detail ? event.detail : {};
+          if (window.ROOMS_SUBSTITUTION_WORKBENCH) {
+            window.ROOMS_SUBSTITUTION_WORKBENCH.activateTab(detail.tab || 'daily');
+          }
+        });
+
         function getReplacementLongFormPayload_() {
           var teacherOption = replacementLongOriginalTeacher && replacementLongOriginalTeacher.selectedIndex >= 0
             ? replacementLongOriginalTeacher.options[replacementLongOriginalTeacher.selectedIndex]

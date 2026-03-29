@@ -59,6 +59,9 @@
       .substitution-user-pill {
         margin-left: auto;
       }
+      .substitution-workbench-error {
+        margin-top: 12px;
+      }
       @media (max-width: 720px) {
         .substitution-page {
           padding-left: 12px;
@@ -114,14 +117,10 @@
       (function () {
         var model = window.ROOMS_SUBSTITUTION_SHELL_MODEL || {};
         var reportsRoot = document.getElementById('substitution-reports-root');
+        var workbenchRoot = document.querySelector('[data-tab-panel="workbench"]');
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var activeTabId = 'daily';
-        var replacementTabButtonMap = {
-          daily: document.getElementById('replacement-tab-daily'),
-          trips: document.getElementById('replacement-tab-trips'),
-          long: document.getElementById('replacement-tab-long')
-        };
 
         function getPanelId_(tabId) {
           var button = tabButtons.find(function (entry) {
@@ -130,10 +129,46 @@
           return button && button.getAttribute('data-panel') ? button.getAttribute('data-panel') : tabId;
         }
 
+        function setWorkbenchError_(message) {
+          var existing = document.getElementById('substitution-workbench-error');
+          if (!workbenchRoot) {
+            return;
+          }
+          if (!message) {
+            if (existing) {
+              existing.remove();
+            }
+            return;
+          }
+          if (!existing) {
+            existing = document.createElement('div');
+            existing.id = 'substitution-workbench-error';
+            existing.className = 'notice error substitution-workbench-error';
+            workbenchRoot.appendChild(existing);
+          }
+          existing.textContent = message;
+        }
+
         function syncReplacementWorkbench_(tabId) {
-          var button = replacementTabButtonMap[tabId];
-          if (button && typeof button.click === 'function') {
-            button.click();
+          var api = window.ROOMS_SUBSTITUTION_WORKBENCH;
+          if (tabId !== 'daily' && tabId !== 'trips' && tabId !== 'long') {
+            return;
+          }
+          setWorkbenchError_('');
+          if (workbenchRoot) {
+            workbenchRoot.style.display = 'block';
+          }
+          if (api && typeof api.activateTab === 'function') {
+            api.activateTab(tabId);
+            return;
+          }
+          document.dispatchEvent(new CustomEvent('rooms:replacement-tab-change', {
+            detail: {
+              tab: tabId
+            }
+          }));
+          if (!(window.ROOMS_SUBSTITUTION_WORKBENCH && typeof window.ROOMS_SUBSTITUTION_WORKBENCH.activateTab === 'function')) {
+            setWorkbenchError_('Workbench sostituzioni non disponibile.');
           }
         }
 
