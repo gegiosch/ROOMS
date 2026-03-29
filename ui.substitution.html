@@ -93,6 +93,9 @@
         <div id="substitution-root">
           <section class="substitution-tab-content active substitution-workbench-shell" data-tab-panel="workbench">
             <?!= dailyContentHtml ?>
+            <template id="substitution-workbench-scripts-template">
+              <?!= dailyScriptsHtml ?>
+            </template>
           </section>
 
           <section class="panel substitution-placeholder substitution-tab-content" data-tab-panel="absences">
@@ -112,7 +115,6 @@
     <script>
       window.ROOMS_SUBSTITUTION_SHELL_MODEL = <?!= initialModelJson ?>;
     </script>
-    <?!= dailyScriptsHtml ?>
     <script>
       (function () {
         var model = window.ROOMS_SUBSTITUTION_SHELL_MODEL || {};
@@ -147,6 +149,43 @@
             workbenchRoot.appendChild(existing);
           }
           existing.textContent = message;
+        }
+
+        function runEmbeddedScripts_(container) {
+          var scripts;
+          if (!container) {
+            return;
+          }
+          scripts = Array.prototype.slice.call(container.querySelectorAll('script'));
+          scripts.forEach(function (oldScript) {
+            var newScript = document.createElement('script');
+            Array.prototype.slice.call(oldScript.attributes || []).forEach(function (attribute) {
+              newScript.setAttribute(attribute.name, attribute.value);
+            });
+            if (oldScript.src) {
+              newScript.src = oldScript.src;
+            } else {
+              newScript.text = oldScript.text || oldScript.textContent || '';
+            }
+            document.body.appendChild(newScript);
+            oldScript.remove();
+          });
+        }
+
+        function hydrateWorkbenchScripts_() {
+          var template = document.getElementById('substitution-workbench-scripts-template');
+          var holder;
+          if (!workbenchRoot || !template || template.dataset.hydrated === 'true') {
+            return;
+          }
+          holder = document.createElement('div');
+          holder.style.display = 'none';
+          holder.setAttribute('data-substitution-workbench-scripts', 'true');
+          holder.innerHTML = template.innerHTML;
+          workbenchRoot.appendChild(holder);
+          runEmbeddedScripts_(holder);
+          template.dataset.hydrated = 'true';
+          template.remove();
         }
 
         function syncReplacementWorkbench_(tabId) {
@@ -239,6 +278,7 @@
           });
         }
 
+        hydrateWorkbenchScripts_();
         setHeader_();
         activateTab_(activeTabId);
       }());
