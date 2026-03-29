@@ -121,6 +121,7 @@
         var replacementStandaloneMode = false;
         var replacementStandaloneTab = 'daily';
         var replacementUsesUnifiedTabs = document.body && document.body.classList.contains('substitution-unified');
+        var replacementLoadWatchdogMs = 20000;
 
         var aulaEditorModal = document.getElementById('aula-magna-editor-modal');
         var aulaEditorDate = document.getElementById('aula-editor-date');
@@ -1858,6 +1859,9 @@
         }
 
         function setReplacementLoading_(isVisible, message) {
+          if (window.console && typeof window.console.info === 'function') {
+            window.console.info('[substitution] spinner', isVisible ? 'show' : 'hide', message || '');
+          }
           if (!replacementLoading) {
             return;
           }
@@ -3512,10 +3516,34 @@
           var settings = options || {};
           var requestSeq = ++replacementState.loadingRequestSeq;
           var targetDate = String(dateValue || getDefaultPanelDate_());
+          var settled = false;
+          var watchdogId = 0;
           replacementState.date = targetDate;
+          if (window.console && typeof window.console.info === 'function') {
+            window.console.info('[substitution] bootstrap load:start', {
+              requestSeq: requestSeq,
+              date: targetDate
+            });
+          }
           setReplacementLoading_(true, settings.loadingMessage || 'Caricamento sostituzioni...');
           if (!settings.keepNotice) {
             setReplacementNotice_('', '');
+          }
+          watchdogId = setTimeout(function () {
+            if (settled || requestSeq !== replacementState.loadingRequestSeq) {
+              return;
+            }
+            if (window.console && typeof window.console.error === 'function') {
+              window.console.error('[substitution] bootstrap load:timeout', {
+                requestSeq: requestSeq,
+                date: targetDate
+              });
+            }
+            setReplacementNotice_('Errore caricamento sostituzioni: timeout risposta server.', 'error');
+            setReplacementLoading_(false);
+          }, replacementLoadWatchdogMs);
+          if (window.console && typeof window.console.info === 'function') {
+            window.console.info('[substitution] bootstrap server-call:start', 'getReplacementModalModel');
           }
           return ROOMS_UI.call(
             'getReplacementModalModel',
@@ -3525,6 +3553,12 @@
               allowAutoShift: settings.allowAutoShift !== false
             }
           ).then(function (model) {
+            if (window.console && typeof window.console.info === 'function') {
+              window.console.info('[substitution] bootstrap server-call:success', {
+                requestSeq: requestSeq,
+                hasModel: Boolean(model)
+              });
+            }
             if (requestSeq !== replacementState.loadingRequestSeq) {
               return null;
             }
@@ -3536,12 +3570,23 @@
             }
             return model;
           }).catch(function (error) {
+            if (window.console && typeof window.console.error === 'function') {
+              window.console.error('[substitution] bootstrap server-call:error', error);
+            }
             if (requestSeq !== replacementState.loadingRequestSeq) {
               return null;
             }
             setReplacementNotice_(error && error.message ? error.message : 'Errore caricamento sostituzioni.', 'error');
             return null;
           }).then(function (result) {
+            settled = true;
+            clearTimeout(watchdogId);
+            if (window.console && typeof window.console.info === 'function') {
+              window.console.info('[substitution] bootstrap load:end', {
+                requestSeq: requestSeq,
+                resolved: Boolean(result)
+              });
+            }
             if (requestSeq === replacementState.loadingRequestSeq) {
               setReplacementLoading_(false);
               renderReplacementModal_();
@@ -3625,6 +3670,42 @@
             loadingMessage: 'Caricamento sostituzioni...'
           }).then(function () {
             switchReplacementTab_(replacementStandaloneTab);
+          });
+        }
+
+        function openReplacementUnified_() {
+          if (!replacementModal) {
+            if (window.console && typeof window.console.error === 'function') {
+              window.console.error('[substitution] bootstrap missing replacement modal in unified page');
+            }
+            return Promise.resolve(null);
+          }
+          replacementState.isOpen = true;
+          replacementState.activeTab = 'daily';
+          replacementModal.style.display = 'flex';
+          replacementState.preview = null;
+          replacementState.pendingManualAssignmentKeys = {};
+          replacementState.teacherDetail = null;
+          replacementState.selectedTeacherEmail = '';
+          resetReplacementLongForm_();
+          resetReplacementTripForm_();
+          if (window.console && typeof window.console.info === 'function') {
+            window.console.info('[substitution] bootstrap unified:start');
+          }
+          return loadReplacementModel_(getDefaultPanelDate_(), null, {
+            allowAutoShift: true,
+            keepDirty: false,
+            loadingMessage: 'Caricamento sostituzioni...'
+          }).then(function (result) {
+            switchReplacementTab_('daily');
+            return result;
+          }).catch(function (error) {
+            setReplacementLoading_(false);
+            setReplacementNotice_('Errore caricamento sostituzioni: ' + (error && error.message ? error.message : 'errore inatteso'), 'error');
+            if (window.console && typeof window.console.error === 'function') {
+              window.console.error('[substitution] bootstrap unified:error', error);
+            }
+            return null;
           });
         }
 
@@ -5017,22 +5098,32 @@
             });
         }
 
-        replacementStandaloneMode = true;
+        replacementStandaloneMode = !replacementUsesUnifiedTabs;
         replacementStandaloneTab = 'daily';
 
-        if (replacementStandaloneMode) {
-          document.body.classList.add('substitution-standalone');
-          if (boardShell) {
-            boardShell.style.display = 'none';
+        try {
+          if (replacementStandaloneMode) {
+            document.body.classList.add('substitution-standalone');
+            if (boardShell) {
+              boardShell.style.display = 'none';
+            }
+            if (boardFloatingControls) {
+              boardFloatingControls.style.display = 'none';
+            }
+            openReplacementStandalone_();
+          } else if (replacementUsesUnifiedTabs) {
+            openReplacementUnified_();
+          } else {
+            render(state);
+            refresh({ skipPanelRefresh: true });
+            window.addEventListener('resize', applyFitScale);
           }
-          if (boardFloatingControls) {
-            boardFloatingControls.style.display = 'none';
+        } catch (bootstrapError) {
+          setReplacementLoading_(false);
+          setReplacementNotice_('Errore caricamento sostituzioni: ' + (bootstrapError && bootstrapError.message ? bootstrapError.message : 'errore inatteso'), 'error');
+          if (window.console && typeof window.console.error === 'function') {
+            window.console.error('[substitution] bootstrap fatal', bootstrapError);
           }
-          openReplacementStandalone_();
-        } else {
-          render(state);
-          refresh({ skipPanelRefresh: true });
-          window.addEventListener('resize', applyFitScale);
         }
 
         if (fullscreenButton) {
