@@ -60,7 +60,7 @@ ROOMS_APP.Replacements = {
       settings.allowAutoShift !== false
     );
     var targetDate = dateState.selectedDate;
-    var context = this.buildDayContext_(targetDate);
+    var context = this.buildDayContext_(targetDate, settings);
     var normalized = this.normalizeDraft_(
       targetDate,
       draft && typeof draft === 'object' ? draft : context.savedDraft,
@@ -88,6 +88,7 @@ ROOMS_APP.Replacements = {
       tripTeacherOptionsByClass: context.tripTeacherOptionsByClass,
       tripDayState: context.tripDayState,
       absenceRegistry: context.absenceRegistryState || {},
+      editorDataLoaded: Boolean(context.editorDataLoaded),
       savedAtISO: context.savedAtISO,
       report: context.reportStatus,
       recipientsConfigured: Boolean(context.recipients.to.length)
@@ -927,14 +928,18 @@ ROOMS_APP.Replacements = {
     return '';
   },
 
-  buildDayContext_: function (dateString) {
+  buildDayContext_: function (dateString, options) {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
+    var settings = options && typeof options === 'object' ? options : {};
+    var includeEditorData = settings.includeEditorData !== false;
     var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate);
     var activeLongAssignmentMap = this.getActiveLongAssignmentsForDate_(targetDate, true);
     var baseTeachers = this.buildTeacherDayTeachers_(targetDate);
     var allTrips = this.listEducationalTrips_();
-    var tripTeacherRegistry = this.getTripTeacherOptionsRegistry_();
     var tripDayState = this.buildTripDayState_(targetDate, allTrips);
+    var tripTeacherRegistry = includeEditorData
+      ? this.getTripTeacherOptionsRegistry_()
+      : { classOptions: [], byClass: {} };
     var activeAbsenceRows = this.listActiveAbsenceRowsForDate_(targetDate);
     var absenceRegistryState = this.buildAbsenceRegistryDayState_(targetDate, activeAbsenceRows, activeLongAssignmentMap);
     var savedClassOutRows = this.listRowsForDate_(ROOMS_APP.SHEET_NAMES.REPL_CLASS_OUT, targetDate);
@@ -1150,14 +1155,15 @@ ROOMS_APP.Replacements = {
       ),
       reportStatus: this.getLatestReportStatus_(targetDate),
       recipients: this.getRecipients_(),
-      longAssignments: this.buildLongAssignmentsList_(),
-      longTeacherOptions: this.listTimetableTeacherDirectory_(),
-      trips: allTrips,
+      longAssignments: includeEditorData ? this.buildLongAssignmentsList_() : [],
+      longTeacherOptions: includeEditorData ? this.listTimetableTeacherDirectory_() : [],
+      trips: includeEditorData ? allTrips : [],
       tripClassOptions: tripTeacherRegistry.classOptions,
       tripTeacherOptionsByClass: tripTeacherRegistry.byClass,
       activeLongAssignments: activeLongAssignments,
       activeLongAssignmentMap: activeLongAssignmentMap,
-      pendingRecoveryRows: pendingRecoveryRows
+      pendingRecoveryRows: pendingRecoveryRows,
+      editorDataLoaded: includeEditorData
     };
   },
 
@@ -3183,39 +3189,11 @@ ROOMS_APP.Replacements = {
   },
 
   listTimetableTeacherDirectory_: function () {
-    var sheetName = ROOMS_APP.Timetable.getConfiguredSourceSheetName_(
-      ROOMS_APP.Timetable.CONFIG_DOCENTI_SHEET_KEY_,
-      ROOMS_APP.Timetable.DEFAULT_DOCENTI_SHEET_
-    );
-    var sheet = ROOMS_APP.DB.getSheet(sheetName);
-    if (!sheet) {
-      return [];
-    }
-
-    var values = ROOMS_APP.Timetable.readSheetDisplayValues_(sheet);
-    var columnMeta = ROOMS_APP.Timetable.detectColumnMeta_(values);
-    var rows = [];
-    var seen = {};
-    var rowIndex;
-
-    for (rowIndex = columnMeta.dataStartRow; rowIndex < values.length; rowIndex += 1) {
-      var rowLabel = ROOMS_APP.normalizeString(values[rowIndex] && values[rowIndex][0]);
-      if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
-        continue;
-      }
-      var teacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
-      if (!teacherEmail || seen[teacherEmail]) {
-        continue;
-      }
-      seen[teacherEmail] = true;
-      rows.push({
-        teacherEmail: teacherEmail,
-        teacherName: rowLabel
-      });
-    }
-
-    return rows.sort(function (left, right) {
-      return left.teacherName.localeCompare(right.teacherName);
+    return this.getDocentiTimetableDerivedData_().teacherDirectory.map(function (entry) {
+      return {
+        teacherEmail: entry.teacherEmail,
+        teacherName: entry.teacherName
+      };
     });
   },
 
@@ -3223,22 +3201,15 @@ ROOMS_APP.Replacements = {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var weekday = ROOMS_APP.getWeekdayName(targetDate);
     var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate, true);
-    var sheetName = ROOMS_APP.Timetable.getConfiguredSourceSheetName_(
-      ROOMS_APP.Timetable.CONFIG_DOCENTI_SHEET_KEY_,
-      ROOMS_APP.Timetable.DEFAULT_DOCENTI_SHEET_
-    );
-    var sheet = ROOMS_APP.DB.getSheet(sheetName);
-    if (!sheet) {
+    var snapshot = this.getDocentiTimetableSnapshot_();
+    if (!snapshot.sheet) {
       return [];
     }
-
-    var values = ROOMS_APP.Timetable.readSheetDisplayValues_(sheet);
-    var columnMeta = ROOMS_APP.Timetable.detectColumnMeta_(values);
     var teacherMap = {};
     var rowIndex;
 
-    for (rowIndex = columnMeta.dataStartRow; rowIndex < values.length; rowIndex += 1) {
-      var rowLabel = ROOMS_APP.normalizeString(values[rowIndex] && values[rowIndex][0]);
+    for (rowIndex = snapshot.columnMeta.dataStartRow; rowIndex < snapshot.values.length; rowIndex += 1) {
+      var rowLabel = ROOMS_APP.normalizeString(snapshot.values[rowIndex] && snapshot.values[rowIndex][0]);
       if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
         continue;
       }
@@ -3257,12 +3228,12 @@ ROOMS_APP.Replacements = {
         teacher.originalTeacherEmails[originalTeacherEmail] = rowLabel;
       }
 
-      columnMeta.usableColumns.forEach(function (column) {
-        var meta = columnMeta.columns[column] || {};
+      snapshot.columnMeta.usableColumns.forEach(function (column) {
+        var meta = snapshot.columnMeta.columns[column] || {};
         if (meta.weekday !== weekday) {
           return;
         }
-        var rawValue = ROOMS_APP.normalizeString(values[rowIndex][column]);
+        var rawValue = ROOMS_APP.normalizeString(snapshot.values[rowIndex][column]);
         teacher.periods[String(meta.period)] = ROOMS_APP.Replacements.classifyTeacherSlotValue_(rawValue, meta.period, meta.startTime, meta.endTime);
       });
 
@@ -3352,6 +3323,108 @@ ROOMS_APP.Replacements = {
       });
     });
     return latest;
+  },
+
+  getReplacementRequestCacheBucket_: function () {
+    if (!ROOMS_APP.DB_REQUEST_CACHE_) {
+      return null;
+    }
+    ROOMS_APP.DB_REQUEST_CACHE_.replacements = ROOMS_APP.DB_REQUEST_CACHE_.replacements || {};
+    return ROOMS_APP.DB_REQUEST_CACHE_.replacements;
+  },
+
+  getDocentiTimetableSnapshot_: function () {
+    var sheetName = ROOMS_APP.Timetable.getConfiguredSourceSheetName_(
+      ROOMS_APP.Timetable.CONFIG_DOCENTI_SHEET_KEY_,
+      ROOMS_APP.Timetable.DEFAULT_DOCENTI_SHEET_
+    );
+    var bucket = this.getReplacementRequestCacheBucket_();
+    var cacheKey = 'docentiSnapshot:' + sheetName;
+    var sheet;
+    var snapshot;
+    if (bucket && bucket[cacheKey]) {
+      return bucket[cacheKey];
+    }
+    sheet = ROOMS_APP.DB.getSheet(sheetName);
+    snapshot = {
+      sheetName: sheetName,
+      sheet: sheet,
+      values: [],
+      columnMeta: {
+        dataStartRow: 0,
+        usableColumns: [],
+        columns: {}
+      }
+    };
+    if (sheet) {
+      snapshot.values = ROOMS_APP.Timetable.readSheetDisplayValues_(sheet);
+      snapshot.columnMeta = ROOMS_APP.Timetable.detectColumnMeta_(snapshot.values);
+    }
+    if (bucket) {
+      bucket[cacheKey] = snapshot;
+    }
+    return snapshot;
+  },
+
+  getDocentiTimetableDerivedData_: function () {
+    var snapshot = this.getDocentiTimetableSnapshot_();
+    var bucket = this.getReplacementRequestCacheBucket_();
+    var cacheKey = 'docentiDerived:' + snapshot.sheetName;
+    var teacherDirectoryMap = {};
+    var tripByClass = {};
+    var teacherDirectory;
+    var derived;
+    var self = this;
+    var rowIndex;
+    if (bucket && bucket[cacheKey]) {
+      return bucket[cacheKey];
+    }
+    for (rowIndex = snapshot.columnMeta.dataStartRow; rowIndex < snapshot.values.length; rowIndex += 1) {
+      var rowLabel = ROOMS_APP.normalizeString(snapshot.values[rowIndex] && snapshot.values[rowIndex][0]);
+      var teacherEmail;
+      if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
+        continue;
+      }
+      teacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
+      if (!teacherEmail) {
+        continue;
+      }
+      teacherDirectoryMap[teacherEmail] = {
+        teacherEmail: teacherEmail,
+        teacherName: rowLabel
+      };
+      snapshot.columnMeta.usableColumns.forEach(function (column) {
+        var classCode = ROOMS_APP.Timetable.extractClassCode_(ROOMS_APP.normalizeString(snapshot.values[rowIndex][column]).toUpperCase());
+        if (!classCode) {
+          return;
+        }
+        self.addTripTeacherOption_(tripByClass, classCode, {
+          teacherEmail: teacherEmail,
+          teacherName: rowLabel
+        });
+      });
+    }
+    teacherDirectory = Object.keys(teacherDirectoryMap).map(function (teacherEmail) {
+      return teacherDirectoryMap[teacherEmail];
+    }).sort(function (left, right) {
+      return left.teacherName.localeCompare(right.teacherName);
+    });
+    Object.keys(tripByClass).forEach(function (classCode) {
+      tripByClass[classCode] = tripByClass[classCode].sort(function (left, right) {
+        return left.teacherName.localeCompare(right.teacherName);
+      });
+    });
+    derived = {
+      teacherDirectory: teacherDirectory,
+      tripRegistry: {
+        byClass: tripByClass,
+        classOptions: Object.keys(tripByClass).sort()
+      }
+    };
+    if (bucket) {
+      bucket[cacheKey] = derived;
+    }
+    return derived;
   },
 
   indexByTeacherEmail_: function (teachers) {
@@ -3912,43 +3985,18 @@ ROOMS_APP.Replacements = {
   },
 
   getTripTeacherOptionsRegistry_: function () {
-    var sheetName = ROOMS_APP.Timetable.getConfiguredSourceSheetName_(
-      ROOMS_APP.Timetable.CONFIG_DOCENTI_SHEET_KEY_,
-      ROOMS_APP.Timetable.DEFAULT_DOCENTI_SHEET_
-    );
-    var sheet = ROOMS_APP.DB.getSheet(sheetName);
+    var baseRegistry = this.getDocentiTimetableDerivedData_().tripRegistry;
     var output = {};
-    var values;
-    var columnMeta;
-    var rowIndex;
     var self = this;
     var supportRows;
-
-    if (sheet) {
-      values = ROOMS_APP.Timetable.readSheetDisplayValues_(sheet);
-      columnMeta = ROOMS_APP.Timetable.detectColumnMeta_(values);
-      for (rowIndex = columnMeta.dataStartRow; rowIndex < values.length; rowIndex += 1) {
-        var rowLabel = ROOMS_APP.normalizeString(values[rowIndex] && values[rowIndex][0]);
-        var teacherEmail;
-        if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
-          continue;
-        }
-        teacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
-        if (!teacherEmail) {
-          continue;
-        }
-        columnMeta.usableColumns.forEach(function (column) {
-          var classCode = ROOMS_APP.Timetable.extractClassCode_(ROOMS_APP.normalizeString(values[rowIndex][column]).toUpperCase());
-          if (!classCode) {
-            return;
-          }
-          self.addTripTeacherOption_(output, classCode, {
-            teacherEmail: teacherEmail,
-            teacherName: rowLabel
-          });
-        });
-      }
-    }
+    Object.keys(baseRegistry.byClass || {}).forEach(function (classCode) {
+      output[classCode] = (baseRegistry.byClass[classCode] || []).map(function (entry) {
+        return {
+          teacherEmail: entry.teacherEmail,
+          teacherName: entry.teacherName
+        };
+      });
+    });
 
     supportRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO);
     supportRows.forEach(function (row) {

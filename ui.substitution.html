@@ -266,6 +266,7 @@
                   <div>
                     <label for="replacement-date-input">Giorno</label>
                     <input id="replacement-date-input" class="input" type="date">
+                    <p id="replacement-absence-source" class="subtitle" style="margin-top:8px;">Assenze giornaliere senza registro salvato.</p>
                   </div>
                   <div class="replacement-quick-summary" id="replacement-quick-summary"></div>
                 </div>
@@ -656,6 +657,7 @@
         var replacementPreviewMount = document.getElementById('replacement-report-preview');
         var replacementStatusPill = document.getElementById('replacement-status-pill');
         var replacementReportPill = document.getElementById('replacement-report-pill');
+        var replacementAbsenceSource = document.getElementById('replacement-absence-source');
         var replacementCloseButton = document.getElementById('replacement-close-button');
         var replacementCloseButtonBottom = document.getElementById('replacement-close-button-bottom');
         var replacementCloseButtonTripsBottom = document.getElementById('replacement-close-button-trips-bottom');
@@ -2674,6 +2676,9 @@
         function renderReplacementStatus_() {
           var savedAt = getReplacementSavedAt_();
           var report = getReplacementReportStatus_();
+          var absenceRegistry = replacementState.model && replacementState.model.absenceRegistry
+            ? replacementState.model.absenceRegistry
+            : {};
           if (replacementStatusPill) {
             if (replacementState.dirty && savedAt) {
               replacementStatusPill.textContent = 'Modifiche successive all\'ultimo salvataggio';
@@ -2695,6 +2700,15 @@
             } else {
               replacementReportPill.style.display = 'none';
               replacementReportPill.textContent = '';
+            }
+          }
+          if (replacementAbsenceSource) {
+            if (absenceRegistry && absenceRegistry.hasEntries) {
+              replacementAbsenceSource.textContent = (absenceRegistry.sourceLabel || 'Assenze caricate da REPL_ABSENCES') +
+                ': ' + String(absenceRegistry.dailyTeacherCount || 0) + ' giornaliere, ' +
+                String(absenceRegistry.hourlyEntryCount || 0) + ' ore di permesso.';
+            } else {
+              replacementAbsenceSource.textContent = 'Assenze giornaliere senza registro salvato.';
             }
           }
         }
@@ -3946,13 +3960,27 @@
         }
 
         function switchReplacementTab_(tabName) {
-          if (tabName === 'long') {
-            replacementState.activeTab = 'long';
-          } else if (tabName === 'trips') {
-            replacementState.activeTab = 'trips';
-          } else {
-            replacementState.activeTab = 'daily';
+          var normalizedTab = tabName === 'long' ? 'long' : (tabName === 'trips' ? 'trips' : 'daily');
+          if (normalizedTab !== 'daily' && !hasReplacementEditorData_()) {
+            loadReplacementModel_(
+              replacementState.date || getDefaultPanelDate_(),
+              replacementState.dirty ? cloneReplacementData_(replacementState.draft) : null,
+              {
+                allowAutoShift: false,
+                keepDirty: Boolean(replacementState.dirty),
+                keepNotice: true,
+                includeEditorData: true,
+                loadingMessage: normalizedTab === 'trips'
+                  ? 'Caricamento dati uscite didattiche...'
+                  : 'Caricamento dati supplenze lunghe...'
+              }
+            ).then(function () {
+              replacementState.activeTab = normalizedTab;
+              renderReplacementModal_();
+            });
+            return;
           }
+          replacementState.activeTab = normalizedTab;
           renderReplacementModal_();
         }
 
@@ -4115,6 +4143,10 @@
           return Promise.resolve(replacementState.teacherDetail);
         }
 
+        function hasReplacementEditorData_() {
+          return Boolean(replacementState.model && replacementState.model.editorDataLoaded);
+        }
+
         function loadReplacementModel_(dateValue, draft, options) {
           var settings = options || {};
           var requestSeq = ++replacementState.loadingRequestSeq;
@@ -4153,7 +4185,8 @@
             targetDate,
             cloneReplacementData_(draft),
             {
-              allowAutoShift: settings.allowAutoShift !== false
+              allowAutoShift: settings.allowAutoShift !== false,
+              includeEditorData: settings.includeEditorData !== false
             }
           ).then(function (model) {
             if (window.console && typeof window.console.info === 'function') {
@@ -4253,6 +4286,7 @@
           loadReplacementModel_(getDefaultPanelDate_(), null, {
             allowAutoShift: true,
             keepDirty: false,
+            includeEditorData: false,
             loadingMessage: 'Caricamento sostituzioni...'
           });
         }
@@ -4273,6 +4307,7 @@
           loadReplacementModel_(getDefaultPanelDate_(), null, {
             allowAutoShift: true,
             keepDirty: false,
+            includeEditorData: replacementStandaloneTab !== 'daily',
             loadingMessage: 'Caricamento sostituzioni...'
           }).then(function () {
             switchReplacementTab_(replacementStandaloneTab);
@@ -4301,6 +4336,7 @@
           return loadReplacementModel_(getDefaultPanelDate_(), null, {
             allowAutoShift: true,
             keepDirty: false,
+            includeEditorData: false,
             loadingMessage: 'Caricamento sostituzioni...'
           }).then(function (result) {
             switchReplacementTab_('daily');
@@ -4328,6 +4364,7 @@
             loadReplacementModel_(nextDate, null, {
               allowAutoShift: false,
               keepDirty: false,
+              includeEditorData: replacementState.activeTab !== 'daily',
               loadingMessage: 'Caricamento nuova data...'
             });
           }, 'Cambia data', 'Il cambio data scarta la bozza corrente non salvata. Continuare?');
