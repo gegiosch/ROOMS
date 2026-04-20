@@ -326,6 +326,12 @@ function saveEducationalTrip(payload, dateString, requestContext) {
   });
 }
 
+function saveReplacementFieldTripRegistry(entries, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.saveReplacementFieldTripRegistry(entries || [], dateString);
+  });
+}
+
 function toggleEducationalTrip(tripId, enabled, dateString, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.Replacements.toggleEducationalTrip(tripId, enabled, dateString);
@@ -563,6 +569,9 @@ function routeApiRequest_(payload) {
   }
   if (action === 'saveEducationalTrip') {
     return ROOMS_APP.Replacements.saveEducationalTrip(payload.trip || payload, payload.date);
+  }
+  if (action === 'saveReplacementFieldTripRegistry') {
+    return ROOMS_APP.Replacements.saveReplacementFieldTripRegistry(payload.rows || payload.entries || payload, payload.date);
   }
   if (action === 'toggleEducationalTrip') {
     return ROOMS_APP.Replacements.toggleEducationalTrip(payload.tripId, payload.enabled, payload.date);

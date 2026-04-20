@@ -71,8 +71,11 @@
         var replacementTripNotes = document.getElementById('replacement-trip-notes');
         var replacementTripTeacherOptions = document.getElementById('replacement-trip-teacher-options');
         var replacementTripExtraTeacher = document.getElementById('replacement-trip-extra-teacher');
+        var replacementTripDraftStatus = document.getElementById('replacement-trip-draft-status');
         var replacementTripSave = document.getElementById('replacement-trip-save');
         var replacementTripCancel = document.getElementById('replacement-trip-cancel');
+        var replacementTripResetDraft = document.getElementById('replacement-trip-reset-draft');
+        var replacementTripBatchSave = document.getElementById('replacement-trip-batch-save');
         var replacementLongListTable = document.getElementById('replacement-long-list-table');
         var replacementLongFormTitle = document.getElementById('replacement-long-form-title');
         var replacementLongOriginalTeacher = document.getElementById('replacement-long-original-teacher');
@@ -183,7 +186,11 @@
           pendingManualAssignmentKeys: {},
           confirmAction: null,
           longForm: null,
-          tripForm: null
+          tripForm: null,
+          tripDraft: [],
+          tripDirty: false,
+          tripDraftErrors: [],
+          tripTeacherDirectory: null
         };
         var pendingDiscardAction = null;
         var pendingDiscardRollbackDate = '';
@@ -2814,6 +2821,187 @@
           };
         }
 
+        function cloneReplacementTrip_(entry) {
+          return {
+            tripId: entry && entry.tripId ? String(entry.tripId) : '',
+            tripType: entry && entry.tripType ? String(entry.tripType) : 'DAILY',
+            classCode: entry && entry.classCode ? String(entry.classCode) : '',
+            title: entry && entry.title ? String(entry.title) : '',
+            startDate: entry && entry.startDate ? String(entry.startDate) : '',
+            endDate: entry && entry.endDate ? String(entry.endDate) : '',
+            startTime: entry && entry.startTime ? String(entry.startTime) : '',
+            endTime: entry && entry.endTime ? String(entry.endTime) : '',
+            notes: entry && entry.notes ? String(entry.notes) : '',
+            enabled: entry ? entry.enabled !== false : true,
+            teachers: safeArray(entry && entry.teachers).map(function (teacher) {
+              return {
+                teacherEmail: normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail),
+                teacherName: teacher && teacher.teacherName ? String(teacher.teacherName) : '',
+                role: teacher && teacher.role ? String(teacher.role) : 'ACCOMPANIST',
+                notes: teacher && teacher.notes ? String(teacher.notes) : ''
+              };
+            })
+          };
+        }
+
+        function getReplacementTripEffectiveEndDate_(entry) {
+          if (!entry) {
+            return '';
+          }
+          return entry.tripType === 'MULTI_DAY'
+            ? String(entry.endDate || entry.startDate || '')
+            : String(entry.startDate || '');
+        }
+
+        function sortReplacementTrips_(entries) {
+          return safeArray(entries).map(function (entry) {
+            return cloneReplacementTrip_(entry);
+          }).sort(function (left, right) {
+            var leftEndDate = getReplacementTripEffectiveEndDate_(left);
+            var rightEndDate = getReplacementTripEffectiveEndDate_(right);
+            if ((left.startDate || '') !== (right.startDate || '')) {
+              return String(left.startDate || '').localeCompare(String(right.startDate || ''));
+            }
+            if (leftEndDate !== rightEndDate) {
+              return leftEndDate.localeCompare(rightEndDate);
+            }
+            if ((left.classCode || '') !== (right.classCode || '')) {
+              return String(left.classCode || '').localeCompare(String(right.classCode || ''));
+            }
+            return String(left.tripId || '').localeCompare(String(right.tripId || ''));
+          });
+        }
+
+        function normalizeReplacementTripForCompare_(entry) {
+          return {
+            tripId: entry && entry.tripId ? String(entry.tripId) : '',
+            tripType: entry && entry.tripType ? String(entry.tripType) : 'DAILY',
+            classCode: entry && entry.classCode ? String(entry.classCode) : '',
+            title: entry && entry.title ? String(entry.title) : '',
+            startDate: entry && entry.startDate ? String(entry.startDate) : '',
+            endDate: getReplacementTripEffectiveEndDate_(entry),
+            startTime: entry && entry.tripType === 'HOURLY' ? String(entry.startTime || '') : '',
+            endTime: entry && entry.tripType === 'HOURLY' ? String(entry.endTime || '') : '',
+            notes: entry && entry.notes ? String(entry.notes) : '',
+            enabled: entry ? entry.enabled !== false : true,
+            teachers: safeArray(entry && entry.teachers).map(function (teacher) {
+              return {
+                teacherEmail: normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail),
+                teacherName: teacher && teacher.teacherName ? String(teacher.teacherName) : '',
+                role: teacher && teacher.role ? String(teacher.role) : 'ACCOMPANIST',
+                notes: teacher && teacher.notes ? String(teacher.notes) : ''
+              };
+            }).sort(function (left, right) {
+              return String(left.teacherEmail || '').localeCompare(String(right.teacherEmail || ''));
+            })
+          };
+        }
+
+        function serializeReplacementTripRegistry_(entries) {
+          return JSON.stringify(sortReplacementTrips_(entries).map(function (entry) {
+            return normalizeReplacementTripForCompare_(entry);
+          }));
+        }
+
+        function buildReplacementTripDraftId_() {
+          return 'trip-' + String(new Date().getTime()) + '-' + String(Math.floor(Math.random() * 100000));
+        }
+
+        function iterateReplacementTripDates_(entry, callback) {
+          var startDate = toDateObject_(entry && entry.startDate);
+          var endDate = toDateObject_(getReplacementTripEffectiveEndDate_(entry));
+          var cursor;
+          if (!startDate || !endDate || typeof callback !== 'function') {
+            return;
+          }
+          cursor = new Date(startDate.getTime());
+          while (cursor.getTime() <= endDate.getTime()) {
+            callback(toIsoDate_(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+          }
+        }
+
+        function buildReplacementTripConflictErrors_(entries) {
+          var conflicts = [];
+          var conflictSet = {};
+          var assignedByDate = {};
+          safeArray(entries).forEach(function (entry) {
+            if (!entry || entry.enabled === false || !entry.startDate || !entry.classCode) {
+              return;
+            }
+            iterateReplacementTripDates_(entry, function (dateKey) {
+              assignedByDate[dateKey] = assignedByDate[dateKey] || {};
+              safeArray(entry.teachers).forEach(function (teacher) {
+                var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+                var teacherName = teacher && teacher.teacherName ? String(teacher.teacherName) : teacherEmail;
+                var existing = assignedByDate[dateKey][teacherEmail];
+                var conflictKey;
+                if (!teacherEmail) {
+                  return;
+                }
+                if (existing && existing.tripId !== entry.tripId) {
+                  conflictKey = teacherEmail + '|' + dateKey;
+                  if (!conflictSet[conflictKey]) {
+                    conflictSet[conflictKey] = true;
+                    conflicts.push('Il docente ' + (teacherName || teacherEmail) + ' risulta assegnato a piu uscite il ' + formatReplacementDate_(dateKey) + '.');
+                  }
+                  return;
+                }
+                assignedByDate[dateKey][teacherEmail] = {
+                  tripId: entry.tripId || '',
+                  classCode: entry.classCode || ''
+                };
+              });
+            });
+          });
+          return conflicts;
+        }
+
+        function syncReplacementTripDraftState_() {
+          replacementState.tripDraft = sortReplacementTrips_(replacementState.tripDraft);
+          replacementState.tripDraftErrors = buildReplacementTripConflictErrors_(replacementState.tripDraft);
+          replacementState.tripDirty = serializeReplacementTripRegistry_(replacementState.tripDraft) !== serializeReplacementTripRegistry_(safeArray(replacementState.model && replacementState.model.trips));
+        }
+
+        function initializeReplacementTripDraftFromModel_() {
+          replacementState.tripDraft = sortReplacementTrips_(safeArray(replacementState.model && replacementState.model.trips));
+          replacementState.tripDirty = false;
+          replacementState.tripDraftErrors = [];
+          replacementState.tripTeacherDirectory = null;
+          syncReplacementTripDraftState_();
+        }
+
+        function renderReplacementTripDraftStatus_() {
+          var tripCount = safeArray(replacementState.tripDraft).length;
+          var conflictCount = safeArray(replacementState.tripDraftErrors).length;
+          var message = tripCount === 1 ? '1 uscita in bozza.' : String(tripCount) + ' uscite in bozza.';
+          if (!tripCount) {
+            message = 'Nessuna uscita in bozza.';
+          }
+          if (conflictCount) {
+            message += ' ' + (conflictCount === 1 ? '1 conflitto docenti da risolvere prima del salvataggio.' : String(conflictCount) + ' conflitti docenti da risolvere prima del salvataggio.');
+          } else if (replacementState.tripDirty) {
+            message += ' Modifiche locali non salvate.';
+          } else {
+            message += ' Bozza locale allineata con il salvato.';
+          }
+          if (replacementTripDraftStatus) {
+            replacementTripDraftStatus.textContent = message;
+          }
+          if (replacementTripBatchSave) {
+            replacementTripBatchSave.disabled = !replacementState.tripDirty || conflictCount > 0 || (replacementLoading && replacementLoading.style.display === 'flex');
+          }
+          if (replacementTripResetDraft) {
+            replacementTripResetDraft.disabled = !replacementState.tripDirty || (replacementLoading && replacementLoading.style.display === 'flex');
+          }
+        }
+
+        function renderReplacementTripViews_() {
+          renderReplacementTripList_();
+          renderReplacementTripForm_();
+          renderReplacementTripDraftStatus_();
+        }
+
         function resetReplacementTripForm_() {
           replacementState.tripForm = buildEmptyReplacementTripForm_();
         }
@@ -2823,33 +3011,27 @@
             resetReplacementTripForm_();
             return;
           }
-          replacementState.tripForm = {
-            tripId: entry.tripId || '',
-            tripType: entry.tripType || 'DAILY',
-            classCode: entry.classCode || '',
-            title: entry.title || '',
+          replacementState.tripForm = cloneReplacementTrip_(Object.assign({}, entry, {
             startDate: entry.startDate || (replacementState.date || getDefaultPanelDate_()),
-            endDate: entry.endDate || entry.startDate || (replacementState.date || getDefaultPanelDate_()),
-            startTime: entry.startTime || '',
-            endTime: entry.endTime || '',
-            notes: entry.notes || '',
-            enabled: entry.enabled !== false,
-            teachers: safeArray(entry.teachers).map(function (teacher) {
-              return {
-                teacherEmail: normalizeReplacementTeacherEmail_(teacher.teacherEmail),
-                teacherName: teacher.teacherName || teacher.teacherEmail || '',
-                role: teacher.role || 'ACCOMPANIST',
-                notes: teacher.notes || ''
-              };
-            })
-          };
+            endDate: entry.endDate || entry.startDate || (replacementState.date || getDefaultPanelDate_())
+          }));
         }
 
         function getReplacementTripTeacherDirectory_() {
-          var byClass = replacementState.model && replacementState.model.tripTeacherOptionsByClass
+          var byClass;
+          var map;
+          if (replacementState.tripTeacherDirectory) {
+            return replacementState.tripTeacherDirectory.map(function (teacher) {
+              return {
+                teacherEmail: teacher.teacherEmail,
+                teacherName: teacher.teacherName
+              };
+            });
+          }
+          byClass = replacementState.model && replacementState.model.tripTeacherOptionsByClass
             ? replacementState.model.tripTeacherOptionsByClass
             : {};
-          var map = {};
+          map = {};
           Object.keys(byClass || {}).forEach(function (classCode) {
             safeArray(byClass[classCode]).forEach(function (teacher) {
               var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
@@ -2872,10 +3054,16 @@
               teacherName: teacher.teacherName || teacherEmail
             };
           });
-          return Object.keys(map).map(function (key) {
+          replacementState.tripTeacherDirectory = Object.keys(map).map(function (key) {
             return map[key];
           }).sort(function (left, right) {
             return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
+          });
+          return replacementState.tripTeacherDirectory.map(function (teacher) {
+            return {
+              teacherEmail: teacher.teacherEmail,
+              teacherName: teacher.teacherName
+            };
           });
         }
 
@@ -2892,6 +3080,73 @@
             notes: replacementTripNotes ? replacementTripNotes.value : current.notes,
             enabled: replacementTripEnabled ? Boolean(replacementTripEnabled.checked) : current.enabled
           });
+        }
+
+        function validateReplacementTripPayload_(candidate) {
+          if (!candidate.classCode) {
+            throw new Error('Selezionare una classe.');
+          }
+          if (!candidate.startDate) {
+            throw new Error('Inserire una data valida per l\'uscita didattica.');
+          }
+          if (candidate.tripType === 'MULTI_DAY') {
+            if (!candidate.endDate || candidate.endDate < candidate.startDate) {
+              throw new Error('Inserire un intervallo date valido per il viaggio di istruzione.');
+            }
+          }
+          if (candidate.tripType === 'HOURLY') {
+            if (!candidate.startTime || !candidate.endTime) {
+              throw new Error('Inserire orario di inizio e fine per l\'uscita oraria.');
+            }
+            if (candidate.startTime >= candidate.endTime) {
+              throw new Error('L\'orario finale deve essere successivo a quello iniziale.');
+            }
+          }
+        }
+
+        function buildReplacementTripUnavailableTeacherMap_(form) {
+          var startDate = form && form.startDate ? String(form.startDate) : '';
+          var endDate = form && form.tripType === 'MULTI_DAY'
+            ? String(form.endDate || form.startDate || '')
+            : startDate;
+          var unavailableMap = {};
+          if (!startDate || !endDate) {
+            return unavailableMap;
+          }
+          safeArray(replacementState.tripDraft).forEach(function (entry) {
+            var entryEndDate = getReplacementTripEffectiveEndDate_(entry);
+            if (!entry || entry.enabled === false || !entry.startDate || !entryEndDate || entry.tripId === form.tripId) {
+              return;
+            }
+            if (entry.startDate > endDate || entryEndDate < startDate) {
+              return;
+            }
+            iterateReplacementTripDates_(entry, function (dateKey) {
+              if (dateKey < startDate || dateKey > endDate) {
+                return;
+              }
+              safeArray(entry.teachers).forEach(function (teacher) {
+                var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+                if (!teacherEmail || unavailableMap[teacherEmail]) {
+                  return;
+                }
+                unavailableMap[teacherEmail] = {
+                  date: dateKey,
+                  classCode: entry.classCode || '',
+                  teacherName: teacher && teacher.teacherName ? String(teacher.teacherName) : teacherEmail
+                };
+              });
+            });
+          });
+          return unavailableMap;
+        }
+
+        function buildReplacementTripTeacherLabel_(teacher, conflictMeta) {
+          var baseLabel = teacher && (teacher.teacherName || teacher.teacherEmail) ? String(teacher.teacherName || teacher.teacherEmail) : '-';
+          if (!conflictMeta || !conflictMeta.date) {
+            return baseLabel;
+          }
+          return baseLabel + ' (gia assegnato il ' + formatReplacementDate_(conflictMeta.date) + ')';
         }
 
         function toggleReplacementTripTeacher_(teacherEmail, teacherName, enabled) {
@@ -2924,11 +3179,15 @@
           var suggestedTeachers = safeArray(teacherOptionsByClass[form.classCode]);
           var selectedTeacherMap = {};
           var allTeachers = getReplacementTripTeacherDirectory_();
+          var unavailableTeacherMap = buildReplacementTripUnavailableTeacherMap_(form);
           var showEndDate = form.tripType === 'MULTI_DAY';
           var showTimes = form.tripType === 'HOURLY';
 
           if (replacementTripFormTitle) {
             replacementTripFormTitle.textContent = form.tripId ? 'Modifica uscita didattica' : 'Nuova uscita didattica';
+          }
+          if (replacementTripSave) {
+            replacementTripSave.textContent = form.tripId ? 'Aggiorna bozza' : 'Aggiungi alla bozza';
           }
           if (replacementTripType) {
             replacementTripType.value = form.tripType || 'DAILY';
@@ -2981,6 +3240,13 @@
             } else if (!suggestedTeachers.length) {
               replacementTripTeacherOptions.appendChild(ROOMS_UI.el('div', 'muted', 'Nessun docente associato alla classe trovato nel timetable.'));
             } else {
+              suggestedTeachers = suggestedTeachers.filter(function (teacher) {
+                var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+                return Boolean(teacherEmail && (!unavailableTeacherMap[teacherEmail] || selectedTeacherMap[teacherEmail]));
+              });
+              if (!suggestedTeachers.length) {
+                replacementTripTeacherOptions.appendChild(ROOMS_UI.el('div', 'muted', 'Nessun docente disponibile per la data selezionata.'));
+              }
               suggestedTeachers.forEach(function (teacher) {
                 var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
                 var wrap = document.createElement('label');
@@ -2995,7 +3261,7 @@
                   toggleReplacementTripTeacher_(teacherEmail, teacher.teacherName || teacherEmail, checkbox.checked);
                 });
                 wrap.appendChild(checkbox);
-                wrap.appendChild(ROOMS_UI.el('span', '', teacher.teacherName || teacherEmail));
+                wrap.appendChild(ROOMS_UI.el('span', '', buildReplacementTripTeacherLabel_(teacher, unavailableTeacherMap[teacherEmail] || null)));
                 replacementTripTeacherOptions.appendChild(wrap);
               });
             }
@@ -3004,15 +3270,21 @@
                 return normalizeReplacementTeacherEmail_(candidate.teacherEmail) === normalizeReplacementTeacherEmail_(teacher.teacherEmail);
               });
             }).forEach(function (teacher) {
-              var extra = ROOMS_UI.el('div', 'muted', 'Altro docente selezionato: ' + (teacher.teacherName || teacher.teacherEmail || '-'));
-              replacementTripTeacherOptions.appendChild(extra);
+              replacementTripTeacherOptions.appendChild(
+                ROOMS_UI.el(
+                  'div',
+                  'muted',
+                  'Altro docente selezionato: ' + buildReplacementTripTeacherLabel_(teacher, unavailableTeacherMap[normalizeReplacementTeacherEmail_(teacher.teacherEmail)] || null)
+                )
+              );
             });
           }
           if (replacementTripExtraTeacher) {
             ROOMS_UI.clearNode(replacementTripExtraTeacher);
             replacementTripExtraTeacher.appendChild(new Option('Seleziona docente aggiuntivo', ''));
             allTeachers.forEach(function (teacher) {
-              if (selectedTeacherMap[normalizeReplacementTeacherEmail_(teacher.teacherEmail)]) {
+              var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+              if (selectedTeacherMap[teacherEmail] || unavailableTeacherMap[teacherEmail]) {
                 return;
               }
               replacementTripExtraTeacher.appendChild(new Option(teacher.teacherName || teacher.teacherEmail, teacher.teacherEmail));
@@ -3021,8 +3293,24 @@
           }
         }
 
+        function getReplacementTripDraftLabel_(entry) {
+          var savedByTripId = {};
+          safeArray(replacementState.model && replacementState.model.trips).forEach(function (savedEntry) {
+            if (savedEntry && savedEntry.tripId) {
+              savedByTripId[savedEntry.tripId] = savedEntry;
+            }
+          });
+          if (!entry || !entry.tripId || !savedByTripId[entry.tripId]) {
+            return 'Bozza locale';
+          }
+          if (JSON.stringify(normalizeReplacementTripForCompare_(entry)) !== JSON.stringify(normalizeReplacementTripForCompare_(savedByTripId[entry.tripId]))) {
+            return 'Bozza locale';
+          }
+          return 'Salvata';
+        }
+
         function renderReplacementTripList_() {
-          var rows = safeArray(replacementState.model && replacementState.model.trips);
+          var rows = safeArray(replacementState.tripDraft);
           renderTable(
             'replacement-trip-list-table',
             ['Tipo', 'Classe', 'Periodo', 'Accompagnatori', 'Stato', 'Azioni'],
@@ -3030,9 +3318,10 @@
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
               var toggleButton = ROOMS_UI.el('button', 'button secondary', entry.enabled ? 'Disabilita' : 'Abilita');
-              var deleteButton = ROOMS_UI.el('button', 'button warn', 'Elimina');
+              var deleteButton = ROOMS_UI.el('button', 'button warn', 'Rimuovi');
               var periodLabel = formatReplacementDate_(entry.startDate);
               var statusNode = createReplacementStatusNode_(entry.enabled ? 'ASSIGNED' : 'NONE');
+              var statusWrap = document.createElement('div');
 
               if (entry.tripType === 'MULTI_DAY') {
                 periodLabel = formatReplacementDate_(entry.startDate) + ' - ' + formatReplacementDate_(entry.endDate);
@@ -3040,24 +3329,47 @@
                 periodLabel = formatReplacementDate_(entry.startDate) + ' ' + (entry.startTime || '--:--') + ' - ' + (entry.endTime || '--:--');
               }
               statusNode.textContent = entry.enabled ? 'ATTIVA' : 'DISABILITATA';
+              statusWrap.style.display = 'grid';
+              statusWrap.style.gap = '4px';
+              statusWrap.appendChild(statusNode);
+              statusWrap.appendChild(ROOMS_UI.el('div', 'muted', getReplacementTripDraftLabel_(entry)));
 
               editButton.type = 'button';
               editButton.addEventListener('click', function () {
                 setReplacementTripForm_(entry);
                 replacementState.activeTab = 'trips';
-                renderReplacementModal_();
+                renderReplacementTripViews_();
               });
               actions.appendChild(editButton);
 
               toggleButton.type = 'button';
               toggleButton.addEventListener('click', function () {
-                toggleEducationalTrip_(entry.tripId, !entry.enabled);
+                replacementState.tripDraft = safeArray(replacementState.tripDraft).map(function (candidate) {
+                  if (!candidate || candidate.tripId !== entry.tripId) {
+                    return candidate;
+                  }
+                  return Object.assign({}, candidate, {
+                    enabled: !entry.enabled
+                  });
+                });
+                syncReplacementTripDraftState_();
+                renderReplacementTripViews_();
               });
               actions.appendChild(toggleButton);
 
               deleteButton.type = 'button';
               deleteButton.addEventListener('click', function () {
-                deleteEducationalTrip_(entry.tripId);
+                openReplacementConfirm_('Rimuovi uscita dalla bozza', 'Confermare rimozione dell\'uscita didattica dalla bozza locale?', function () {
+                  replacementState.tripDraft = safeArray(replacementState.tripDraft).filter(function (candidate) {
+                    return candidate && candidate.tripId !== entry.tripId;
+                  });
+                  if ((replacementState.tripForm && replacementState.tripForm.tripId) === entry.tripId) {
+                    resetReplacementTripForm_();
+                  }
+                  syncReplacementTripDraftState_();
+                  setReplacementNotice_('Uscita rimossa dalla bozza locale.', 'success');
+                  renderReplacementTripViews_();
+                });
               });
               actions.appendChild(deleteButton);
 
@@ -3068,11 +3380,11 @@
                 safeArray(entry.teachers).map(function (teacher) {
                   return teacher.teacherName || teacher.teacherEmail || '';
                 }).join(', ') || '-',
-                statusNode,
+                statusWrap,
                 actions
               ];
             }),
-            'Nessuna uscita didattica configurata.'
+            'Nessuna uscita didattica in bozza.'
           );
         }
 
@@ -3102,76 +3414,82 @@
         }
 
         function saveEducationalTrip_() {
+          var nextEntry;
+          var nextDraft;
+          var draftErrors;
           if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
             return;
           }
-          setReplacementLoading_(true, 'Salvataggio uscita didattica...');
-          ROOMS_UI.call('saveEducationalTrip', getReplacementTripFormPayload_(), replacementState.date)
+          try {
+            nextEntry = getReplacementTripFormPayload_();
+            if (!nextEntry.tripId) {
+              nextEntry.tripId = buildReplacementTripDraftId_();
+            }
+            validateReplacementTripPayload_(nextEntry);
+            nextDraft = safeArray(replacementState.tripDraft).filter(function (entry) {
+              return entry && entry.tripId !== nextEntry.tripId;
+            });
+            nextDraft.push(nextEntry);
+            draftErrors = buildReplacementTripConflictErrors_(nextDraft);
+            if (draftErrors.length) {
+              throw new Error(draftErrors[0]);
+            }
+            replacementState.tripDraft = nextDraft;
+            syncReplacementTripDraftState_();
+            resetReplacementTripForm_();
+            replacementState.activeTab = 'trips';
+            setReplacementNotice_('Uscita aggiornata nella bozza locale.', 'success');
+            renderReplacementTripViews_();
+          } catch (error) {
+            setReplacementNotice_(error && error.message ? error.message : 'Errore aggiornamento bozza uscite.', 'error');
+          }
+        }
+
+        function resetReplacementTripDraft_() {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
+            return;
+          }
+          openReplacementConfirm_('Ripristina uscite salvate', 'Annullare le modifiche locali e ricaricare le uscite didattiche salvate?', function () {
+            initializeReplacementTripDraftFromModel_();
+            resetReplacementTripForm_();
+            replacementState.activeTab = 'trips';
+            setReplacementNotice_('Bozza locale ripristinata.', 'success');
+            renderReplacementTripViews_();
+          });
+        }
+
+        function saveReplacementTripDraft_() {
+          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
+            return;
+          }
+          if (!replacementState.tripDirty) {
+            setReplacementNotice_('Nessuna modifica locale da salvare per le uscite didattiche.', 'success');
+            renderReplacementTripViews_();
+            return;
+          }
+          if (safeArray(replacementState.tripDraftErrors).length) {
+            setReplacementNotice_(replacementState.tripDraftErrors[0], 'error');
+            renderReplacementTripViews_();
+            return;
+          }
+          setReplacementLoading_(true, 'Salvataggio uscite didattiche...');
+          ROOMS_UI.call('saveReplacementFieldTripRegistry', cloneReplacementData_(replacementState.tripDraft), replacementState.date)
             .then(function (result) {
               applyReplacementModel_(result && result.model ? result.model : null, {
                 keepDirty: false
               });
               resetReplacementTripForm_();
               replacementState.activeTab = 'trips';
-              setReplacementNotice_('Uscita didattica salvata.', 'success');
+              setReplacementNotice_('Uscite didattiche salvate.', 'success');
               refresh({ skipPanelRefresh: false });
             })
             .catch(function (error) {
-              setReplacementNotice_(error && error.message ? error.message : 'Errore salvataggio uscita didattica.', 'error');
+              setReplacementNotice_(error && error.message ? error.message : 'Errore salvataggio uscite didattiche.', 'error');
             })
             .then(function () {
               setReplacementLoading_(false);
               renderReplacementModal_();
             });
-        }
-
-        function toggleEducationalTrip_(tripId, enabled) {
-          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
-            return;
-          }
-          setReplacementLoading_(true, enabled ? 'Abilitazione uscita didattica...' : 'Disabilitazione uscita didattica...');
-          ROOMS_UI.call('toggleEducationalTrip', tripId, enabled, replacementState.date)
-            .then(function (result) {
-              applyReplacementModel_(result && result.model ? result.model : null, {
-                keepDirty: false
-              });
-              replacementState.activeTab = 'trips';
-              setReplacementNotice_('Uscita didattica aggiornata.', 'success');
-              refresh({ skipPanelRefresh: false });
-            })
-            .catch(function (error) {
-              setReplacementNotice_(error && error.message ? error.message : 'Errore aggiornamento uscita didattica.', 'error');
-            })
-            .then(function () {
-              setReplacementLoading_(false);
-              renderReplacementModal_();
-            });
-        }
-
-        function deleteEducationalTrip_(tripId) {
-          if (!ensureCleanDailyDraftForNonDailyAction_('Salva o annulla prima la bozza delle sostituzioni giornaliere prima di modificare le uscite didattiche.')) {
-            return;
-          }
-          openReplacementConfirm_('Elimina uscita didattica', 'Confermare eliminazione dell\'uscita didattica selezionata?', function () {
-            setReplacementLoading_(true, 'Eliminazione uscita didattica...');
-            ROOMS_UI.call('deleteEducationalTrip', tripId, replacementState.date)
-              .then(function (result) {
-                applyReplacementModel_(result && result.model ? result.model : null, {
-                  keepDirty: false
-                });
-                resetReplacementTripForm_();
-                replacementState.activeTab = 'trips';
-                setReplacementNotice_('Uscita didattica eliminata.', 'success');
-                refresh({ skipPanelRefresh: false });
-              })
-              .catch(function (error) {
-                setReplacementNotice_(error && error.message ? error.message : 'Errore eliminazione uscita didattica.', 'error');
-              })
-              .then(function () {
-                setReplacementLoading_(false);
-                renderReplacementModal_();
-              });
-          });
         }
 
         function buildEmptyReplacementLongForm_() {
@@ -3463,6 +3781,7 @@
           renderReplacementPreview_();
           renderReplacementTripList_();
           renderReplacementTripForm_();
+          renderReplacementTripDraftStatus_();
           renderReplacementLongList_();
           renderReplacementLongForm_();
           updateReplacementTabUi_();
@@ -3492,6 +3811,7 @@
           if (!replacementState.tripForm) {
             resetReplacementTripForm_();
           }
+          initializeReplacementTripDraftFromModel_();
           if (!settings.keepDirty) {
             replacementState.dirty = false;
           }
@@ -3612,6 +3932,10 @@
           replacementState.pendingManualAssignmentKeys = {};
           replacementState.longForm = null;
           replacementState.tripForm = null;
+          replacementState.tripDraft = [];
+          replacementState.tripDirty = false;
+          replacementState.tripDraftErrors = [];
+          replacementState.tripTeacherDirectory = null;
           closeReplacementConfirm_();
           setReplacementNotice_('', '');
           setReplacementDateStateMessage_('', '');
@@ -5217,7 +5541,10 @@
           if (!field) {
             return;
           }
-          field.addEventListener('change', syncReplacementTripFormFromInputs_);
+          field.addEventListener('change', function () {
+            syncReplacementTripFormFromInputs_();
+            renderReplacementTripForm_();
+          });
         });
         if (replacementTripExtraTeacher) {
           replacementTripExtraTeacher.addEventListener('change', function () {
@@ -5235,8 +5562,14 @@
         if (replacementTripCancel) {
           replacementTripCancel.addEventListener('click', function () {
             resetReplacementTripForm_();
-            renderReplacementTripForm_();
+            renderReplacementTripViews_();
           });
+        }
+        if (replacementTripResetDraft) {
+          replacementTripResetDraft.addEventListener('click', resetReplacementTripDraft_);
+        }
+        if (replacementTripBatchSave) {
+          replacementTripBatchSave.addEventListener('click', saveReplacementTripDraft_);
         }
         if (replacementLongSave) {
           replacementLongSave.addEventListener('click', saveLongReplacement_);
