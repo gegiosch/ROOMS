@@ -53,6 +53,7 @@
         var replacementPreviewMount = document.getElementById('replacement-report-preview');
         var replacementStatusPill = document.getElementById('replacement-status-pill');
         var replacementReportPill = document.getElementById('replacement-report-pill');
+        var replacementAbsenceSource = document.getElementById('replacement-absence-source');
         var replacementCloseButton = document.getElementById('replacement-close-button');
         var replacementCloseButtonBottom = document.getElementById('replacement-close-button-bottom');
         var replacementCloseButtonTripsBottom = document.getElementById('replacement-close-button-trips-bottom');
@@ -2078,6 +2079,9 @@
         function renderReplacementStatus_() {
           var savedAt = getReplacementSavedAt_();
           var report = getReplacementReportStatus_();
+          var absenceRegistry = replacementState.model && replacementState.model.absenceRegistry
+            ? replacementState.model.absenceRegistry
+            : {};
           if (replacementStatusPill) {
             if (replacementState.dirty && savedAt) {
               replacementStatusPill.textContent = 'Modifiche successive all\'ultimo salvataggio';
@@ -2099,6 +2103,15 @@
             } else {
               replacementReportPill.style.display = 'none';
               replacementReportPill.textContent = '';
+            }
+          }
+          if (replacementAbsenceSource) {
+            if (absenceRegistry && absenceRegistry.hasEntries) {
+              replacementAbsenceSource.textContent = (absenceRegistry.sourceLabel || 'Assenze caricate da REPL_ABSENCES') +
+                ': ' + String(absenceRegistry.dailyTeacherCount || 0) + ' giornaliere, ' +
+                String(absenceRegistry.hourlyEntryCount || 0) + ' ore di permesso.';
+            } else {
+              replacementAbsenceSource.textContent = 'Assenze giornaliere senza registro salvato.';
             }
           }
         }
