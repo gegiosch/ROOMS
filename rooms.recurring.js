@@ -30,6 +30,7 @@ ROOMS_APP.Recurring = {
         startTime: payload.startTime,
         endTime: payload.endTime,
         title: payload.title,
+        activityDescription: payload.activityDescription,
         notes: payload.notes,
         bookerName: payload.bookerName,
         bookerSurname: payload.bookerSurname
@@ -71,6 +72,7 @@ ROOMS_APP.Recurring = {
         startTime: payload.startTime,
         endTime: payload.endTime,
         title: payload.title,
+        activityDescription: payload.activityDescription,
         notes: payload.notes,
         bookerName: payload.bookerName,
         bookerSurname: payload.bookerSurname,

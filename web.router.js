@@ -660,6 +660,7 @@ function renderBoardPage_(params) {
       simulationActive: false,
       simulatedNowISO: ''
     },
+    afternoonBookings: [],
     branchOrder: [],
     branchLabels: {},
     pages: []

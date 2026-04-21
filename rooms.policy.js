@@ -184,6 +184,7 @@ ROOMS_APP.Policy = {
       startTime: ROOMS_APP.toTimeString(request.startTime || request.StartTime),
       endTime: ROOMS_APP.toTimeString(request.endTime || request.EndTime),
       title: ROOMS_APP.normalizeString(request.title || request.Title),
+      activityDescription: ROOMS_APP.normalizeString(request.activityDescription || request.ActivityDescription),
       notes: ROOMS_APP.normalizeString(request.notes || request.Notes),
       bookerName: ROOMS_APP.normalizeString(request.bookerName || request.BookerName),
       bookerSurname: ROOMS_APP.normalizeString(request.bookerSurname || request.BookerSurname),

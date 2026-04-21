@@ -106,6 +106,7 @@ ROOMS_APP.Booking = {
       startTime: Object.prototype.hasOwnProperty.call(payload, 'startTime') ? payload.startTime : existing.StartTime,
       endTime: Object.prototype.hasOwnProperty.call(payload, 'endTime') ? payload.endTime : existing.EndTime,
       title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : existing.Title,
+      activityDescription: Object.prototype.hasOwnProperty.call(payload, 'activityDescription') ? payload.activityDescription : existing.ActivityDescription,
       notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : existing.Notes,
       bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : existing.BookerName,
       bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : existing.BookerSurname
@@ -265,6 +266,7 @@ ROOMS_APP.Booking = {
             startTime: occurrence.StartTime,
             endTime: occurrence.EndTime,
             title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : occurrence.Title,
+            activityDescription: Object.prototype.hasOwnProperty.call(payload, 'activityDescription') ? payload.activityDescription : occurrence.ActivityDescription,
             notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : occurrence.Notes,
             bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : occurrence.BookerName,
             bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : occurrence.BookerSurname
@@ -337,6 +339,7 @@ ROOMS_APP.Booking = {
             startTime: Object.prototype.hasOwnProperty.call(payload, 'startTime') ? payload.startTime : existing.StartTime,
             endTime: Object.prototype.hasOwnProperty.call(payload, 'endTime') ? payload.endTime : existing.EndTime,
             title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : existing.Title,
+            activityDescription: Object.prototype.hasOwnProperty.call(payload, 'activityDescription') ? payload.activityDescription : existing.ActivityDescription,
             notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : existing.Notes,
             bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : existing.BookerName,
             bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : existing.BookerSurname
@@ -375,6 +378,7 @@ ROOMS_APP.Booking = {
             startTime: payload.startTime,
             endTime: payload.endTime,
             title: payload.title,
+            activityDescription: payload.activityDescription,
             notes: payload.notes,
             bookerName: payload.bookerName,
             bookerSurname: payload.bookerSurname
@@ -1140,6 +1144,7 @@ ROOMS_APP.Booking = {
       StartISO: ROOMS_APP.toIsoDateTime(ROOMS_APP.combineDateTime(normalized.bookingDate, normalized.startTime)),
       EndISO: ROOMS_APP.toIsoDateTime(ROOMS_APP.combineDateTime(normalized.bookingDate, normalized.endTime)),
       Title: normalized.title || validation.resource.DisplayName,
+      ActivityDescription: normalized.activityDescription,
       BookerEmail: current.BookerEmail || actor.email,
       BookerName: effectiveName,
       BookerSurname: effectiveSurname,

@@ -599,6 +599,67 @@ body.board-monitor #board-root {
   font-size: 12px;
 }
 
+.branch-panel.afternoon-summary-special {
+  position: absolute;
+  left: 50%;
+  top: 420px;
+  transform: translateX(-50%);
+  width: min(330px, 100%);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 47, 73, 0.82));
+  border-color: rgba(56, 189, 248, 0.28);
+}
+
+.afternoon-summary-content {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.afternoon-summary-list {
+  display: grid;
+  gap: 6px;
+}
+
+.afternoon-summary-line {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.afternoon-summary-line:last-child {
+  border-bottom: 0;
+}
+
+.afternoon-summary-time {
+  color: #7dd3fc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.afternoon-summary-main {
+  min-width: 0;
+  color: #e5e7eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.afternoon-summary-actor {
+  grid-column: 2;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.board-loading-state {
+  min-height: 320px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+}
+
 .board-floating-controls {
   position: fixed;
   right: 12px;
@@ -971,15 +1032,15 @@ body.substitution-standalone #replacement-close-button-long-bottom {
   inset: 0;
   z-index: 120;
   background: rgba(2, 6, 23, 0.5);
-  align-items: stretch;
-  justify-content: flex-end;
-  padding: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
 }
 
 .room-panel {
   position: relative;
-  width: min(760px, 96vw);
-  height: calc(100vh - 16px);
+  width: min(980px, 96vw);
+  max-height: calc(100vh - 36px);
   overflow: auto;
   background: rgba(2, 6, 23, 0.98);
   border: 1px solid var(--border);
@@ -1295,7 +1356,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 .board-tree {
   grid-row: 1;
   display: grid;
-  grid-template-columns: 470px 84px minmax(0, 1fr);
+  grid-template-columns: 470px 330px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -1626,6 +1687,14 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 
   .tree-center-column {
     display: none;
+  }
+
+  .branch-panel.afternoon-summary-special {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: 100%;
   }
 
   .floor-group-branches,

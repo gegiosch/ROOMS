@@ -66,6 +66,8 @@ ROOMS_APP.Board = {
     );
     var byResource = {};
     var branchBuckets = this.createEmptyBranchBuckets_();
+    var visibleOccupancyKeys = {};
+    var resourceNames = {};
 
     occupancies.forEach(function (occupancy) {
       byResource[occupancy.ResourceId] = byResource[occupancy.ResourceId] || [];
@@ -78,6 +80,7 @@ ROOMS_APP.Board = {
 
     resources.forEach(function (resource) {
       var roomBookings = byResource[resource.ResourceId] || [];
+      resourceNames[resource.ResourceId] = resource.DisplayName || resource.ResourceId;
       var visibleCurrent = roomBookings.filter(function (booking) {
         return booking.StartTime <= currentTime && booking.EndTime > currentTime;
       })[0] || null;
@@ -93,6 +96,12 @@ ROOMS_APP.Board = {
       var next = blockingBookings.filter(function (booking) {
         return booking.StartTime > currentTime;
       })[0] || null;
+      if (visibleCurrent) {
+        visibleOccupancyKeys[ROOMS_APP.Board.getOccupancySummaryKey_(visibleCurrent)] = true;
+      }
+      if (visibleNext) {
+        visibleOccupancyKeys[ROOMS_APP.Board.getOccupancySummaryKey_(visibleNext)] = true;
+      }
       var state = current ? 'OCCUPIED' : (next ? 'NEXT_OCCUPIED' : 'FREE');
       var branchKey = ROOMS_APP.Board.mapResourceBranchKey_(resource);
 
@@ -116,6 +125,7 @@ ROOMS_APP.Board = {
     var requiredPageCount = this.getRequiredPageCount_(branchBuckets);
     var pageCount = Math.max(1, Math.min(configuredPageCount, requiredPageCount));
     var pages = this.buildPages_(branchBuckets, pageCount);
+    var afternoonBookings = this.buildAfternoonBookingSummary_(bookings, resourceNames, visibleOccupancyKeys, currentTime);
     var composeMs = Date.now() - stepStartedAt;
 
     var model = {
@@ -145,6 +155,7 @@ ROOMS_APP.Board = {
         simulatedNowISO: simulation.iso || ''
       },
       aulaMagna: aulaMagna,
+      afternoonBookings: afternoonBookings,
       branchOrder: this.BRANCH_ORDER_.slice(),
       branchLabels: this.BRANCH_LABELS_,
       pages: pages
@@ -335,6 +346,62 @@ ROOMS_APP.Board = {
     enriched.SourceKind = 'USER_BOOKING';
     enriched.SourceType = 'USER_BOOKING';
     return enriched;
+  },
+
+  getOccupancySummaryKey_: function (occupancy) {
+    return [
+      ROOMS_APP.normalizeString(occupancy && occupancy.SourceKind),
+      ROOMS_APP.normalizeString(occupancy && occupancy.BookingId),
+      ROOMS_APP.normalizeString(occupancy && occupancy.ResourceId),
+      ROOMS_APP.toIsoDate(occupancy && occupancy.BookingDate),
+      ROOMS_APP.toTimeString(occupancy && occupancy.StartTime),
+      ROOMS_APP.toTimeString(occupancy && occupancy.EndTime)
+    ].join('|');
+  },
+
+  getBookingActivityDescription_: function (booking) {
+    return ROOMS_APP.normalizeString(
+      (booking && booking.ActivityDescription) ||
+      (booking && booking.activityDescription) ||
+      (booking && booking.Notes) ||
+      (booking && booking.Title) ||
+      'Attivita non specificata'
+    );
+  },
+
+  getBookingActorLabel_: function (booking) {
+    var surname = ROOMS_APP.normalizeString(booking && booking.BookerSurname);
+    var name = ROOMS_APP.normalizeString(booking && booking.BookerName);
+    var joined = [surname, name].filter(function (token) {
+      return Boolean(token);
+    }).join(' ');
+    return joined || ROOMS_APP.normalizeString(booking && booking.BookerEmail) || 'N/D';
+  },
+
+  buildAfternoonBookingSummary_: function (bookings, resourceNames, visibleOccupancyKeys, currentTime) {
+    return ROOMS_APP.sortBy((bookings || []).filter(function (booking) {
+      if (!booking || booking.Status === 'CANCELLED') {
+        return false;
+      }
+      if (ROOMS_APP.toTimeString(booking.StartTime) < '14:00') {
+        return false;
+      }
+      if (currentTime && ROOMS_APP.toTimeString(booking.EndTime) <= currentTime) {
+        return false;
+      }
+      return !visibleOccupancyKeys[ROOMS_APP.Board.getOccupancySummaryKey_(booking)];
+    }).map(function (booking) {
+      return {
+        bookingId: ROOMS_APP.normalizeString(booking.BookingId),
+        resourceId: ROOMS_APP.normalizeString(booking.ResourceId),
+        roomName: resourceNames[booking.ResourceId] || booking.ResourceId || '',
+        bookingDate: ROOMS_APP.toIsoDate(booking.BookingDate),
+        startTime: ROOMS_APP.toTimeString(booking.StartTime),
+        endTime: ROOMS_APP.toTimeString(booking.EndTime),
+        activityDescription: ROOMS_APP.Board.getBookingActivityDescription_(booking),
+        actorLabel: ROOMS_APP.Board.getBookingActorLabel_(booking)
+      };
+    }), ['startTime', 'roomName', 'endTime', 'bookingId']);
   },
 
   getOccupancyLabel_: function (occupancy) {

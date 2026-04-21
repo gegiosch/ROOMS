@@ -512,6 +512,7 @@ ROOMS_APP.Schema = {
       'StartISO',
       'EndISO',
       'Title',
+      'ActivityDescription',
       'BookerEmail',
       'BookerName',
       'BookerSurname',

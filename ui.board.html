@@ -180,6 +180,10 @@
               <input class="input" type="text" id="panel-occupant-editor-name" placeholder="Nome">
             </div>
           </div>
+          <div style="margin-top:12px;">
+            <label for="panel-activity-description">Descrizione attività</label>
+            <textarea class="textarea" id="panel-activity-description" placeholder="Descrizione attività"></textarea>
+          </div>
           <div class="toolbar">
             <button id="panel-occupant-editor-save" class="button" type="button">Salva</button>
             <button id="panel-occupant-editor-cancel" class="button secondary" type="button">Annulla</button>
@@ -326,6 +330,7 @@
         var occupantEditorTitle = document.getElementById('panel-occupant-editor-title');
         var occupantEditorSurname = document.getElementById('panel-occupant-editor-surname');
         var occupantEditorName = document.getElementById('panel-occupant-editor-name');
+        var occupantEditorActivityDescription = document.getElementById('panel-activity-description');
         var occupantEditorSave = document.getElementById('panel-occupant-editor-save');
         var occupantEditorCancel = document.getElementById('panel-occupant-editor-cancel');
         var initialRoomId = String(window.ROOMS_INITIAL_ROOM_ID || '');
@@ -361,6 +366,7 @@
             bookingId: '',
             slotKey: '',
             title: '',
+            activityDescription: '',
             slotLabel: '',
             existingPayload: null
           },
@@ -610,6 +616,32 @@
           return 'dalle ' + (eventItem && eventItem.StartTime ? eventItem.StartTime : '--:--') + ' alle ' + (eventItem && eventItem.EndTime ? eventItem.EndTime : '--:--');
         }
 
+        function formatBookingTimeRange_(booking) {
+          return (booking && booking.startTime ? booking.startTime : '--:--') + ' - ' + (booking && booking.endTime ? booking.endTime : '--:--');
+        }
+
+        function createAfternoonSummaryPanel(model) {
+          var branch = ROOMS_UI.el('section', 'branch-panel afternoon-summary-special');
+          var rows = safeArray(model && model.afternoonBookings);
+          var content = ROOMS_UI.el('div', 'afternoon-summary-content');
+          var list = ROOMS_UI.el('div', 'afternoon-summary-list');
+          branch.appendChild(ROOMS_UI.el('div', 'branch-label', 'Prenotazioni pomeridiane successive'));
+          if (!rows.length) {
+            list.appendChild(ROOMS_UI.el('div', 'aula-magna-empty', 'Nessuna prenotazione pomeridiana successiva.'));
+          } else {
+            rows.slice(0, 12).forEach(function (booking) {
+              var line = ROOMS_UI.el('div', 'afternoon-summary-line');
+              line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-time', formatBookingTimeRange_(booking)));
+              line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-main', (booking.roomName || '-') + ' · ' + (booking.activityDescription || 'Attivita non specificata')));
+              line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-actor', booking.actorLabel || 'N/D'));
+              list.appendChild(line);
+            });
+          }
+          content.appendChild(list);
+          branch.appendChild(content);
+          return branch;
+        }
+
         function createAulaMagnaSpecialPanel(model, sideClass, fallbackTitle) {
           var branchClass = 'branch-panel ' + sideClass + ' branch-pa1-aula aula-magna-special';
           var branch = ROOMS_UI.el('section', branchClass);
@@ -823,6 +855,7 @@
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-2p', '2P'));
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-1p', '1P'));
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-pt', 'PT'));
+          centerColumn.appendChild(createAfternoonSummaryPanel(state));
 
           rightColumn.appendChild(createFloorGroup(state, page, '2P', '2P_DX', '2P_SX'));
           rightColumn.appendChild(createFloorGroup(state, page, '1P', '1P_DX', '1P_SX'));
@@ -847,6 +880,23 @@
           root.appendChild(fitShell);
           applyFitScale();
           window.requestAnimationFrame(applyFitScale);
+        }
+
+        function renderBoardLoading_() {
+          var root = document.getElementById('board-root');
+          applyFullscreenCompactMode(state);
+          setText('board-app-name', state.appName || 'ROOMS');
+          setText('board-school-name', state.schoolName || '');
+          setText('board-page-indicator', 'Caricamento');
+          setText('board-updated-at', 'Aggiornamento in corso...');
+          if (!root) {
+            return;
+          }
+          ROOMS_UI.clearNode(root);
+          var loading = ROOMS_UI.el('div', 'board-loading-state');
+          loading.appendChild(ROOMS_UI.el('div', 'room-panel-spinner'));
+          loading.appendChild(ROOMS_UI.el('div', 'room-panel-loading-text', 'Caricamento ROOMS...'));
+          root.appendChild(loading);
         }
 
         function closeSimulationModal_() {
@@ -4210,6 +4260,9 @@
             Object.keys(panelState.draft.updates[bookingId]).forEach(function (key) {
               next[key] = panelState.draft.updates[bookingId][key];
             });
+            if (Object.prototype.hasOwnProperty.call(panelState.draft.updates[bookingId], 'activityDescription')) {
+              next.ActivityDescription = panelState.draft.updates[bookingId].activityDescription;
+            }
             next._draftAction = 'UPDATE';
             byId[bookingId] = next;
           });
@@ -4224,6 +4277,9 @@
             });
             if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
               next.Title = payload.title;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'activityDescription')) {
+              next.ActivityDescription = payload.activityDescription;
             }
             if (Object.prototype.hasOwnProperty.call(payload, 'notes')) {
               next.Notes = payload.notes;
@@ -4255,6 +4311,7 @@
               StartTime: draft.startTime,
               EndTime: draft.endTime,
               Title: draft.title || '',
+              ActivityDescription: draft.activityDescription || '',
               BookerName: draft.bookerName || '',
               BookerSurname: draft.bookerSurname || '',
               BookerEmail: draft.bookerEmail || '',
@@ -4321,6 +4378,7 @@
             startTime: slot.startTime,
             endTime: slot.endTime,
             title: currentDraft.title || ((panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || ''),
+            activityDescription: currentDraft.activityDescription || '',
             notes: currentDraft.notes || '',
             bookerName: currentDraft.bookerName || identity.firstName || '',
             bookerSurname: currentDraft.bookerSurname || identity.surname || '',
@@ -4395,6 +4453,7 @@
             bookingId: '',
             slotKey: '',
             title: '',
+            activityDescription: '',
             slotLabel: '',
             existingPayload: null
           };
@@ -4403,6 +4462,9 @@
           }
           if (occupantEditorName) {
             occupantEditorName.value = '';
+          }
+          if (occupantEditorActivityDescription) {
+            occupantEditorActivityDescription.value = '';
           }
           if (occupantEditorSlot) {
             occupantEditorSlot.textContent = '-';
@@ -4425,6 +4487,14 @@
           };
         }
 
+        function getBookingActivityDescription_(booking) {
+          return normalizeNameToken_(
+            (booking && booking.ActivityDescription) ||
+            (booking && booking.activityDescription) ||
+            ''
+          );
+        }
+
         function openOccupantEditor_(booking, mode, meta) {
           if (!canManageReplacementUser_(panelState.model) || !occupantEditorModal) {
             return;
@@ -4435,6 +4505,7 @@
             bookingId: meta && meta.bookingId ? meta.bookingId : '',
             slotKey: meta && meta.slotKey ? meta.slotKey : '',
             title: booking && booking.Title ? booking.Title : '',
+            activityDescription: getBookingActivityDescription_(booking),
             slotLabel: [booking && booking.StartTime ? booking.StartTime : '', booking && booking.EndTime ? booking.EndTime : ''].filter(function (token) {
               return Boolean(token);
             }).join(' - '),
@@ -4452,6 +4523,9 @@
           if (occupantEditorTitle) {
             occupantEditorTitle.textContent = panelState.occupantEditor.title || '-';
           }
+          if (occupantEditorActivityDescription) {
+            occupantEditorActivityDescription.value = panelState.occupantEditor.activityDescription || '';
+          }
           occupantEditorModal.style.display = 'flex';
         }
 
@@ -4466,6 +4540,7 @@
           var editor = panelState.occupantEditor || {};
           var surname = normalizeNameToken_(occupantEditorSurname && occupantEditorSurname.value);
           var firstName = normalizeNameToken_(occupantEditorName && occupantEditorName.value);
+          var activityDescription = normalizeNameToken_(occupantEditorActivityDescription && occupantEditorActivityDescription.value);
           if (!surname || !firstName) {
             ROOMS_UI.setNotice(panelNotice, 'Inserire cognome e nome validi.', 'error');
             return;
@@ -4477,6 +4552,7 @@
               startTime: currentDraft.startTime,
               endTime: currentDraft.endTime,
               title: currentDraft.title,
+              activityDescription: activityDescription,
               notes: currentDraft.notes,
               bookerEmail: currentDraft.bookerEmail || '',
               bookerSurname: surname,
@@ -4484,12 +4560,14 @@
             };
           } else if (editor.mode === 'booking-update' && editor.bookingId) {
             panelState.draft.updates[editor.bookingId] = Object.assign({}, editor.existingPayload || {}, {
+              activityDescription: activityDescription,
               bookerSurname: surname,
               bookerName: firstName
             });
             delete panelState.draft.deletes[editor.bookingId];
           } else if (editor.mode === 'timetable-update' && editor.bookingId) {
             panelState.draft.timetableUpdates[editor.bookingId] = Object.assign({}, editor.existingPayload || {}, {
+              activityDescription: activityDescription,
               bookerSurname: surname,
               bookerName: firstName
             });
@@ -4755,11 +4833,11 @@
 
           renderTable(
             'panel-bookings-day-table',
-            ['Orario', 'Titolo', 'Occupante', 'Fonte', 'Azioni'],
+            ['Orario', 'Descrizione attività', 'Occupante', 'Fonte', 'Azioni'],
             bookings.map(function (booking) {
               return [
                 '🕒 ' + (booking.StartTime || '') + ' - ' + (booking.EndTime || ''),
-                booking.Title || (booking._draftAction === 'CREATE' ? '(bozza)' : '-'),
+                getBookingActivityDescription_(booking) || booking.Title || (booking._draftAction === 'CREATE' ? '(bozza)' : '-'),
                 occupancyDisplayActor_(booking),
                 bookingSourceNode_(booking),
                 bookingActionsNode(booking)
@@ -4917,6 +4995,7 @@
                 startTime: slot.startTime,
                 endTime: slot.endTime,
                 title: slot.title || '',
+                activityDescription: slot.activityDescription || '',
                 notes: slot.notes || '',
                 bookerName: canManageReplacement ? (slot.bookerName || identity.firstName) : identity.firstName,
                 bookerSurname: canManageReplacement ? (slot.bookerSurname || identity.surname) : identity.surname
@@ -5240,7 +5319,7 @@
           }
           openReplacementStandalone_();
         } else {
-          render(state);
+          renderBoardLoading_();
           refresh({ skipPanelRefresh: true });
           window.addEventListener('resize', applyFitScale);
         }
