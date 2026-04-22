@@ -4714,7 +4714,7 @@
         }
 
         function slotSelectionNode(slot) {
-          var wrap = ROOMS_UI.el('div', 'chip-row');
+          var wrap = ROOMS_UI.el('div', 'slot-booking-control');
           if (!slot || slot.isOccupied) {
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Occupato'));
             return wrap;
@@ -4724,14 +4724,43 @@
             return wrap;
           }
           var key = normalizeSlotKey_(slot.startTime, slot.endTime);
+          var isSelected = Boolean(panelState.selectedFreeSlotKeys[key]);
+          var draft = panelState.draft.creates[key] || {};
+          var selector = ROOMS_UI.el('label', 'slot-booking-selector');
           var checkbox = document.createElement('input');
           checkbox.type = 'checkbox';
-          checkbox.checked = Boolean(panelState.selectedFreeSlotKeys[key]);
+          checkbox.checked = isSelected;
           checkbox.addEventListener('change', function () {
             syncFreeSlotSelection_(slot, checkbox.checked);
           });
-          wrap.appendChild(checkbox);
-          wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Seleziona'));
+          selector.appendChild(checkbox);
+          selector.appendChild(ROOMS_UI.el('span', 'muted', 'Seleziona'));
+          wrap.appendChild(selector);
+          if (isSelected) {
+            if (!panelState.draft.creates[key]) {
+              ensureDraftCreateForSlot_(slot);
+              draft = panelState.draft.creates[key] || {};
+            }
+            var descriptionLabel = ROOMS_UI.el('label', 'slot-booking-description-label', 'Descrizione attività');
+            var descriptionInput = document.createElement('textarea');
+            descriptionInput.className = 'textarea slot-booking-description';
+            descriptionInput.placeholder = 'Descrizione attività';
+            descriptionInput.value = draft.activityDescription || '';
+            descriptionInput.addEventListener('input', function () {
+              if (!panelState.draft.creates[key]) {
+                ensureDraftCreateForSlot_(slot);
+              }
+              if (panelState.draft.creates[key]) {
+                panelState.draft.creates[key].activityDescription = descriptionInput.value;
+              }
+              updateDraftUiState_();
+            });
+            descriptionInput.addEventListener('click', function (event) {
+              event.stopPropagation();
+            });
+            wrap.appendChild(descriptionLabel);
+            wrap.appendChild(descriptionInput);
+          }
           return wrap;
         }
 
