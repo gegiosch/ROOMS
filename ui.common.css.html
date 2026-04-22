@@ -508,7 +508,7 @@ body.board-monitor #board-root {
 }
 
 .board-shell.monitor-mode .aula-magna-special {
-  min-height: calc(300px * var(--monitor-ui-scale));
+  min-height: calc(470px * var(--monitor-ui-scale));
 }
 
 .board-shell.monitor-mode .aula-magna-current-title {
@@ -535,7 +535,7 @@ body.board-monitor #board-root {
 }
 
 .branch-panel.aula-magna-special {
-  min-height: 300px;
+  min-height: 470px;
   padding: 10px;
   gap: 10px;
   border-color: rgba(96, 165, 250, 0.48);
@@ -545,9 +545,26 @@ body.board-monitor #board-root {
 
 .aula-magna-content {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
-  min-height: 240px;
+  min-height: 410px;
+}
+
+.service-block-section {
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.aula-magna-main-section {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.afternoon-summary-section {
+  grid-template-rows: auto minmax(0, 1fr);
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 10px;
 }
 
 .aula-magna-section-label {
@@ -574,8 +591,32 @@ body.board-monitor #board-root {
 
 .aula-magna-upcoming {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 6px;
   min-height: 0;
+}
+
+.auto-scroll-viewport {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.auto-scroll-track {
+  will-change: transform;
+}
+
+.auto-scroll-viewport.is-auto-scrolling .auto-scroll-track {
+  animation: rooms-auto-scroll var(--auto-scroll-duration, 24s) linear infinite;
+}
+
+@keyframes rooms-auto-scroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(calc(-1 * var(--auto-scroll-distance, 0px)));
+  }
 }
 
 .aula-magna-event-list {
@@ -597,22 +638,6 @@ body.board-monitor #board-root {
 .aula-magna-empty {
   color: #94a3b8;
   font-size: 12px;
-}
-
-.branch-panel.afternoon-summary-special {
-  position: absolute;
-  left: 50%;
-  top: 420px;
-  transform: translateX(-50%);
-  width: min(330px, 100%);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 47, 73, 0.82));
-  border-color: rgba(56, 189, 248, 0.28);
-}
-
-.afternoon-summary-content {
-  display: grid;
-  gap: 8px;
-  min-height: 0;
 }
 
 .afternoon-summary-list {
@@ -1356,7 +1381,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 .board-tree {
   grid-row: 1;
   display: grid;
-  grid-template-columns: 470px 330px minmax(0, 1fr);
+  grid-template-columns: 470px 84px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -1687,14 +1712,6 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 
   .tree-center-column {
     display: none;
-  }
-
-  .branch-panel.afternoon-summary-special {
-    position: relative;
-    left: auto;
-    top: auto;
-    transform: none;
-    width: 100%;
   }
 
   .floor-group-branches,

@@ -620,16 +620,16 @@
           return (booking && booking.startTime ? booking.startTime : '--:--') + ' - ' + (booking && booking.endTime ? booking.endTime : '--:--');
         }
 
-        function createAfternoonSummaryPanel(model) {
-          var branch = ROOMS_UI.el('section', 'branch-panel afternoon-summary-special');
+        function createAfternoonSummarySection(model) {
+          var section = ROOMS_UI.el('div', 'service-block-section afternoon-summary-section');
           var rows = safeArray(model && model.afternoonBookings);
-          var content = ROOMS_UI.el('div', 'afternoon-summary-content');
-          var list = ROOMS_UI.el('div', 'afternoon-summary-list');
-          branch.appendChild(ROOMS_UI.el('div', 'branch-label', 'Prenotazioni pomeridiane successive'));
+          var viewport = ROOMS_UI.el('div', 'auto-scroll-viewport afternoon-summary-viewport');
+          var list = ROOMS_UI.el('div', 'auto-scroll-track afternoon-summary-list');
+          section.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'PRENOTAZIONI POMERIDIANE SUCCESSIVE'));
           if (!rows.length) {
             list.appendChild(ROOMS_UI.el('div', 'aula-magna-empty', 'Nessuna prenotazione pomeridiana successiva.'));
           } else {
-            rows.slice(0, 12).forEach(function (booking) {
+            rows.forEach(function (booking) {
               var line = ROOMS_UI.el('div', 'afternoon-summary-line');
               line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-time', formatBookingTimeRange_(booking)));
               line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-main', (booking.roomName || '-') + ' · ' + (booking.activityDescription || 'Attivita non specificata')));
@@ -637,9 +637,9 @@
               list.appendChild(line);
             });
           }
-          content.appendChild(list);
-          branch.appendChild(content);
-          return branch;
+          viewport.appendChild(list);
+          section.appendChild(viewport);
+          return section;
         }
 
         function createAulaMagnaSpecialPanel(model, sideClass, fallbackTitle) {
@@ -651,16 +651,18 @@
           branch.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || 'AULA MAGNA'));
 
           var content = ROOMS_UI.el('div', 'aula-magna-content');
+          var aulaSection = ROOMS_UI.el('div', 'service-block-section aula-magna-main-section');
           var currentSection = ROOMS_UI.el('div', 'aula-magna-current');
           currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'ORA'));
           var currentEvent = eventBlock.currentEvent || null;
           currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-current-title', currentEvent ? (currentEvent.EventName || 'NESSUN EVENTO') : 'NESSUN EVENTO'));
           currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-current-time', currentEvent ? formatEventTimeRange(currentEvent) : ''));
-          content.appendChild(currentSection);
+          aulaSection.appendChild(currentSection);
 
           var upcomingSection = ROOMS_UI.el('div', 'aula-magna-upcoming');
           upcomingSection.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'PROSSIMI EVENTI'));
-          var list = ROOMS_UI.el('div', 'aula-magna-event-list');
+          var eventViewport = ROOMS_UI.el('div', 'auto-scroll-viewport aula-magna-event-viewport');
+          var list = ROOMS_UI.el('div', 'auto-scroll-track aula-magna-event-list');
           var nextEvents = safeArray(eventBlock.nextEvents).slice(0, 10);
           if (!nextEvents.length) {
             list.appendChild(ROOMS_UI.el('div', 'aula-magna-empty', 'Nessun evento programmato.'));
@@ -669,8 +671,11 @@
               list.appendChild(ROOMS_UI.el('div', 'aula-magna-event-line', formatEventDateShort(eventItem.EventDate) + ' · ' + formatEventTimeRange(eventItem) + ' · ' + (eventItem.EventName || '')));
             });
           }
-          upcomingSection.appendChild(list);
-          content.appendChild(upcomingSection);
+          eventViewport.appendChild(list);
+          upcomingSection.appendChild(eventViewport);
+          aulaSection.appendChild(upcomingSection);
+          content.appendChild(aulaSection);
+          content.appendChild(createAfternoonSummarySection(model));
           branch.appendChild(content);
           if (shouldBlockRoomPanel_()) {
             branch.classList.add('monitor-readonly-branch');
@@ -855,7 +860,6 @@
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-2p', '2P'));
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-1p', '1P'));
           centerColumn.appendChild(ROOMS_UI.el('div', 'spine-node node-pt', 'PT'));
-          centerColumn.appendChild(createAfternoonSummaryPanel(state));
 
           rightColumn.appendChild(createFloorGroup(state, page, '2P', '2P_DX', '2P_SX'));
           rightColumn.appendChild(createFloorGroup(state, page, '1P', '1P_DX', '1P_SX'));
@@ -879,7 +883,49 @@
           fitShell.appendChild(canvas);
           root.appendChild(fitShell);
           applyFitScale();
-          window.requestAnimationFrame(applyFitScale);
+          configureAutoScrollAreas_();
+          window.requestAnimationFrame(function () {
+            applyFitScale();
+            configureAutoScrollAreas_();
+          });
+        }
+
+        function configureAutoScrollAreas_() {
+          Array.prototype.slice.call(document.querySelectorAll('.auto-scroll-viewport')).forEach(function (viewport) {
+            var track = viewport.querySelector('.auto-scroll-track');
+            var clones;
+            var originals;
+            var computedStyle;
+            var gap;
+            var distance;
+            if (!track) {
+              return;
+            }
+            viewport.classList.remove('is-auto-scrolling');
+            track.style.removeProperty('--auto-scroll-distance');
+            track.style.removeProperty('--auto-scroll-duration');
+            clones = Array.prototype.slice.call(track.querySelectorAll('.auto-scroll-clone'));
+            clones.forEach(function (clone) {
+              clone.parentNode.removeChild(clone);
+            });
+            distance = Math.max(0, track.scrollHeight - viewport.clientHeight);
+            if (distance <= 2) {
+              return;
+            }
+            originals = Array.prototype.slice.call(track.children);
+            originals.forEach(function (node) {
+              var clone = node.cloneNode(true);
+              clone.classList.add('auto-scroll-clone');
+              clone.setAttribute('aria-hidden', 'true');
+              track.appendChild(clone);
+            });
+            computedStyle = window.getComputedStyle ? window.getComputedStyle(track) : null;
+            gap = computedStyle ? Number(parseFloat(computedStyle.rowGap || computedStyle.gap || '0')) : 0;
+            distance = track.scrollHeight ? Math.ceil((track.scrollHeight - gap) / 2) : distance;
+            track.style.setProperty('--auto-scroll-distance', String(distance + gap) + 'px');
+            track.style.setProperty('--auto-scroll-duration', String(Math.max(24, Math.ceil((distance + gap) / 10))) + 's');
+            viewport.classList.add('is-auto-scrolling');
+          });
         }
 
         function renderBoardLoading_() {
