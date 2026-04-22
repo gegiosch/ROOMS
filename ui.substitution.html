@@ -6731,7 +6731,10 @@
           editingDraftId: '',
           dirty: false,
           initialized: false,
-          loading: false
+          loading: false,
+          loadPromise: null,
+          loadKey: '',
+          loadRequestToken: ''
         };
 
         function getPanelId_(tabId) {
@@ -6830,6 +6833,26 @@
           };
         }
 
+        function setAdminBookingControlsLoading_(loading) {
+          if (adminBookingLoadSlots) {
+            adminBookingLoadSlots.disabled = Boolean(loading);
+          }
+          if (adminBookingAddDraft) {
+            adminBookingAddDraft.disabled = Boolean(loading);
+          }
+        }
+
+        function showAdminBookingLoadingOptions_() {
+          if (!adminBookingState.initialized && adminBookingRoom) {
+            adminBookingRoom.innerHTML = '';
+            adminBookingRoom.appendChild(new Option('Caricamento aule...', ''));
+          }
+          if (!adminBookingState.initialized && adminBookingTeacher) {
+            adminBookingTeacher.innerHTML = '';
+            adminBookingTeacher.appendChild(new Option('Caricamento docenti...', ''));
+          }
+        }
+
         function populateAdminBookingOptions_() {
           var previousRoom = adminBookingRoom ? adminBookingRoom.value : '';
           var previousTeacher = adminBookingTeacher ? adminBookingTeacher.value : '';
@@ -6858,6 +6881,10 @@
           adminBookingState.model = nextModel || { date: '', resourceId: '', resources: [], teacherOptions: [], freeSlots: [] };
           adminBookingState.initialized = true;
           adminBookingState.loading = false;
+          adminBookingState.loadPromise = null;
+          adminBookingState.loadKey = '';
+          adminBookingState.loadRequestToken = '';
+          setAdminBookingControlsLoading_(false);
           if (adminBookingDate) {
             adminBookingDate.value = adminBookingState.model.date || getReplacementCurrentDate_() || getDefaultPanelDate_();
           }
@@ -6870,23 +6897,50 @@
           var settings = options || {};
           var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultPanelDate_());
           var targetRoom = adminBookingRoom && adminBookingRoom.value ? adminBookingRoom.value : '';
+          var loadKey = targetDate + '|' + targetRoom;
+          var requestToken = String(Date.now()) + ':' + String(Math.random());
+          if (adminBookingState.loading && adminBookingState.loadPromise && adminBookingState.loadKey === loadKey) {
+            return adminBookingState.loadPromise;
+          }
+          if (adminBookingDate && !adminBookingDate.value && targetDate) {
+            adminBookingDate.value = targetDate;
+          }
           adminBookingState.loading = true;
+          adminBookingState.loadKey = loadKey;
+          adminBookingState.loadRequestToken = requestToken;
+          setAdminBookingControlsLoading_(true);
+          showAdminBookingLoadingOptions_();
           if (!settings.preserveNotice) {
             setAdminBookingNotice_('Caricamento slot liberi...', '');
           }
           renderAdminBookingSlots_();
-          return ROOMS_UI.call('getAdminRoomBookingModel', targetDate, targetRoom)
+          adminBookingState.loadPromise = ROOMS_UI.call('getAdminRoomBookingModel', targetDate, targetRoom)
             .then(function (result) {
+              if (adminBookingState.loadRequestToken !== requestToken) {
+                return;
+              }
               applyAdminBookingModel_(result);
               if (!settings.preserveNotice) {
-                setAdminBookingNotice_('', '');
+                if (result && result.dateState && result.dateState.message) {
+                  setAdminBookingNotice_(result.dateState.message, result.dateState.autoShifted ? 'warn' : '');
+                } else {
+                  setAdminBookingNotice_('', '');
+                }
               }
             })
             .catch(function (error) {
+              if (adminBookingState.loadRequestToken !== requestToken) {
+                return;
+              }
               adminBookingState.loading = false;
+              adminBookingState.loadPromise = null;
+              adminBookingState.loadKey = '';
+              adminBookingState.loadRequestToken = '';
+              setAdminBookingControlsLoading_(false);
               renderAdminBookingSlots_();
               setAdminBookingNotice_('Errore caricamento prenotazioni aule: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
             });
+          return adminBookingState.loadPromise;
         }
 
         function renderAdminBookingSlots_() {
@@ -7905,6 +7959,7 @@
         setAbsenceMode_('DAY');
         clearAbsenceForm_(true);
         updateAbsenceDraftStatus_();
+        loadAdminBookingModel_({ preserveNotice: true });
         loadAbsenceRegistry_(getReplacementCurrentDate_() || '');
         activateTab_(activeTabId);
       }());

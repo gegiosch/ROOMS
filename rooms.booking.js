@@ -437,7 +437,9 @@ ROOMS_APP.Booking = {
 
   getAdminRoomBookingModel: function (dateString, resourceId) {
     var actor = this.requireAdminRoomBookingActor_();
-    var date = ROOMS_APP.toIsoDate(dateString || new Date());
+    var requestedDate = dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, actor));
+    var dateState = ROOMS_APP.Replacements.resolveSelectedDate_(requestedDate, true);
+    var date = dateState.selectedDate;
     var resources = ROOMS_APP.Board.listResources_().filter(function (resource) {
       return resource &&
         ROOMS_APP.asBoolean(resource.IsActive) &&
@@ -455,6 +457,7 @@ ROOMS_APP.Booking = {
       : null;
     return {
       date: date,
+      dateState: dateState,
       resourceId: selectedResourceId,
       resources: resources,
       freeSlots: roomModel && roomModel.freeSlots ? roomModel.freeSlots : [],

@@ -3189,11 +3189,45 @@ ROOMS_APP.Replacements = {
   },
 
   listTimetableTeacherDirectory_: function () {
-    return this.getDocentiTimetableDerivedData_().teacherDirectory.map(function (entry) {
+    var teacherMap = {};
+    this.getDocentiTimetableDerivedData_().teacherDirectory.concat(this.listSupportTeacherDirectory_()).forEach(function (entry) {
+      var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(entry && entry.teacherEmail);
+      var teacherName = ROOMS_APP.normalizeString(entry && entry.teacherName);
+      if (!teacherEmail) {
+        return;
+      }
+      teacherMap[teacherEmail] = {
+        teacherEmail: teacherEmail,
+        teacherName: teacherName || teacherEmail
+      };
+    });
+    return Object.keys(teacherMap).map(function (teacherEmail) {
+      return teacherMap[teacherEmail];
+    }).sort(function (left, right) {
+      return left.teacherName.localeCompare(right.teacherName);
+    }).map(function (entry) {
       return {
         teacherEmail: entry.teacherEmail,
         teacherName: entry.teacherName
       };
+    });
+  },
+
+  listSupportTeacherDirectory_: function () {
+    var supportMap = {};
+    this.listSupportTeacherEntries_().forEach(function (entry) {
+      if (!entry.teacherEmail) {
+        return;
+      }
+      supportMap[entry.teacherEmail] = {
+        teacherEmail: entry.teacherEmail,
+        teacherName: entry.teacherName || entry.teacherEmail
+      };
+    });
+    return Object.keys(supportMap).map(function (teacherEmail) {
+      return supportMap[teacherEmail];
+    }).sort(function (left, right) {
+      return left.teacherName.localeCompare(right.teacherName);
     });
   },
 
@@ -3988,7 +4022,6 @@ ROOMS_APP.Replacements = {
     var baseRegistry = this.getDocentiTimetableDerivedData_().tripRegistry;
     var output = {};
     var self = this;
-    var supportRows;
     Object.keys(baseRegistry.byClass || {}).forEach(function (classCode) {
       output[classCode] = (baseRegistry.byClass[classCode] || []).map(function (entry) {
         return {
@@ -3998,17 +4031,14 @@ ROOMS_APP.Replacements = {
       });
     });
 
-    supportRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO);
-    supportRows.forEach(function (row) {
-      var teacherName = ROOMS_APP.normalizeString((row.Cognome || '') + ' ' + (row.Nome || '')).replace(/\s+/g, ' ').trim();
-      var teacherEmail = self.buildTeacherSyntheticEmail_(teacherName);
-      if (!teacherEmail) {
+    this.listSupportTeacherEntries_().forEach(function (entry) {
+      if (!entry.teacherEmail) {
         return;
       }
-      self.parseSupportTeacherClassCodes_(row.classi).forEach(function (classCode) {
+      entry.classCodes.forEach(function (classCode) {
         self.addTripTeacherOption_(output, classCode, {
-          teacherEmail: teacherEmail,
-          teacherName: teacherName
+          teacherEmail: entry.teacherEmail,
+          teacherName: entry.teacherName
         });
       });
     });
@@ -4021,6 +4051,35 @@ ROOMS_APP.Replacements = {
     return {
       byClass: output,
       classOptions: Object.keys(output).sort()
+    };
+  },
+
+  listSupportTeacherEntries_: function () {
+    var self = this;
+    return ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO).map(function (row) {
+      return self.normalizeSupportTeacherRow_(row);
+    }).filter(function (entry) {
+      return Boolean(entry && entry.teacherEmail);
+    });
+  },
+
+  normalizeSupportTeacherRow_: function (row) {
+    var surname = ROOMS_APP.normalizeString(row && (row.Cognome || row.cognome || row.Surname || row.surname));
+    var firstName = ROOMS_APP.normalizeString(row && (row.Nome || row.nome || row.Name || row.name));
+    var teacherName = ROOMS_APP.normalizeString(
+      (surname || firstName)
+        ? (surname + ' ' + firstName)
+        : (row && (row.TeacherName || row.teacherName || row.Docente || row.docente))
+    ).replace(/\s+/g, ' ').trim();
+    var teacherEmail = this.normalizeTeacherEmail_(row && (row.TeacherEmail || row.teacherEmail || row.Email || row.email)) ||
+      this.buildTeacherSyntheticEmail_(teacherName);
+    if (!teacherEmail) {
+      return null;
+    }
+    return {
+      teacherEmail: teacherEmail,
+      teacherName: teacherName || teacherEmail,
+      classCodes: this.parseSupportTeacherClassCodes_(row && (row.classi || row.Classi || row.Classes || row.classes || row.ClassCodes || row.classCodes))
     };
   },
 
