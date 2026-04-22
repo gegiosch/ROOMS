@@ -464,7 +464,7 @@ ROOMS_APP.Booking = {
       bookings: roomModel && roomModel.bookings ? roomModel.bookings : [],
       isOpen: roomModel ? Boolean(roomModel.isOpen) : false,
       statusSummary: roomModel ? (roomModel.statusSummary || '') : '',
-      teacherOptions: ROOMS_APP.Replacements.listTimetableTeacherDirectory_(),
+      teacherOptions: ROOMS_APP.Replacements.listAdminTeacherDirectory_(),
       user: actor
     };
   },

@@ -129,7 +129,7 @@ ROOMS_APP.Replacements = {
     var rows;
     this.ensureSchema_();
     dateState = this.resolveSelectedDate_(referenceDate || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()), true);
-    teacherOptions = this.listTimetableTeacherDirectory_();
+    teacherOptions = this.listAdminTeacherDirectory_();
     rows = this.listAbsenceRows_();
     return {
       ok: true,
@@ -1156,7 +1156,7 @@ ROOMS_APP.Replacements = {
       reportStatus: this.getLatestReportStatus_(targetDate),
       recipients: this.getRecipients_(),
       longAssignments: includeEditorData ? this.buildLongAssignmentsList_() : [],
-      longTeacherOptions: includeEditorData ? this.listTimetableTeacherDirectory_() : [],
+      longTeacherOptions: includeEditorData ? this.listAdminTeacherDirectory_() : [],
       trips: includeEditorData ? allTrips : [],
       tripClassOptions: tripTeacherRegistry.classOptions,
       tripTeacherOptionsByClass: tripTeacherRegistry.byClass,
@@ -3189,6 +3189,10 @@ ROOMS_APP.Replacements = {
   },
 
   listTimetableTeacherDirectory_: function () {
+    return this.listAdminTeacherDirectory_();
+  },
+
+  listAdminTeacherDirectory_: function () {
     var teacherMap = {};
     this.getDocentiTimetableDerivedData_().teacherDirectory.concat(this.listSupportTeacherDirectory_()).forEach(function (entry) {
       var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(entry && entry.teacherEmail);
