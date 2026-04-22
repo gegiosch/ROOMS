@@ -865,12 +865,13 @@
           rightColumn.appendChild(createFloorGroup(state, page, '1P', '1P_DX', '1P_SX'));
           rightColumn.appendChild(createBranchPanel(state, page, 'PT', 'right pt', getBranchLabel(state, 'PT')));
 
+          var labBlock = ROOMS_UI.el('div', 'lab-block');
+          labBlock.appendChild(createBranchPanel(state, page, 'LAB', 'lab', getBranchLabel(state, 'LAB')));
+          rightColumn.appendChild(labBlock);
+
           treeShell.appendChild(leftColumn);
           treeShell.appendChild(centerColumn);
           treeShell.appendChild(rightColumn);
-
-          var labBlock = ROOMS_UI.el('div', 'lab-block');
-          labBlock.appendChild(createBranchPanel(state, page, 'LAB', 'lab', getBranchLabel(state, 'LAB')));
 
           var fitShell = ROOMS_UI.el('div', 'board-fit-shell');
           fitShell.id = 'board-fit-shell';
@@ -879,7 +880,6 @@
           canvas.dataset.baseWidth = '1800';
           canvas.dataset.baseHeight = '760';
           canvas.appendChild(treeShell);
-          canvas.appendChild(labBlock);
           fitShell.appendChild(canvas);
           root.appendChild(fitShell);
           applyFitScale();

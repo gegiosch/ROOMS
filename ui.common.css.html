@@ -446,7 +446,6 @@ body.board-monitor #board-root {
 }
 
 .board-shell.fullscreen-active .board-canvas {
-  grid-template-rows: auto auto;
   gap: 12px;
 }
 
@@ -460,7 +459,6 @@ body.board-monitor #board-root {
 }
 
 .board-shell.fullscreen-active.fullscreen-compact .board-canvas {
-  grid-template-rows: auto auto;
   gap: 10px;
 }
 
@@ -1374,7 +1372,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
   height: 760px;
   transform-origin: top center;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto;
   gap: 10px;
 }
 
@@ -1408,16 +1406,16 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 .tree-center-column {
   position: relative;
   height: 470px;
-  --spine-node-2p-top: 62px;
-  --spine-node-1p-top: 214px;
-  --spine-node-pt-top: 366px;
+  --spine-node-2p-top: 78px;
+  --spine-node-1p-top: 254px;
+  --spine-node-pt-top: 396px;
 }
 
 .tree-spine {
   position: absolute;
   left: 50%;
-  top: 86px;
-  height: 305px;
+  top: var(--spine-node-2p-top);
+  height: calc(var(--spine-node-pt-top) - var(--spine-node-2p-top));
   width: 4px;
   transform: translateX(-50%);
   border-radius: 999px;
@@ -1427,7 +1425,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 .spine-node {
   position: absolute;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   padding: 4px 7px;
   border-radius: 999px;
   border: 1px solid rgba(96, 165, 250, 0.45);
@@ -1462,6 +1460,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 
 .tree-right-column {
   padding-top: 8px;
+  gap: 10px;
 }
 
 .floor-group {
@@ -1531,7 +1530,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 }
 
 .branch-panel.branch-pt {
-  margin-top: 12px;
+  margin-top: 6px;
 }
 
 .branch-panel.branch-pt::before {
@@ -1577,17 +1576,16 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 }
 
 .lab-block {
-  grid-row: 2;
   margin-top: 2px;
 }
 
 .lab-block .branch-panel {
-  padding: 8px;
+  padding: 7px;
 }
 
 .lab-block .branch-tiles {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 7px;
 }
 
 .room-tile {
