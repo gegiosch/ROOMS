@@ -506,6 +506,7 @@ body.board-monitor #board-root {
 }
 
 .board-shell.monitor-mode .aula-magna-special {
+  height: calc(470px * var(--monitor-ui-scale));
   min-height: calc(470px * var(--monitor-ui-scale));
 }
 
@@ -515,6 +516,7 @@ body.board-monitor #board-root {
 
 .board-shell.monitor-mode .aula-magna-current-time,
 .board-shell.monitor-mode .aula-magna-event-line,
+.board-shell.monitor-mode .afternoon-summary-line,
 .board-shell.monitor-mode .aula-magna-empty {
   font-size: calc(12px * var(--monitor-ui-scale));
 }
@@ -533,6 +535,8 @@ body.board-monitor #board-root {
 }
 
 .branch-panel.aula-magna-special {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 470px;
   min-height: 470px;
   padding: 10px;
   gap: 10px;
@@ -545,7 +549,8 @@ body.board-monitor #board-root {
   display: grid;
   grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
-  min-height: 410px;
+  height: 100%;
+  min-height: 0;
 }
 
 .service-block-section {
@@ -553,6 +558,7 @@ body.board-monitor #board-root {
   display: grid;
   gap: 8px;
   padding-top: 2px;
+  overflow: hidden;
 }
 
 .aula-magna-main-section {
@@ -595,6 +601,7 @@ body.board-monitor #board-root {
 }
 
 .auto-scroll-viewport {
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   position: relative;
@@ -631,6 +638,9 @@ body.board-monitor #board-root {
   border-radius: 6px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .aula-magna-empty {
@@ -640,16 +650,19 @@ body.board-monitor #board-root {
 
 .afternoon-summary-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .afternoon-summary-line {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 4px 8px;
-  align-items: start;
-  padding: 7px 0;
+  grid-template-columns: max-content minmax(0, 1fr) minmax(84px, 0.45fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 5px 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .afternoon-summary-line:last-child {
@@ -658,21 +671,25 @@ body.board-monitor #board-root {
 
 .afternoon-summary-time {
   color: #7dd3fc;
-  font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .afternoon-summary-main {
   min-width: 0;
   color: #e5e7eb;
-  font-size: 12px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .afternoon-summary-actor {
-  grid-column: 2;
+  min-width: 0;
   color: #cbd5e1;
-  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .board-loading-state {
