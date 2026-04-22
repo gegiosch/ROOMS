@@ -14,10 +14,10 @@ Mod.Substitution = {
     });
 
     return renderTemplate_('ui.substitution', {
-      pageTitle: 'Sostituzioni',
+      pageTitle: 'Amministrazione',
       shellModelJson: JSON.stringify({
-        title: 'Sostituzioni',
-        subtitle: 'Modulo unificato delle sostituzioni.',
+        title: 'Amministrazione',
+        subtitle: 'Modulo operativo per sostituzioni, assenze e prenotazioni.',
         user: actor
       }),
       initialModelJson: JSON.stringify(dailyBootstrap),

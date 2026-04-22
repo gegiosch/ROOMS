@@ -435,6 +435,266 @@ ROOMS_APP.Booking = {
     return this.getRoomViewModel(targetResourceId, targetDate);
   },
 
+  getAdminRoomBookingModel: function (dateString, resourceId) {
+    var actor = this.requireAdminRoomBookingActor_();
+    var date = ROOMS_APP.toIsoDate(dateString || new Date());
+    var resources = ROOMS_APP.Board.listResources_().filter(function (resource) {
+      return resource &&
+        ROOMS_APP.asBoolean(resource.IsActive) &&
+        ROOMS_APP.asBoolean(resource.IsBookable) &&
+        ROOMS_APP.slugify(resource.DisplayName || '') !== 'aula_magna';
+    }).map(function (resource) {
+      return {
+        resourceId: resource.ResourceId,
+        displayName: resource.DisplayName || resource.ResourceId
+      };
+    });
+    var selectedResourceId = ROOMS_APP.normalizeString(resourceId || (resources[0] && resources[0].resourceId) || '');
+    var roomModel = selectedResourceId
+      ? this.getRoomViewModel(selectedResourceId, date, { splitFreeSlotsHalfHour: true })
+      : null;
+    return {
+      date: date,
+      resourceId: selectedResourceId,
+      resources: resources,
+      freeSlots: roomModel && roomModel.freeSlots ? roomModel.freeSlots : [],
+      bookings: roomModel && roomModel.bookings ? roomModel.bookings : [],
+      isOpen: roomModel ? Boolean(roomModel.isOpen) : false,
+      statusSummary: roomModel ? (roomModel.statusSummary || '') : '',
+      teacherOptions: ROOMS_APP.Replacements.listTimetableTeacherDirectory_(),
+      user: actor
+    };
+  },
+
+  saveAdminRoomBookingRegistry: function (draftRows) {
+    var actor = this.requireAdminRoomBookingActor_();
+    if (!actor.canBook) {
+      throw new Error('Booking permission required.');
+    }
+    var self = this;
+    var rows = (Array.isArray(draftRows) ? draftRows : []).map(function (row, index) {
+      var teacherName = ROOMS_APP.normalizeString(row && (row.teacherName || row.bookerName || row.BookerName));
+      var parsedName = self.parseAdminBookingTeacherName_(teacherName);
+      return {
+        draftId: ROOMS_APP.normalizeString(row && row.draftId) || ('row-' + String(index + 1)),
+        resourceId: ROOMS_APP.normalizeString(row && (row.resourceId || row.ResourceId)),
+        bookingDate: ROOMS_APP.toIsoDate(row && (row.bookingDate || row.date || row.BookingDate)),
+        startTime: ROOMS_APP.toTimeString(row && (row.startTime || row.StartTime)),
+        endTime: ROOMS_APP.toTimeString(row && (row.endTime || row.EndTime)),
+        title: ROOMS_APP.normalizeString(row && (row.title || row.Title)),
+        activityDescription: ROOMS_APP.normalizeString(row && (row.activityDescription || row.ActivityDescription)),
+        notes: ROOMS_APP.normalizeString(row && (row.notes || row.Notes)),
+        bookerName: ROOMS_APP.normalizeString(row && (row.bookerName || row.BookerName)) || parsedName.firstName,
+        bookerSurname: ROOMS_APP.normalizeString(row && (row.bookerSurname || row.BookerSurname)) || parsedName.surname,
+        teacherEmail: ROOMS_APP.normalizeEmail(row && row.teacherEmail)
+      };
+    });
+    var result = {
+      savedCount: 0,
+      failedCount: 0,
+      saved: [],
+      failed: []
+    };
+    if (!rows.length) {
+      return result;
+    }
+
+    result = this.withBookingLock_(function () {
+      var workingRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS);
+      var rowsToAppend = [];
+      var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+      var timetableCache = {};
+      var validationContext = {
+        resourceMap: self.buildAdminBookingResourceMap_(),
+        openingCache: {},
+        closureRows: ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.CLOSURES)
+      };
+      var saved = [];
+      var failed = [];
+
+      rows.forEach(function (row) {
+        var validation;
+        var bookingId;
+        var seriesId;
+        var booking;
+        try {
+          validation = self.validateAdminBookingDraftRow_(row, actor, workingRows, timetableCache, validationContext);
+          bookingId = Utilities.getUuid();
+          seriesId = '';
+          booking = self.buildBookingFromValidation_(bookingId, seriesId, validation, actor, nowIso, null);
+          workingRows.push(booking);
+          rowsToAppend.push(booking);
+          saved.push({
+            draftId: row.draftId,
+            bookingId: bookingId
+          });
+        } catch (error) {
+          failed.push({
+            draftId: row.draftId,
+            message: String(error && error.message ? error.message : error)
+          });
+        }
+      });
+
+      if (rowsToAppend.length) {
+        ROOMS_APP.DB.appendRows(ROOMS_APP.SHEET_NAMES.BOOKINGS, rowsToAppend);
+      }
+
+      return {
+        savedCount: saved.length,
+        failedCount: failed.length,
+        saved: saved,
+        failed: failed
+      };
+    });
+
+    this.writeAudit_('ADMIN_ROOM_BOOKING_BATCH', '', '', '', actor.email, result.failedCount ? 'PARTIAL' : 'OK', {
+      requestedCount: rows.length,
+      savedCount: result.savedCount,
+      failedCount: result.failedCount
+    });
+    return result;
+  },
+
+  requireAdminRoomBookingActor_: function () {
+    var actor = ROOMS_APP.Auth.getUserContext();
+    ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+    if (!actor.canAccessAdmin && !actor.canManageReplacement) {
+      throw new Error('Admin access required.');
+    }
+    return actor;
+  },
+
+  validateAdminBookingDraftRow_: function (row, actor, workingRows, timetableCache, validationContext) {
+    var context = validationContext || {};
+    var errors = [];
+    var resource = context.resourceMap ? context.resourceMap[row.resourceId] : ROOMS_APP.Policy.getResource(row.resourceId);
+    var openingKey = [row.resourceId, row.bookingDate].join('|');
+    var opening;
+    var closure;
+    if (!row.resourceId || !row.bookingDate || !row.startTime || !row.endTime) {
+      errors.push('Aula, data e orario sono obbligatori.');
+    }
+    if (!row.bookerName && !row.bookerSurname) {
+      errors.push('Seleziona il docente/richiedente.');
+    }
+    if (!row.activityDescription) {
+      errors.push('Descrizione attività obbligatoria.');
+    }
+    if (!resource || !ROOMS_APP.asBoolean(resource.IsActive) || !ROOMS_APP.asBoolean(resource.IsBookable)) {
+      errors.push('Aula non prenotabile.');
+    }
+    if (resource && ROOMS_APP.slugify(resource.DisplayName || '') === 'aula_magna') {
+      errors.push('Aula Magna è gestita tramite eventi dedicati.');
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.bookingDate || '')) {
+      errors.push('Formato data non valido.');
+    }
+    if (!/^\d{2}:\d{2}$/.test(row.startTime || '') || !/^\d{2}:\d{2}$/.test(row.endTime || '')) {
+      errors.push('Formato orario non valido.');
+    }
+    if (row.startTime >= row.endTime) {
+      errors.push('Ora fine precedente o uguale all\'inizio.');
+    }
+    if (errors.length) {
+      throw new Error(errors.join(' '));
+    }
+
+    context.openingCache = context.openingCache || {};
+    if (!Object.prototype.hasOwnProperty.call(context.openingCache, openingKey)) {
+      context.openingCache[openingKey] = ROOMS_APP.Policy.getEffectiveOpeningForResource(row.resourceId, row.bookingDate);
+    }
+    opening = context.openingCache[openingKey];
+    if (!opening.isOpen || row.startTime < opening.openTime || row.endTime > opening.closeTime) {
+      throw new Error('Slot non disponibile nella finestra di apertura dell\'aula.');
+    }
+    closure = this.findAdminBlockingClosure_(context.closureRows, row.bookingDate, row.startTime, row.endTime);
+    if (closure) {
+      throw new Error('Slot non disponibile per chiusura: ' + (closure.Label || 'chiusura'));
+    }
+    if (
+      this.hasConflictInRows_(workingRows, row.resourceId, row.bookingDate, row.startTime, row.endTime, '') ||
+      this.hasAdminTimetableConflict_(row.resourceId, row.bookingDate, row.startTime, row.endTime, timetableCache)
+    ) {
+      throw new Error('Slot non più disponibile al momento del salvataggio.');
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      normalized: {
+        resourceId: row.resourceId,
+        bookingDate: row.bookingDate,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        title: row.title || (resource.DisplayName || row.resourceId),
+        activityDescription: row.activityDescription,
+        notes: row.notes,
+        bookerName: row.bookerName,
+        bookerSurname: row.bookerSurname,
+        seriesId: '',
+        bookingId: ''
+      },
+      resource: resource,
+      actor: actor
+    };
+  },
+
+  hasAdminTimetableConflict_: function (resourceId, bookingDate, startTime, endTime, timetableCache) {
+    var key = [resourceId, bookingDate].join('|');
+    var cache = timetableCache || {};
+    if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+      cache[key] = ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, bookingDate).filter(function (occupancy) {
+        return ROOMS_APP.Timetable.isBlockingOccurrence(occupancy);
+      });
+    }
+    return (cache[key] || []).some(function (occupancy) {
+      return !(endTime <= occupancy.StartTime || startTime >= occupancy.EndTime);
+    });
+  },
+
+  buildAdminBookingResourceMap_: function () {
+    var output = {};
+    ROOMS_APP.Board.listResources_().forEach(function (resource) {
+      if (resource && resource.ResourceId) {
+        output[resource.ResourceId] = resource;
+      }
+    });
+    return output;
+  },
+
+  findAdminBlockingClosure_: function (closureRows, dateString, startTime, endTime) {
+    return (closureRows || []).filter(function (closure) {
+      var closureStart;
+      var closureEnd;
+      if (!ROOMS_APP.asBoolean(closure && closure.IsBlocked)) {
+        return false;
+      }
+      if (closure.StartDate > dateString || closure.EndDate < dateString) {
+        return false;
+      }
+      closureStart = closure.StartTime || '00:00';
+      closureEnd = closure.EndTime || '23:59';
+      return !(endTime <= closureStart || startTime >= closureEnd);
+    })[0] || null;
+  },
+
+  parseAdminBookingTeacherName_: function (value) {
+    var tokens = ROOMS_APP.normalizeString(value).split(/\s+/).filter(function (token) {
+      return Boolean(token);
+    });
+    if (!tokens.length) {
+      return { firstName: '', surname: '' };
+    }
+    if (tokens.length === 1) {
+      return { firstName: '', surname: tokens[0] };
+    }
+    return {
+      surname: tokens[0],
+      firstName: tokens.slice(1).join(' ')
+    };
+  },
+
   buildRoomFallbackModel_: function (requestedResourceId, dateString, errorMessage) {
     var roomConfig = this.getRoomConfig_();
     var user = ROOMS_APP.Auth.getUserContext();

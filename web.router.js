@@ -242,6 +242,18 @@ function applyRoomPanelChanges(resourceId, dateString, changes, requestContext) 
   });
 }
 
+function getAdminRoomBookingModel(dateString, resourceId, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.getAdminRoomBookingModel(dateString, resourceId);
+  });
+}
+
+function saveAdminRoomBookingRegistry(rows, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.saveAdminRoomBookingRegistry(rows || []);
+  });
+}
+
 function getReplacementModalModel(dateString, draft, options, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.Replacements.getModalModel(dateString, draft, options);
@@ -527,6 +539,12 @@ function routeApiRequest_(payload) {
       payload.date,
       payload.changes || payload
     );
+  }
+  if (action === 'getAdminRoomBookingModel') {
+    return ROOMS_APP.Booking.getAdminRoomBookingModel(payload.date, normalizeRoomIdParam_(payload));
+  }
+  if (action === 'saveAdminRoomBookingRegistry') {
+    return ROOMS_APP.Booking.saveAdminRoomBookingRegistry(payload.rows || payload.draftRows || []);
   }
   if (action === 'getReplacementModalModel') {
     return ROOMS_APP.Replacements.getModalModel(payload.date, payload.draft, payload.options || {});
