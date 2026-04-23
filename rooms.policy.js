@@ -1,6 +1,10 @@
 var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.Policy = {
+  normalizeBookingDisplayMode_: function (value) {
+    return String(value || '').toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
+  },
+
   getResource: function (resourceId) {
     var resources = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.RESOURCES);
     return resources.filter(function (row) {
@@ -185,6 +189,7 @@ ROOMS_APP.Policy = {
       endTime: ROOMS_APP.toTimeString(request.endTime || request.EndTime),
       title: ROOMS_APP.normalizeString(request.title || request.Title),
       activityDescription: ROOMS_APP.normalizeString(request.activityDescription || request.ActivityDescription),
+      displayMode: this.normalizeBookingDisplayMode_(request.displayMode || request.DisplayMode),
       notes: ROOMS_APP.normalizeString(request.notes || request.Notes),
       bookerName: ROOMS_APP.normalizeString(request.bookerName || request.BookerName),
       bookerSurname: ROOMS_APP.normalizeString(request.bookerSurname || request.BookerSurname),

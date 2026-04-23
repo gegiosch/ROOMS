@@ -732,6 +732,17 @@
                       <input id="admin-booking-notes" class="input" type="text" placeholder="Note opzionali">
                     </div>
                   </div>
+                  <div class="substitution-absence-inline" style="margin-top:12px;">
+                    <span class="substitution-absence-section-title" style="margin:0 12px 0 0;">Visualizza su monitor</span>
+                    <label class="substitution-absence-check" for="admin-booking-display-teacher">
+                      <input id="admin-booking-display-teacher" name="admin-booking-display-mode" type="radio" value="TEACHER" checked>
+                      <span>Mostra docente</span>
+                    </label>
+                    <label class="substitution-absence-check" for="admin-booking-display-activity">
+                      <input id="admin-booking-display-activity" name="admin-booking-display-mode" type="radio" value="ACTIVITY">
+                      <span>Mostra attività</span>
+                    </label>
+                  </div>
                   <div style="margin-top:14px;">
                     <div class="substitution-absence-section-title">Slot del giorno ancora disponibili</div>
                     <div id="admin-booking-slots" class="admin-booking-slots"></div>
@@ -6821,6 +6832,8 @@
         var adminBookingTeacher = document.getElementById('admin-booking-teacher');
         var adminBookingActivity = document.getElementById('admin-booking-activity');
         var adminBookingNotes = document.getElementById('admin-booking-notes');
+        var adminBookingDisplayTeacher = document.getElementById('admin-booking-display-teacher');
+        var adminBookingDisplayActivity = document.getElementById('admin-booking-display-activity');
         var adminBookingLoadSlots = document.getElementById('admin-booking-load-slots');
         var adminBookingSplitHalfHour = document.getElementById('admin-booking-split-half-hour');
         var adminBookingSlots = document.getElementById('admin-booking-slots');
@@ -6862,6 +6875,7 @@
           loadPromise: null,
           loadKey: '',
           loadRequestToken: '',
+          selectedSlotKeys: {},
           splitFreeSlotsHalfHour: false,
           status: 'idle',
           errorMessage: ''
@@ -6955,11 +6969,28 @@
         }
 
         function getAdminBookingSelectedSlotKeys_() {
-          return Array.prototype.slice.call(document.querySelectorAll('[data-admin-booking-slot]')).filter(function (input) {
-            return input.checked;
-          }).map(function (input) {
-            return input.getAttribute('data-admin-booking-slot');
+          return Object.keys(adminBookingState.selectedSlotKeys || {}).filter(function (slotKey) {
+            return Boolean(adminBookingState.selectedSlotKeys[slotKey]);
           });
+        }
+
+        function clearAdminBookingSelectedSlots_() {
+          adminBookingState.selectedSlotKeys = {};
+        }
+
+        function syncAdminBookingSlotSelection_(slotKey, checked) {
+          var key = String(slotKey || '');
+          if (!key) {
+            return;
+          }
+          if (!adminBookingState.selectedSlotKeys) {
+            adminBookingState.selectedSlotKeys = {};
+          }
+          if (checked) {
+            adminBookingState.selectedSlotKeys[key] = true;
+          } else {
+            delete adminBookingState.selectedSlotKeys[key];
+          }
         }
 
         function getAdminBookingSlotKey_(slot) {
@@ -6982,6 +7013,27 @@
             teacherEmail: adminBookingTeacher ? adminBookingTeacher.value : '',
             teacherName: option ? option.textContent : ''
           };
+        }
+
+        function getAdminBookingDisplayMode_() {
+          if (adminBookingDisplayActivity && adminBookingDisplayActivity.checked) {
+            return 'ACTIVITY';
+          }
+          return 'TEACHER';
+        }
+
+        function setAdminBookingDisplayMode_(mode) {
+          var normalized = String(mode || '').toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
+          if (adminBookingDisplayTeacher) {
+            adminBookingDisplayTeacher.checked = normalized === 'TEACHER';
+          }
+          if (adminBookingDisplayActivity) {
+            adminBookingDisplayActivity.checked = normalized === 'ACTIVITY';
+          }
+        }
+
+        function getAdminBookingDisplayModeLabel_(mode) {
+          return String(mode || '').toUpperCase() === 'ACTIVITY' ? 'Attività' : 'Docente';
         }
 
         function setAdminBookingControlsLoading_(loading) {
@@ -7202,6 +7254,7 @@
         function renderAdminBookingSlots_() {
           var selectedDraftId = adminBookingState.editingDraftId || '';
           var occupiedDraftKeys = {};
+          var availableSlotKeys = {};
           if (!adminBookingSlots) {
             return;
           }
@@ -7229,6 +7282,14 @@
             ].join('|');
             return !occupiedDraftKeys[key];
           });
+          freeSlots.forEach(function (slot) {
+            availableSlotKeys[getAdminBookingSlotKey_(slot)] = true;
+          });
+          Object.keys(adminBookingState.selectedSlotKeys || {}).forEach(function (slotKey) {
+            if (!availableSlotKeys[slotKey]) {
+              delete adminBookingState.selectedSlotKeys[slotKey];
+            }
+          });
           if (!freeSlots.length) {
             adminBookingSlots.appendChild(ROOMS_UI.el('div', 'substitution-absence-empty', adminBookingState.model && adminBookingState.model.isOpen === false ? 'Aula non disponibile nella data selezionata.' : 'Nessuno slot libero disponibile.'));
             return;
@@ -7237,9 +7298,14 @@
             var label = document.createElement('label');
             var input = document.createElement('input');
             var text = document.createElement('span');
+            var slotKey = getAdminBookingSlotKey_(slot);
             label.className = 'admin-booking-slot-chip';
             input.type = 'checkbox';
-            input.setAttribute('data-admin-booking-slot', getAdminBookingSlotKey_(slot));
+            input.checked = Boolean(adminBookingState.selectedSlotKeys && adminBookingState.selectedSlotKeys[slotKey]);
+            input.setAttribute('data-admin-booking-slot', slotKey);
+            input.addEventListener('change', function () {
+              syncAdminBookingSlotSelection_(slotKey, input.checked);
+            });
             text.textContent = (slot.startTime || '') + ' - ' + (slot.endTime || '');
             label.appendChild(input);
             label.appendChild(text);
@@ -7262,6 +7328,8 @@
           if (adminBookingNotes) {
             adminBookingNotes.value = '';
           }
+          clearAdminBookingSelectedSlots_();
+          setAdminBookingDisplayMode_('TEACHER');
           adminBookingState.editingDraftId = '';
           renderAdminBookingSlots_();
         }
@@ -7271,8 +7339,9 @@
           var selectedKeys = getAdminBookingSelectedSlotKeys_();
           var date = adminBookingDate ? adminBookingDate.value : '';
           var resourceId = adminBookingRoom ? adminBookingRoom.value : '';
-          var activityDescription = adminBookingActivity ? adminBookingActivity.value : '';
+          var activityDescription = adminBookingActivity ? String(adminBookingActivity.value || '').trim() : '';
           var notes = adminBookingNotes ? adminBookingNotes.value : '';
+          var displayMode = getAdminBookingDisplayMode_();
           var parsedTeacher = parseFullNameLocal_(teacher.teacherName);
           var rowsToAdd = [];
           if (!date || !resourceId || !teacher.teacherEmail || !activityDescription || !selectedKeys.length) {
@@ -7296,10 +7365,15 @@
               bookerName: parsedTeacher.firstName,
               bookerSurname: parsedTeacher.surname,
               activityDescription: activityDescription,
+              displayMode: displayMode,
               notes: notes,
               error: ''
             });
           });
+          if (!rowsToAdd.length) {
+            setAdminBookingNotice_('Seleziona almeno uno slot libero valido prima di aggiungere la bozza.', 'error');
+            return;
+          }
           if (adminBookingState.editingDraftId) {
             adminBookingState.draftRows = adminBookingState.draftRows.filter(function (row) {
               return row.draftId !== adminBookingState.editingDraftId;
@@ -7337,10 +7411,14 @@
           if (adminBookingNotes) {
             adminBookingNotes.value = row.notes || '';
           }
+          setAdminBookingDisplayMode_(row.displayMode || 'TEACHER');
           loadAdminBookingModel_().then(function () {
-            Array.prototype.slice.call(document.querySelectorAll('[data-admin-booking-slot]')).forEach(function (input) {
-              input.checked = input.getAttribute('data-admin-booking-slot') === getAdminBookingSlotKey_({ startTime: row.startTime, endTime: row.endTime });
-            });
+            clearAdminBookingSelectedSlots_();
+            syncAdminBookingSlotSelection_(getAdminBookingSlotKey_({
+              startTime: row.startTime,
+              endTime: row.endTime
+            }), true);
+            renderAdminBookingSlots_();
           });
         }
 
@@ -7381,7 +7459,7 @@
         function renderAdminBookingDraft_() {
           renderTable(
             'admin-booking-draft-table',
-            ['Data', 'Aula', 'Orario', 'Docente', 'Descrizione attività', 'Stato', 'Azioni'],
+            ['Data', 'Aula', 'Orario', 'Docente', 'Descrizione attività', 'Visualizza', 'Stato', 'Azioni'],
             safeArray(adminBookingState.draftRows).map(function (row) {
               var actions = document.createElement('div');
               var edit = document.createElement('button');
@@ -7412,6 +7490,7 @@
                 (row.startTime || '') + ' - ' + (row.endTime || ''),
                 row.teacherName || '-',
                 row.activityDescription || '-',
+                getAdminBookingDisplayModeLabel_(row.displayMode),
                 status,
                 actions
               ];

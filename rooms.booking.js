@@ -4,6 +4,28 @@ ROOMS_APP.Booking = {
   SLOT_TAKEN_MESSAGE_: 'Lo slot non è più disponibile. Aggiorna la disponibilità dell’aula.',
   AULA_MAGNA_RESOURCE_ID_: 'AULA_MAGNA',
 
+  normalizeDisplayMode_: function (value) {
+    return String(value || '').toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
+  },
+
+  getBookingDisplayLabel_: function (booking) {
+    var displayMode = this.normalizeDisplayMode_(booking && (booking.DisplayMode || booking.displayMode));
+    var actorLabel = ROOMS_APP.normalizeString([
+      ROOMS_APP.normalizeString(booking && (booking.BookerSurname || booking.bookerSurname)),
+      ROOMS_APP.normalizeString(booking && (booking.BookerName || booking.bookerName))
+    ].filter(function (token) {
+      return Boolean(token);
+    }).join(' '));
+    var activityLabel = ROOMS_APP.normalizeString(
+      (booking && (booking.ActivityDescription || booking.activityDescription)) ||
+      (booking && (booking.Title || booking.title))
+    );
+    if (displayMode === 'ACTIVITY' && activityLabel) {
+      return activityLabel;
+    }
+    return actorLabel || activityLabel || ROOMS_APP.normalizeString(booking && (booking.BookerEmail || booking.bookerEmail)) || 'N/D';
+  },
+
   listBookingsForDay: function (resourceId, dateString) {
     var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
       return row.ResourceId === resourceId &&
@@ -107,6 +129,7 @@ ROOMS_APP.Booking = {
       endTime: Object.prototype.hasOwnProperty.call(payload, 'endTime') ? payload.endTime : existing.EndTime,
       title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : existing.Title,
       activityDescription: Object.prototype.hasOwnProperty.call(payload, 'activityDescription') ? payload.activityDescription : existing.ActivityDescription,
+      displayMode: Object.prototype.hasOwnProperty.call(payload, 'displayMode') ? payload.displayMode : existing.DisplayMode,
       notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : existing.Notes,
       bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : existing.BookerName,
       bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : existing.BookerSurname
@@ -267,6 +290,7 @@ ROOMS_APP.Booking = {
             endTime: occurrence.EndTime,
             title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : occurrence.Title,
             activityDescription: Object.prototype.hasOwnProperty.call(payload, 'activityDescription') ? payload.activityDescription : occurrence.ActivityDescription,
+            displayMode: Object.prototype.hasOwnProperty.call(payload, 'displayMode') ? payload.displayMode : occurrence.DisplayMode,
             notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : occurrence.Notes,
             bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : occurrence.BookerName,
             bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : occurrence.BookerSurname
@@ -340,6 +364,7 @@ ROOMS_APP.Booking = {
             endTime: Object.prototype.hasOwnProperty.call(payload, 'endTime') ? payload.endTime : existing.EndTime,
             title: Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : existing.Title,
             activityDescription: Object.prototype.hasOwnProperty.call(payload, 'activityDescription') ? payload.activityDescription : existing.ActivityDescription,
+            displayMode: Object.prototype.hasOwnProperty.call(payload, 'displayMode') ? payload.displayMode : existing.DisplayMode,
             notes: Object.prototype.hasOwnProperty.call(payload, 'notes') ? payload.notes : existing.Notes,
             bookerName: Object.prototype.hasOwnProperty.call(payload, 'bookerName') ? payload.bookerName : existing.BookerName,
             bookerSurname: Object.prototype.hasOwnProperty.call(payload, 'bookerSurname') ? payload.bookerSurname : existing.BookerSurname
@@ -379,6 +404,7 @@ ROOMS_APP.Booking = {
             endTime: payload.endTime,
             title: payload.title,
             activityDescription: payload.activityDescription,
+            displayMode: payload.displayMode,
             notes: payload.notes,
             bookerName: payload.bookerName,
             bookerSurname: payload.bookerSurname
@@ -530,6 +556,7 @@ ROOMS_APP.Booking = {
         endTime: ROOMS_APP.toTimeString(row && (row.endTime || row.EndTime)),
         title: ROOMS_APP.normalizeString(row && (row.title || row.Title)),
         activityDescription: ROOMS_APP.normalizeString(row && (row.activityDescription || row.ActivityDescription)),
+        displayMode: self.normalizeDisplayMode_(row && (row.displayMode || row.DisplayMode)),
         notes: ROOMS_APP.normalizeString(row && (row.notes || row.Notes)),
         bookerName: ROOMS_APP.normalizeString(row && (row.bookerName || row.BookerName)) || parsedName.firstName,
         bookerSurname: ROOMS_APP.normalizeString(row && (row.bookerSurname || row.BookerSurname)) || parsedName.surname,
@@ -676,6 +703,7 @@ ROOMS_APP.Booking = {
         endTime: row.endTime,
         title: row.title || (resource.DisplayName || row.resourceId),
         activityDescription: row.activityDescription,
+        displayMode: this.normalizeDisplayMode_(row.displayMode),
         notes: row.notes,
         bookerName: row.bookerName,
         bookerSurname: row.bookerSurname,
@@ -1452,6 +1480,7 @@ ROOMS_APP.Booking = {
       EndISO: ROOMS_APP.toIsoDateTime(ROOMS_APP.combineDateTime(normalized.bookingDate, normalized.endTime)),
       Title: normalized.title || validation.resource.DisplayName,
       ActivityDescription: normalized.activityDescription,
+      DisplayMode: this.normalizeDisplayMode_(normalized.displayMode || current.DisplayMode),
       BookerEmail: current.BookerEmail || actor.email,
       BookerName: effectiveName,
       BookerSurname: effectiveSurname,
@@ -1469,11 +1498,12 @@ ROOMS_APP.Booking = {
       Object.keys(booking || {}).forEach(function (key) {
         enriched[key] = booking[key];
       });
+      enriched.DisplayMode = ROOMS_APP.Booking.normalizeDisplayMode_(booking && booking.DisplayMode);
       enriched.CanManage = ROOMS_APP.Auth.canManageBooking(booking, user);
       enriched.SourceKind = 'USER_BOOKING';
       enriched.SourceType = 'USER_BOOKING';
       enriched.IsReadOnly = false;
-      enriched.DisplayLabel = ROOMS_APP.normalizeString(booking.BookerSurname || booking.BookerName || booking.Title || 'N/D');
+      enriched.DisplayLabel = ROOMS_APP.Booking.getBookingDisplayLabel_(enriched);
       return enriched;
     });
   },

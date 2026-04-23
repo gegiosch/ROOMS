@@ -369,6 +369,12 @@ ROOMS_APP.Board = {
     );
   },
 
+  getBookingDisplayMode_: function (booking) {
+    return String(
+      booking && (booking.DisplayMode || booking.displayMode) || 'TEACHER'
+    ).toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
+  },
+
   getBookingActorLabel_: function (booking) {
     var surname = ROOMS_APP.normalizeString(booking && booking.BookerSurname);
     var name = ROOMS_APP.normalizeString(booking && booking.BookerName);
@@ -415,7 +421,10 @@ ROOMS_APP.Board = {
         ROOMS_APP.Timetable.getDisplayLabel(occupancy)
       );
     }
-    return this.getBookingSurname_(occupancy);
+    if (this.getBookingDisplayMode_(occupancy) === 'ACTIVITY') {
+      return this.getBookingActivityDescription_(occupancy);
+    }
+    return ROOMS_APP.normalizeString(occupancy && occupancy.DisplayLabel) || this.getBookingSurname_(occupancy);
   },
 
   uniqueByKey_: function (rows, keyField) {
