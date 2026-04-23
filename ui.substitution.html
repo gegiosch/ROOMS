@@ -732,11 +732,11 @@
                 <div id="admin-booking-form-body" class="admin-booking-form-body is-hidden">
                   <div class="grid grid-3" style="align-items:end;">
                     <div>
-                      <label for="admin-booking-date">Data</label>
+                      <label for="admin-booking-date">Data *</label>
                       <input id="admin-booking-date" class="input" type="date">
                     </div>
                     <div>
-                      <label for="admin-booking-room">Aula</label>
+                      <label for="admin-booking-room">Aula *</label>
                       <select id="admin-booking-room" class="select"></select>
                     </div>
                     <div>
@@ -749,11 +749,11 @@
                       </div>
                     </div>
                     <div>
-                      <label for="admin-booking-teacher">Docente / richiedente</label>
+                      <label for="admin-booking-teacher">Docente / richiedente *</label>
                       <select id="admin-booking-teacher" class="select"></select>
                     </div>
                     <div>
-                      <label for="admin-booking-activity">Descrizione attività</label>
+                      <label for="admin-booking-activity">Descrizione attività *</label>
                       <input id="admin-booking-activity" class="input" type="text" placeholder="Descrizione attività">
                     </div>
                     <div>
@@ -762,7 +762,7 @@
                     </div>
                   </div>
                   <div class="substitution-absence-inline" style="margin-top:12px;">
-                    <span class="substitution-absence-section-title" style="margin:0 12px 0 0;">Visualizza su monitor</span>
+                    <span class="substitution-absence-section-title" style="margin:0 12px 0 0;">Visualizza su monitor *</span>
                     <label class="substitution-absence-check" for="admin-booking-display-teacher">
                       <input id="admin-booking-display-teacher" name="admin-booking-display-mode" type="radio" value="TEACHER" checked>
                       <span>Mostra docente</span>
@@ -773,7 +773,7 @@
                     </label>
                   </div>
                   <div style="margin-top:14px;">
-                    <div class="substitution-absence-section-title">Slot del giorno ancora disponibili</div>
+                    <div class="substitution-absence-section-title">Slot del giorno ancora disponibili *</div>
                     <div id="admin-booking-slots" class="admin-booking-slots"></div>
                   </div>
                   <div class="toolbar substitution-absence-toolbar">
@@ -7420,6 +7420,57 @@
           renderAdminBookingSlots_();
         }
 
+        function getAdminBookingAvailableFreeSlots_() {
+          var occupiedDraftKeys = {};
+          var selectedDraftId = adminBookingState.editingDraftId || '';
+          safeArray(adminBookingState.draftRows).forEach(function (row) {
+            if (row.draftId === selectedDraftId) {
+              return;
+            }
+            occupiedDraftKeys[[row.date, row.resourceId, row.startTime, row.endTime].join('|')] = true;
+          });
+          return safeArray(adminBookingState.model && adminBookingState.model.freeSlots).filter(function (slot) {
+            var key = [
+              adminBookingDate ? adminBookingDate.value : '',
+              adminBookingRoom ? adminBookingRoom.value : '',
+              slot.startTime,
+              slot.endTime
+            ].join('|');
+            return !occupiedDraftKeys[key];
+          });
+        }
+
+        function getAdminBookingDraftValidationMessage_() {
+          if (!(adminBookingDate && adminBookingDate.value)) {
+            return 'Selezionare una data.';
+          }
+          if (!(adminBookingRoom && adminBookingRoom.value)) {
+            return 'Selezionare un\'aula.';
+          }
+          if (!(adminBookingTeacher && adminBookingTeacher.value)) {
+            return 'Selezionare un docente.';
+          }
+          if (!(adminBookingActivity && String(adminBookingActivity.value || '').trim())) {
+            return 'Inserire la descrizione attività.';
+          }
+          if (!getAdminBookingDisplayMode_()) {
+            return 'Selezionare cosa visualizzare sul monitor.';
+          }
+          if (adminBookingState.loading) {
+            return 'Attendere il completamento del caricamento degli slot liberi.';
+          }
+          if (adminBookingState.slotsErrorMessage) {
+            return 'Errore caricamento slot liberi: ' + adminBookingState.slotsErrorMessage;
+          }
+          if (!getAdminBookingAvailableFreeSlots_().length) {
+            return 'Nessuno slot disponibile per le scelte effettuate.';
+          }
+          if (!getAdminBookingSelectedSlotKeys_().length) {
+            return 'Selezionare almeno uno slot libero.';
+          }
+          return '';
+        }
+
         function addAdminBookingDraft_() {
           var teacher = getAdminBookingTeacher_();
           var selectedKeys = getAdminBookingSelectedSlotKeys_();
@@ -7429,9 +7480,10 @@
           var notes = adminBookingNotes ? adminBookingNotes.value : '';
           var displayMode = getAdminBookingDisplayMode_();
           var parsedTeacher = parseFullName(teacher.teacherName);
+          var validationMessage = getAdminBookingDraftValidationMessage_();
           var rowsToAdd = [];
-          if (!date || !resourceId || !teacher.teacherEmail || !activityDescription || !selectedKeys.length) {
-            setAdminBookingNotice_('Seleziona data, aula, docente, descrizione attività e almeno uno slot libero.', 'error');
+          if (validationMessage) {
+            setAdminBookingNotice_(validationMessage, 'error');
             return;
           }
           selectedKeys.forEach(function (slotKey) {
