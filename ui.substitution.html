@@ -8,6 +8,7 @@
         max-width: 1480px;
         margin: 0 auto;
         padding: 24px 18px 32px;
+        position: relative;
       }
       .substitution-page-header {
         margin-bottom: 18px;
@@ -20,6 +21,30 @@
         gap: 10px;
         flex-wrap: wrap;
         margin-bottom: 16px;
+      }
+      .substitution-tab-strip.is-disabled {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+      .admin-shell-bootstrap {
+        position: fixed;
+        inset: 0;
+        z-index: 120;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 24px;
+        background: rgba(2, 6, 23, 0.86);
+        backdrop-filter: blur(6px);
+      }
+      .admin-shell-bootstrap.is-hidden {
+        display: none;
+      }
+      .admin-shell-bootstrap-text {
+        color: var(--text);
+        font-size: 15px;
       }
       .substitution-tab-content {
         display: none;
@@ -295,6 +320,10 @@
           </div>
           <div class="status-pill substitution-user-pill" id="substitution-user-pill"></div>
         </header>
+        <div id="admin-shell-bootstrap" class="admin-shell-bootstrap" aria-live="polite" aria-busy="true">
+          <div class="room-panel-spinner"></div>
+          <div id="admin-shell-bootstrap-text" class="admin-shell-bootstrap-text">Caricamento amministrazione...</div>
+        </div>
 
         <div class="substitution-tab-strip" id="substitution-tab-strip">
           <button class="button secondary substitution-tab-button active" type="button" data-tab="absences">Inserimento assenze</button>
@@ -4545,6 +4574,14 @@
 
         function switchReplacementTab_(tabName) {
           var normalizedTab = tabName === 'long' ? 'long' : (tabName === 'trips' ? 'trips' : 'daily');
+          if (replacementUsesUnifiedTabs && (!replacementState.isOpen || !replacementState.model)) {
+            openReplacementUnified_().then(function () {
+              if (normalizedTab !== 'daily') {
+                switchReplacementTab_(normalizedTab);
+              }
+            });
+            return;
+          }
           if (shouldConfirmReplacementTripLeave_(normalizedTab)) {
             ensureCanDiscardReplacementTripDraft_(function () {
               switchReplacementTab_(normalizedTab);
@@ -6386,7 +6423,9 @@
             }
             openReplacementStandalone_();
           } else if (replacementUsesUnifiedTabs) {
-            openReplacementUnified_();
+            if (replacementModal) {
+              replacementModal.style.display = 'flex';
+            }
           } else {
             render(state);
             refresh({ skipPanelRefresh: true });
@@ -6793,11 +6832,31 @@
         var safeArray = ROOMS_UI && typeof ROOMS_UI.safeArray === 'function'
           ? ROOMS_UI.safeArray
           : function (value) { return Array.isArray(value) ? value : []; };
+        var parseFullName = ROOMS_UI && typeof ROOMS_UI.parseFullName === 'function'
+          ? ROOMS_UI.parseFullName
+          : function (value) {
+            var normalized = String(value || '').trim().replace(/\s+/g, ' ');
+            var tokens;
+            if (!normalized) {
+              return { firstName: '', surname: '' };
+            }
+            tokens = normalized.split(/\s+/);
+            if (tokens.length === 1) {
+              return { firstName: '', surname: normalized };
+            }
+            return {
+              surname: tokens[0],
+              firstName: tokens.slice(1).join(' ')
+            };
+          };
         var renderTable = ROOMS_UI && typeof ROOMS_UI.renderTable === 'function'
           ? function (mountId, headers, rows, emptyText, tableClassName) {
             return ROOMS_UI.renderTable(mountId, headers, rows, emptyText, tableClassName);
           }
           : function () {};
+        var tabStrip = document.getElementById('substitution-tab-strip');
+        var adminShellBootstrap = document.getElementById('admin-shell-bootstrap');
+        var adminShellBootstrapText = document.getElementById('admin-shell-bootstrap-text');
         var reportsRoot = document.getElementById('substitution-reports-root');
         var absenceTeacherSelect = document.getElementById('substitution-absence-teacher');
         var absenceTypeSelect = document.getElementById('substitution-absence-type');
@@ -6849,6 +6908,7 @@
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var activeTabId = 'absences';
+        var adminShellReady = false;
         var absenceState = {
           mode: 'DAY',
           model: null,
@@ -6860,6 +6920,8 @@
           periodCache: {},
           periodsLoading: false,
           periodsRequestToken: 0,
+          loadPromise: null,
+          loadKey: '',
           initialized: false,
           status: 'idle',
           errorMessage: ''
@@ -6886,6 +6948,22 @@
             return entry.getAttribute('data-tab') === tabId;
           });
           return button && button.getAttribute('data-panel') ? button.getAttribute('data-panel') : tabId;
+        }
+
+        function setAdminShellReady_(ready, message) {
+          adminShellReady = Boolean(ready);
+          if (adminShellBootstrap) {
+            adminShellBootstrap.classList.toggle('is-hidden', adminShellReady);
+          }
+          if (adminShellBootstrapText && message) {
+            adminShellBootstrapText.textContent = message;
+          }
+          if (tabStrip) {
+            tabStrip.classList.toggle('is-disabled', !adminShellReady);
+          }
+          tabButtons.forEach(function (button) {
+            button.disabled = !adminShellReady;
+          });
         }
 
         function activateTab_(tabId) {
@@ -7342,7 +7420,7 @@
           var activityDescription = adminBookingActivity ? String(adminBookingActivity.value || '').trim() : '';
           var notes = adminBookingNotes ? adminBookingNotes.value : '';
           var displayMode = getAdminBookingDisplayMode_();
-          var parsedTeacher = parseFullNameLocal_(teacher.teacherName);
+          var parsedTeacher = parseFullName(teacher.teacherName);
           var rowsToAdd = [];
           if (!date || !resourceId || !teacher.teacherEmail || !activityDescription || !selectedKeys.length) {
             setAdminBookingNotice_('Seleziona data, aula, docente, descrizione attività e almeno uno slot libero.', 'error');
@@ -8154,9 +8232,14 @@
         }
 
         function loadAbsenceRegistry_(referenceDate) {
+          var targetDate = referenceDate || '';
+          if (absenceState.loadPromise && absenceState.loadKey === targetDate) {
+            return absenceState.loadPromise;
+          }
           setAbsenceViewState_('loading', 'Caricamento archivio assenze...');
           setAbsenceNotice_('Caricamento archivio assenze...', '');
-          ROOMS_UI.call('getReplacementAbsenceRegistryModel', referenceDate || '')
+          absenceState.loadKey = targetDate;
+          absenceState.loadPromise = ROOMS_UI.call('getReplacementAbsenceRegistryModel', targetDate)
             .then(function (result) {
               applyAbsenceModel_(result);
               if (result && result.dateState && result.dateState.message) {
@@ -8164,10 +8247,34 @@
               } else {
                 setAbsenceNotice_('', '');
               }
+              return result;
             })
             .catch(function (error) {
               setAbsenceViewState_('error', 'Errore caricamento assenze: ' + (error && error.message ? error.message : 'errore imprevisto'));
               setAbsenceNotice_('Errore caricamento assenze: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
+              throw error;
+            })
+            .finally(function () {
+              absenceState.loadPromise = null;
+              absenceState.loadKey = '';
+            });
+          return absenceState.loadPromise;
+        }
+
+        function bootstrapAdminShell_() {
+          setAdminShellReady_(false, 'Caricamento archivio assenze...');
+          renderAdminBookingDraft_();
+          return loadAbsenceRegistry_(getReplacementCurrentDate_() || '')
+            .catch(function () {
+              return null;
+            })
+            .finally(function () {
+              setAdminShellReady_(true, '');
+              if (activeTabId !== 'absences') {
+                activateTab_(activeTabId);
+              } else if (absenceState.initialized) {
+                renderAbsenceTables_();
+              }
             });
         }
 
@@ -8201,6 +8308,10 @@
 
         tabButtons.forEach(function (button) {
           button.addEventListener('click', function (event) {
+            if (!adminShellReady) {
+              event.preventDefault();
+              return;
+            }
             var targetTab = button.getAttribute('data-tab');
             var replacementTab = button.getAttribute('data-replacement-tab') || '';
             var workbench = window.ROOMS_SUBSTITUTION_WORKBENCH;
@@ -8341,9 +8452,7 @@
         setAbsenceMode_('DAY');
         clearAbsenceForm_(true);
         updateAbsenceDraftStatus_();
-        loadAdminBookingModel_({ preserveNotice: true });
-        loadAbsenceRegistry_(getReplacementCurrentDate_() || '');
-        activateTab_(activeTabId);
+        bootstrapAdminShell_();
       }());
     </script>
   </body>

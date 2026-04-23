@@ -91,6 +91,36 @@ window.ROOMS_UI = {
     return Array.isArray(value) ? value : [];
   },
 
+  parseFullName: function (value) {
+    function normalizeNameToken_(token) {
+      return String(token || '').trim().replace(/\s+/g, ' ');
+    }
+
+    function toNameCaseLocal_(token) {
+      var normalized = normalizeNameToken_(token).toLowerCase();
+      if (!normalized) {
+        return '';
+      }
+      return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    }
+
+    var normalized = normalizeNameToken_(value);
+    var tokens;
+    if (!normalized) {
+      return { firstName: '', surname: '' };
+    }
+    tokens = normalized.split(/\s+/);
+    if (tokens.length === 1) {
+      return { firstName: '', surname: toNameCaseLocal_(tokens[0]) };
+    }
+    return {
+      surname: toNameCaseLocal_(tokens[0]),
+      firstName: tokens.slice(1).map(function (token) {
+        return toNameCaseLocal_(token);
+      }).join(' ')
+    };
+  },
+
   renderTable: function (mountIdOrNode, headers, rows, emptyText, tableClassName) {
     var mount = typeof mountIdOrNode === 'string'
       ? document.getElementById(mountIdOrNode)
