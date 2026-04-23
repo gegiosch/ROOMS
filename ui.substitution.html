@@ -6761,6 +6761,11 @@
         var safeArray = ROOMS_UI && typeof ROOMS_UI.safeArray === 'function'
           ? ROOMS_UI.safeArray
           : function (value) { return Array.isArray(value) ? value : []; };
+        var renderTable = ROOMS_UI && typeof ROOMS_UI.renderTable === 'function'
+          ? function (mountId, headers, rows, emptyText, tableClassName) {
+            return ROOMS_UI.renderTable(mountId, headers, rows, emptyText, tableClassName);
+          }
+          : function () {};
         var reportsRoot = document.getElementById('substitution-reports-root');
         var absenceTeacherSelect = document.getElementById('substitution-absence-teacher');
         var absenceTypeSelect = document.getElementById('substitution-absence-type');

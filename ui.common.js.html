@@ -91,6 +91,50 @@ window.ROOMS_UI = {
     return Array.isArray(value) ? value : [];
   },
 
+  renderTable: function (mountIdOrNode, headers, rows, emptyText, tableClassName) {
+    var mount = typeof mountIdOrNode === 'string'
+      ? document.getElementById(mountIdOrNode)
+      : mountIdOrNode;
+    if (!mount) {
+      return;
+    }
+    this.clearNode(mount);
+    if (!this.safeArray(rows).length) {
+      mount.appendChild(this.el('div', 'notice', emptyText));
+      return;
+    }
+    var wrap = this.el('div', 'table-wrap');
+    var table = document.createElement('table');
+    if (tableClassName) {
+      table.className = tableClassName;
+    }
+    var thead = document.createElement('thead');
+    var headerRow = document.createElement('tr');
+    headers.forEach(function (header) {
+      headerRow.appendChild(ROOMS_UI.el('th', '', header));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    rows.forEach(function (cells) {
+      var tr = document.createElement('tr');
+      cells.forEach(function (cell) {
+        var td = document.createElement('td');
+        if (cell && typeof cell === 'object' && cell.nodeType === 1) {
+          td.appendChild(cell);
+        } else {
+          td.textContent = cell == null ? '' : String(cell);
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    mount.appendChild(wrap);
+  },
+
   fillSelect: function (select, options, valueField, labelField, selectedValue) {
     this.clearNode(select);
     options.forEach(function (option) {
