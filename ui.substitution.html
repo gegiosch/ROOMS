@@ -213,6 +213,27 @@
         font-size: 12px;
         margin-top: 4px;
       }
+      .admin-booking-state {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        margin-top: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .admin-booking-state.error {
+        border-color: rgba(248, 113, 113, 0.35);
+        background: rgba(127, 29, 29, 0.18);
+        color: #fecaca;
+      }
+      .admin-booking-state.error .room-panel-spinner {
+        display: none;
+      }
+      .admin-booking-form-body.is-hidden {
+        display: none;
+      }
       @media (max-width: 720px) {
         .substitution-page {
           padding-left: 12px;
@@ -633,41 +654,47 @@
                   </div>
                   <span id="admin-booking-draft-pill" class="status-pill">Bozza vuota</span>
                 </div>
-                <div class="grid grid-3" style="align-items:end;">
-                  <div>
-                    <label for="admin-booking-date">Data</label>
-                    <input id="admin-booking-date" class="input" type="date">
-                  </div>
-                  <div>
-                    <label for="admin-booking-room">Aula</label>
-                    <select id="admin-booking-room" class="select"></select>
-                  </div>
-                  <div>
-                    <button id="admin-booking-load-slots" class="button secondary" type="button">Carica slot liberi</button>
-                  </div>
-                  <div>
-                    <label for="admin-booking-teacher">Docente / richiedente</label>
-                    <select id="admin-booking-teacher" class="select"></select>
-                  </div>
-                  <div>
-                    <label for="admin-booking-activity">Descrizione attività</label>
-                    <input id="admin-booking-activity" class="input" type="text" placeholder="Descrizione attività">
-                  </div>
-                  <div>
-                    <label for="admin-booking-notes">Note</label>
-                    <input id="admin-booking-notes" class="input" type="text" placeholder="Note opzionali">
-                  </div>
+                <div id="admin-booking-state" class="admin-booking-state" aria-live="polite">
+                  <div class="room-panel-spinner"></div>
+                  <div id="admin-booking-state-text">Caricamento prenotazioni aule...</div>
                 </div>
-                <div style="margin-top:14px;">
-                  <div class="substitution-absence-section-title">Slot del giorno ancora disponibili</div>
-                  <div id="admin-booking-slots" class="admin-booking-slots"></div>
+                <div id="admin-booking-form-body" class="admin-booking-form-body is-hidden">
+                  <div class="grid grid-3" style="align-items:end;">
+                    <div>
+                      <label for="admin-booking-date">Data</label>
+                      <input id="admin-booking-date" class="input" type="date">
+                    </div>
+                    <div>
+                      <label for="admin-booking-room">Aula</label>
+                      <select id="admin-booking-room" class="select"></select>
+                    </div>
+                    <div>
+                      <button id="admin-booking-load-slots" class="button secondary" type="button">Carica slot liberi</button>
+                    </div>
+                    <div>
+                      <label for="admin-booking-teacher">Docente / richiedente</label>
+                      <select id="admin-booking-teacher" class="select"></select>
+                    </div>
+                    <div>
+                      <label for="admin-booking-activity">Descrizione attività</label>
+                      <input id="admin-booking-activity" class="input" type="text" placeholder="Descrizione attività">
+                    </div>
+                    <div>
+                      <label for="admin-booking-notes">Note</label>
+                      <input id="admin-booking-notes" class="input" type="text" placeholder="Note opzionali">
+                    </div>
+                  </div>
+                  <div style="margin-top:14px;">
+                    <div class="substitution-absence-section-title">Slot del giorno ancora disponibili</div>
+                    <div id="admin-booking-slots" class="admin-booking-slots"></div>
+                  </div>
+                  <div class="toolbar substitution-absence-toolbar">
+                    <button id="admin-booking-add-draft" class="button secondary" type="button">Aggiungi alla bozza</button>
+                    <button id="admin-booking-reset-draft" class="button secondary" type="button">Svuota bozza</button>
+                    <button id="admin-booking-save" class="button" type="button" disabled>Salva prenotazioni</button>
+                  </div>
+                  <div id="admin-booking-notice" class="notice" style="display:none;margin-top:12px;"></div>
                 </div>
-                <div class="toolbar substitution-absence-toolbar">
-                  <button id="admin-booking-add-draft" class="button secondary" type="button">Aggiungi alla bozza</button>
-                  <button id="admin-booking-reset-draft" class="button secondary" type="button">Svuota bozza</button>
-                  <button id="admin-booking-save" class="button" type="button" disabled>Salva prenotazioni</button>
-                </div>
-                <div id="admin-booking-notice" class="notice" style="display:none;margin-top:12px;"></div>
               </section>
 
               <section class="panel table-card">
@@ -722,6 +749,7 @@
         var replacementModal = document.getElementById('replacement-modal');
         var replacementDialog = replacementModal ? replacementModal.querySelector('.replacement-dialog') : null;
         var replacementLoading = document.getElementById('replacement-loading');
+        var replacementLoadingSpinner = replacementLoading ? replacementLoading.querySelector('.room-panel-spinner') : null;
         var replacementLoadingText = document.getElementById('replacement-loading-text');
         var replacementNotice = document.getElementById('replacement-notice');
         var replacementDateState = document.getElementById('replacement-date-state');
@@ -822,7 +850,6 @@
         var replacementStandaloneTab = 'daily';
         var replacementUsesUnifiedTabs = document.body && document.body.classList.contains('substitution-unified');
         var replacementLoadWatchdogMs = 20000;
-        var replacementDailyLoadTimeoutMessage = 'Errore caricamento sostituzioni: timeout risposta server.';
 
         var aulaEditorModal = document.getElementById('aula-magna-editor-modal');
         var aulaEditorDate = document.getElementById('aula-editor-date');
@@ -890,6 +917,7 @@
           tripDraftErrors: [],
           tripTeacherDirectory: null,
           loadStatus: 'idle',
+          loadScope: '',
           loadErrorMessage: '',
           loadErrorScope: ''
         };
@@ -2554,8 +2582,18 @@
 
         function setReplacementLoadState_(status, message, scope) {
           replacementState.loadStatus = status || 'idle';
-          replacementState.loadErrorMessage = message || '';
-          replacementState.loadErrorScope = scope || '';
+          replacementState.loadScope = replacementState.loadStatus === 'loading'
+            ? (scope || replacementState.activeTab || 'daily')
+            : '';
+          if (replacementState.loadStatus === 'error') {
+            replacementState.loadErrorMessage = message || '';
+            replacementState.loadErrorScope = scope || '';
+            return;
+          }
+          if (replacementState.loadStatus === 'loaded' || replacementState.loadStatus === 'idle') {
+            replacementState.loadErrorMessage = '';
+            replacementState.loadErrorScope = '';
+          }
         }
 
         function isReplacementLoadNoticeVisible_() {
@@ -2568,7 +2606,7 @@
         }
 
         function clearReplacementLoadNotice_() {
-          if (isReplacementLoadNoticeVisible_()) {
+          if ((isReplacementLoadNoticeVisible_()) || (replacementNotice && replacementNotice.style.display !== 'none' && replacementState.loadErrorMessage)) {
             setReplacementNotice_('', '');
           }
         }
@@ -2594,7 +2632,9 @@
           ROOMS_UI.setNotice(replacementDateState, message, kind || '');
         }
 
-        function setReplacementLoading_(isVisible, message) {
+        function setReplacementLoading_(isVisible, message, options) {
+          var settings = options || {};
+          var isError = Boolean(settings.kind === 'error');
           if (window.console && typeof window.console.info === 'function') {
             window.console.info('[substitution] spinner', isVisible ? 'show' : 'hide', message || '');
           }
@@ -2602,12 +2642,21 @@
             return;
           }
           replacementLoading.style.display = isVisible ? 'flex' : 'none';
+          replacementLoading.classList.toggle('is-error', Boolean(isVisible && isError));
+          replacementLoading.setAttribute('aria-busy', isVisible && !isError ? 'true' : 'false');
           if (replacementDialog) {
             replacementDialog.classList.toggle('is-loading', Boolean(isVisible));
+          }
+          if (replacementLoadingSpinner) {
+            replacementLoadingSpinner.style.display = isVisible && isError ? 'none' : '';
           }
           if (replacementLoadingText) {
             replacementLoadingText.textContent = message || 'Caricamento sostituzioni...';
           }
+        }
+
+        function hasReplacementLoadedModel_() {
+          return Boolean(replacementState.model && replacementState.model.date);
         }
 
         function setReplacementDetailLoading_(isVisible) {
@@ -4460,7 +4509,10 @@
                   ? 'Caricamento dati uscite didattiche...'
                   : 'Caricamento dati supplenze lunghe...'
               }
-            ).then(function () {
+            ).then(function (result) {
+              if (!result || !hasReplacementEditorData_()) {
+                return;
+              }
               replacementState.activeTab = normalizedTab;
               renderReplacementModal_();
             });
@@ -4640,6 +4692,7 @@
           var requestSeq = ++replacementState.loadingRequestSeq;
           var targetDate = String(dateValue || getDefaultPanelDate_());
           var noticeScope = settings.noticeScope || (settings.includeEditorData === true && replacementState.activeTab !== 'daily' ? replacementState.activeTab : 'daily');
+          var shouldBlockOnError = !hasReplacementLoadedModel_() || Boolean(replacementState.model && replacementState.model.date && replacementState.model.date !== targetDate);
           var settled = false;
           var watchdogId = 0;
           replacementState.date = targetDate;
@@ -4651,6 +4704,7 @@
             });
           }
           setReplacementLoading_(true, settings.loadingMessage || 'Caricamento sostituzioni...');
+          clearReplacementLoadNotice_();
           if (!settings.keepNotice) {
             setReplacementNotice_('', '');
           }
@@ -4664,8 +4718,7 @@
                 date: targetDate
               });
             }
-            showReplacementLoadError_(replacementDailyLoadTimeoutMessage, noticeScope);
-            setReplacementLoading_(false);
+            setReplacementLoading_(true, 'Risposta lenta, caricamento ancora in corso...');
           }, replacementLoadWatchdogMs);
           if (window.console && typeof window.console.info === 'function') {
             window.console.info('[substitution] bootstrap server-call:start', 'getReplacementModalModel');
@@ -4690,8 +4743,8 @@
             }
             settled = true;
             clearTimeout(watchdogId);
-            setReplacementLoadState_('loaded', '', '');
             clearReplacementLoadNotice_();
+            setReplacementLoadState_('loaded', '', '');
             applyReplacementModel_(model, {
               keepDirty: Boolean(settings.keepDirty)
             });
@@ -4709,6 +4762,11 @@
             settled = true;
             clearTimeout(watchdogId);
             showReplacementLoadError_(error && error.message ? error.message : 'Errore caricamento sostituzioni.', noticeScope);
+            if (shouldBlockOnError) {
+              setReplacementLoading_(true, replacementState.loadErrorMessage || 'Errore caricamento sostituzioni.', {
+                kind: 'error'
+              });
+            }
             return null;
           }).then(function (result) {
             settled = true;
@@ -4720,7 +4778,9 @@
               });
             }
             if (requestSeq === replacementState.loadingRequestSeq) {
-              setReplacementLoading_(false);
+              if (!(replacementState.loadStatus === 'error' && shouldBlockOnError)) {
+                setReplacementLoading_(false);
+              }
               renderReplacementModal_();
             }
             return result;
@@ -4749,6 +4809,7 @@
           replacementState.tripDraftErrors = [];
           replacementState.tripTeacherDirectory = null;
           replacementState.loadStatus = 'idle';
+          replacementState.loadScope = '';
           replacementState.loadErrorMessage = '';
           replacementState.loadErrorScope = '';
           closeReplacementConfirm_();
@@ -6709,6 +6770,9 @@
         var adminBookingDraftPill = document.getElementById('admin-booking-draft-pill');
         var adminBookingNotice = document.getElementById('admin-booking-notice');
         var adminBookingDraftTable = document.getElementById('admin-booking-draft-table');
+        var adminBookingStateView = document.getElementById('admin-booking-state');
+        var adminBookingStateText = document.getElementById('admin-booking-state-text');
+        var adminBookingFormBody = document.getElementById('admin-booking-form-body');
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var activeTabId = 'daily';
@@ -6734,7 +6798,9 @@
           loading: false,
           loadPromise: null,
           loadKey: '',
-          loadRequestToken: ''
+          loadRequestToken: '',
+          status: 'idle',
+          errorMessage: ''
         };
 
         function getPanelId_(tabId) {
@@ -6797,6 +6863,27 @@
           adminBookingNotice.style.display = 'block';
           adminBookingNotice.className = 'notice' + (kind ? (' ' + kind) : '');
           adminBookingNotice.textContent = message;
+        }
+
+        function setAdminBookingViewState_(status, message) {
+          adminBookingState.status = status || 'idle';
+          adminBookingState.errorMessage = message || '';
+          if (adminBookingStateView) {
+            adminBookingStateView.classList.toggle('error', adminBookingState.status === 'error');
+            adminBookingStateView.style.display = adminBookingState.status === 'loaded' ? 'none' : 'flex';
+          }
+          if (adminBookingStateText) {
+            if (adminBookingState.status === 'error') {
+              adminBookingStateText.textContent = adminBookingState.errorMessage || 'Errore caricamento prenotazioni aule.';
+            } else if (adminBookingState.status === 'loading') {
+              adminBookingStateText.textContent = message || 'Caricamento prenotazioni aule...';
+            } else {
+              adminBookingStateText.textContent = '';
+            }
+          }
+          if (adminBookingFormBody) {
+            adminBookingFormBody.classList.toggle('is-hidden', adminBookingState.status !== 'loaded');
+          }
         }
 
         function buildAdminBookingDraftId_() {
@@ -6884,6 +6971,7 @@
           adminBookingState.loadPromise = null;
           adminBookingState.loadKey = '';
           adminBookingState.loadRequestToken = '';
+          setAdminBookingViewState_('loaded', '');
           setAdminBookingControlsLoading_(false);
           if (adminBookingDate) {
             adminBookingDate.value = adminBookingState.model.date || getReplacementCurrentDate_() || getDefaultPanelDate_();
@@ -6908,6 +6996,7 @@
           adminBookingState.loading = true;
           adminBookingState.loadKey = loadKey;
           adminBookingState.loadRequestToken = requestToken;
+          setAdminBookingViewState_('loading', 'Caricamento prenotazioni aule...');
           setAdminBookingControlsLoading_(true);
           showAdminBookingLoadingOptions_();
           if (!settings.preserveNotice) {
@@ -6936,6 +7025,7 @@
               adminBookingState.loadPromise = null;
               adminBookingState.loadKey = '';
               adminBookingState.loadRequestToken = '';
+              setAdminBookingViewState_('error', 'Errore caricamento prenotazioni aule: ' + (error && error.message ? error.message : 'errore imprevisto'));
               setAdminBookingControlsLoading_(false);
               renderAdminBookingSlots_();
               setAdminBookingNotice_('Errore caricamento prenotazioni aule: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
