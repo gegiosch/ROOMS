@@ -435,12 +435,8 @@ ROOMS_APP.Booking = {
     return this.getRoomViewModel(targetResourceId, targetDate);
   },
 
-  getAdminRoomBookingModel: function (dateString, resourceId) {
-    var actor = this.requireAdminRoomBookingActor_();
-    var requestedDate = dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, actor));
-    var dateState = ROOMS_APP.Replacements.resolveSelectedDate_(requestedDate, true);
-    var date = dateState.selectedDate;
-    var resources = ROOMS_APP.Board.listResources_().filter(function (resource) {
+  listAdminBookableResources_: function () {
+    return ROOMS_APP.Board.listResources_().filter(function (resource) {
       return resource &&
         ROOMS_APP.asBoolean(resource.IsActive) &&
         ROOMS_APP.asBoolean(resource.IsBookable) &&
@@ -451,20 +447,61 @@ ROOMS_APP.Booking = {
         displayName: resource.DisplayName || resource.ResourceId
       };
     });
+  },
+
+  buildAdminRoomBookingBaseModel_: function (dateString, resourceId, actor) {
+    var bookingActor = actor || this.requireAdminRoomBookingActor_();
+    var requestedDate = dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, bookingActor));
+    var dateState = ROOMS_APP.Replacements.resolveSelectedDate_(requestedDate, true);
+    var date = dateState.selectedDate;
+    var resources = this.listAdminBookableResources_();
     var selectedResourceId = ROOMS_APP.normalizeString(resourceId || (resources[0] && resources[0].resourceId) || '');
-    var roomModel = selectedResourceId
-      ? this.getRoomViewModel(selectedResourceId, date, { splitFreeSlotsHalfHour: true })
-      : null;
     return {
       date: date,
       dateState: dateState,
       resourceId: selectedResourceId,
       resources: resources,
+      teacherOptions: ROOMS_APP.Replacements.listAdminTeacherDirectory_(),
+      user: bookingActor
+    };
+  },
+
+  getAdminRoomBookingBootstrapModel: function (dateString, resourceId) {
+    var actor = this.requireAdminRoomBookingActor_();
+    return this.buildAdminRoomBookingBaseModel_(dateString, resourceId, actor);
+  },
+
+  getAdminRoomBookingAvailabilityModel: function (dateString, resourceId) {
+    var actor = this.requireAdminRoomBookingActor_();
+    var baseModel = this.buildAdminRoomBookingBaseModel_(dateString, resourceId, actor);
+    var selectedResourceId = baseModel.resourceId;
+    var roomModel = selectedResourceId
+      ? this.getRoomViewModel(selectedResourceId, baseModel.date, { splitFreeSlotsHalfHour: true })
+      : null;
+    return {
+      date: baseModel.date,
+      resourceId: selectedResourceId,
       freeSlots: roomModel && roomModel.freeSlots ? roomModel.freeSlots : [],
       bookings: roomModel && roomModel.bookings ? roomModel.bookings : [],
       isOpen: roomModel ? Boolean(roomModel.isOpen) : false,
-      statusSummary: roomModel ? (roomModel.statusSummary || '') : '',
-      teacherOptions: ROOMS_APP.Replacements.listAdminTeacherDirectory_(),
+      statusSummary: roomModel ? (roomModel.statusSummary || '') : ''
+    };
+  },
+
+  getAdminRoomBookingModel: function (dateString, resourceId) {
+    var actor = this.requireAdminRoomBookingActor_();
+    var baseModel = this.buildAdminRoomBookingBaseModel_(dateString, resourceId, actor);
+    var availabilityModel = this.getAdminRoomBookingAvailabilityModel(baseModel.date, baseModel.resourceId);
+    return {
+      date: baseModel.date,
+      dateState: baseModel.dateState,
+      resourceId: baseModel.resourceId,
+      resources: baseModel.resources,
+      freeSlots: availabilityModel.freeSlots,
+      bookings: availabilityModel.bookings,
+      isOpen: availabilityModel.isOpen,
+      statusSummary: availabilityModel.statusSummary,
+      teacherOptions: baseModel.teacherOptions,
       user: actor
     };
   },
