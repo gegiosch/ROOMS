@@ -297,16 +297,16 @@
         </header>
 
         <div class="substitution-tab-strip" id="substitution-tab-strip">
-          <button class="button secondary substitution-tab-button active" type="button" data-tab="daily" data-panel="workbench" data-replacement-tab="daily">Sostituzioni giornaliere</button>
-          <button class="button secondary substitution-tab-button" type="button" data-tab="absences">Inserimento assenze</button>
+          <button class="button secondary substitution-tab-button active" type="button" data-tab="absences">Inserimento assenze</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="trips" data-panel="workbench" data-replacement-tab="trips">Uscite didattiche</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="long" data-panel="workbench" data-replacement-tab="long">Supplenze lunghe</button>
-          <button class="button secondary substitution-tab-button" type="button" data-tab="reports">Report giornalieri</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="daily" data-panel="workbench" data-replacement-tab="daily">Sostituzioni giornaliere</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="room-bookings">Prenotazioni aule</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="reports">Report</button>
         </div>
 
         <div id="substitution-root">
-          <section class="substitution-tab-content active substitution-workbench-shell" data-tab-panel="workbench">
+          <section class="substitution-tab-content substitution-workbench-shell" data-tab-panel="workbench">
 <div id="replacement-modal" class="replacement-modal" style="display:none;">
       <div class="replacement-dialog">
         <div id="replacement-loading" class="replacement-loading" style="display:none;" aria-live="polite" aria-busy="true">
@@ -590,7 +590,7 @@
     </div>
 </section>
 
-          <section class="substitution-tab-content" data-tab-panel="absences">
+          <section class="substitution-tab-content active" data-tab-panel="absences">
             <div class="substitution-absence-layout">
               <section class="panel form-card">
                 <div class="replacement-detail-header">
@@ -6835,7 +6835,7 @@
         var adminBookingFormBody = document.getElementById('admin-booking-form-body');
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
-        var activeTabId = 'daily';
+        var activeTabId = 'absences';
         var absenceState = {
           mode: 'DAY',
           model: null,
@@ -6875,7 +6875,7 @@
         }
 
         function activateTab_(tabId) {
-          activeTabId = tabId || 'daily';
+          activeTabId = tabId || 'absences';
           var activePanelId = getPanelId_(activeTabId);
           var activeButton = tabButtons.find(function (entry) {
             return entry.getAttribute('data-tab') === activeTabId;
