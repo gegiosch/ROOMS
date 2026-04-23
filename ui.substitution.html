@@ -7023,6 +7023,55 @@
           }
         }
 
+        function discardAdminBookingDraft_() {
+          adminBookingState.draftRows = [];
+          adminBookingState.dirty = false;
+          adminBookingState.editingDraftId = '';
+          renderAdminBookingDraft_();
+          renderAdminBookingSlots_();
+        }
+
+        function requestTabActivation_(tabId, options) {
+          var targetTab = tabId || 'landing';
+          var settings = options || {};
+          var workbench = window.ROOMS_SUBSTITUTION_WORKBENCH;
+          var activePanelId = getPanelId_(activeTabId);
+          var targetButton = tabButtons.find(function (entry) {
+            return entry.getAttribute('data-tab') === targetTab;
+          });
+          var replacementTab = targetButton && targetButton.getAttribute('data-replacement-tab')
+            ? targetButton.getAttribute('data-replacement-tab')
+            : '';
+          if (!adminShellReady || targetTab === activeTabId) {
+            return;
+          }
+          if (!settings.skipBookingDraftConfirm &&
+            activeTabId === 'room-bookings' &&
+            targetTab !== 'room-bookings' &&
+            hasAdminBookingDraftChanges_()) {
+            confirmDiscardAdminBookingDraft_(function () {
+              discardAdminBookingDraft_();
+              requestTabActivation_(targetTab, Object.assign({}, settings, {
+                skipBookingDraftConfirm: true
+              }));
+            });
+            return;
+          }
+          if (!settings.skipTripDraftConfirm &&
+            activePanelId === 'workbench' &&
+            workbench &&
+            workbench.shouldConfirmTripLeave &&
+            workbench.shouldConfirmTripLeave(replacementTab || targetTab)) {
+            workbench.confirmDiscardTripDraft(function () {
+              requestTabActivation_(targetTab, Object.assign({}, settings, {
+                skipTripDraftConfirm: true
+              }));
+            }, 'Modifiche uscite non salvate', 'Sono presenti modifiche non salvate alle uscite didattiche. Continuando senza salvare, tutte le modifiche non salvate saranno perse.');
+            return;
+          }
+          activateTab_(targetTab);
+        }
+
         function setHeader_() {
           document.getElementById('substitution-subtitle').textContent = model.subtitle || '';
           document.getElementById('substitution-user-pill').textContent = model.user && model.user.email ? model.user.email : 'ROOMS';
@@ -8427,33 +8476,8 @@
 
         tabButtons.forEach(function (button) {
           button.addEventListener('click', function (event) {
-            if (!adminShellReady) {
-              event.preventDefault();
-              return;
-            }
-            var targetTab = button.getAttribute('data-tab');
-            var replacementTab = button.getAttribute('data-replacement-tab') || '';
-            var workbench = window.ROOMS_SUBSTITUTION_WORKBENCH;
-            if (workbench && workbench.shouldConfirmTripLeave && workbench.shouldConfirmTripLeave(replacementTab || targetTab)) {
-              event.preventDefault();
-              workbench.confirmDiscardTripDraft(function () {
-                activateTab_(targetTab);
-              }, 'Modifiche uscite non salvate', 'Sono presenti modifiche non salvate alle uscite didattiche. Continuando senza salvare, tutte le modifiche non salvate saranno perse.');
-              return;
-            }
-            if (activeTabId === 'room-bookings' && targetTab !== 'room-bookings' && hasAdminBookingDraftChanges_()) {
-              event.preventDefault();
-              confirmDiscardAdminBookingDraft_(function () {
-                adminBookingState.draftRows = [];
-                adminBookingState.dirty = false;
-                adminBookingState.editingDraftId = '';
-                renderAdminBookingDraft_();
-                renderAdminBookingSlots_();
-                activateTab_(targetTab);
-              });
-              return;
-            }
-            activateTab_(targetTab);
+            event.preventDefault();
+            requestTabActivation_(button.getAttribute('data-tab'));
           });
         });
 
