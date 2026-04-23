@@ -6849,6 +6849,14 @@
               firstName: tokens.slice(1).join(' ')
             };
           };
+        var getDefaultDate = function () {
+          var now = new Date();
+          return [
+            String(now.getFullYear()),
+            ('0' + String(now.getMonth() + 1)).slice(-2),
+            ('0' + String(now.getDate())).slice(-2)
+          ].join('-');
+        };
         var renderTable = ROOMS_UI && typeof ROOMS_UI.renderTable === 'function'
           ? function (mountId, headers, rows, emptyText, tableClassName) {
             return ROOMS_UI.renderTable(mountId, headers, rows, emptyText, tableClassName);
@@ -7177,7 +7185,7 @@
           adminBookingState.initialized = true;
           setAdminBookingViewState_('loaded', '');
           if (adminBookingDate) {
-            adminBookingDate.value = adminBookingState.model.date || getReplacementCurrentDate_() || getDefaultPanelDate_();
+            adminBookingDate.value = adminBookingState.model.date || getReplacementCurrentDate_() || getDefaultDate();
           }
           if (adminBookingSplitHalfHour) {
             adminBookingSplitHalfHour.checked = Boolean(adminBookingState.splitFreeSlotsHalfHour);
@@ -7208,7 +7216,7 @@
 
         function loadAdminBookingAvailability_(options) {
           var settings = options || {};
-          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultPanelDate_());
+          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultDate());
           var targetRoom = adminBookingRoom && adminBookingRoom.value ? adminBookingRoom.value : '';
           var availabilityOptions = getAdminBookingAvailabilityOptions_();
           var loadKey = targetDate + '|' + targetRoom + '|' + (availabilityOptions.splitFreeSlotsHalfHour ? '30' : '60');
@@ -7274,7 +7282,7 @@
 
         function loadAdminBookingModel_(options) {
           var settings = options || {};
-          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultPanelDate_());
+          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultDate());
           var targetRoom = adminBookingRoom && adminBookingRoom.value ? adminBookingRoom.value : '';
           var loadKey = targetDate + '|' + targetRoom;
           var requestToken = String(Date.now()) + ':' + String(Math.random());
@@ -7394,7 +7402,7 @@
         function clearAdminBookingForm_(preserveDateRoom) {
           if (!preserveDateRoom) {
             if (adminBookingDate) {
-              adminBookingDate.value = getReplacementCurrentDate_() || getDefaultPanelDate_();
+              adminBookingDate.value = getReplacementCurrentDate_() || getDefaultDate();
             }
           }
           if (adminBookingTeacher) {
