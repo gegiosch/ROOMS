@@ -184,6 +184,27 @@
         color: var(--muted);
         padding: 12px 0;
       }
+      .substitution-absence-state {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        margin-bottom: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .substitution-absence-state.error {
+        border-color: rgba(248, 113, 113, 0.35);
+        background: rgba(127, 29, 29, 0.18);
+        color: #fecaca;
+      }
+      .substitution-absence-state.error .room-panel-spinner {
+        display: none;
+      }
+      .substitution-absence-form-body.is-hidden {
+        display: none;
+      }
       .admin-booking-layout {
         display: grid;
         gap: 16px;
@@ -563,68 +584,74 @@
                     <p class="subtitle">Registro ufficiale delle assenze, separato dalla gestione sostituzioni del giorno.</p>
                   </div>
                 </div>
-                <div class="substitution-absence-mode-strip" id="substitution-absence-mode-strip">
-                  <button class="button secondary substitution-absence-mode-button active" type="button" data-absence-mode="DAY">Assenze del giorno</button>
-                  <button class="button secondary substitution-absence-mode-button" type="button" data-absence-mode="PLANNED">Assenze programmate</button>
+                <div id="substitution-absence-state" class="substitution-absence-state" aria-live="polite">
+                  <div class="room-panel-spinner"></div>
+                  <div id="substitution-absence-state-text">Caricamento archivio assenze...</div>
                 </div>
-                <div class="substitution-absence-grid">
-                  <div>
-                    <label for="substitution-absence-teacher">Docente</label>
-                    <select id="substitution-absence-teacher" class="select"></select>
+                <div id="substitution-absence-form-body" class="substitution-absence-form-body is-hidden">
+                  <div class="substitution-absence-mode-strip" id="substitution-absence-mode-strip">
+                    <button class="button secondary substitution-absence-mode-button active" type="button" data-absence-mode="DAY">Assenze del giorno</button>
+                    <button class="button secondary substitution-absence-mode-button" type="button" data-absence-mode="PLANNED">Assenze programmate</button>
                   </div>
-                  <div>
-                    <label for="substitution-absence-type">Tipo assenza</label>
-                    <select id="substitution-absence-type" class="select">
-                      <option value="DAILY">Assenza giornaliera</option>
-                      <option value="HOURLY_PERMISSION">Permesso orario</option>
-                    </select>
+                  <div class="substitution-absence-grid">
+                    <div>
+                      <label for="substitution-absence-teacher">Docente</label>
+                      <select id="substitution-absence-teacher" class="select"></select>
+                    </div>
+                    <div>
+                      <label for="substitution-absence-type">Tipo assenza</label>
+                      <select id="substitution-absence-type" class="select">
+                        <option value="DAILY">Assenza giornaliera</option>
+                        <option value="HOURLY_PERMISSION">Permesso orario</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div id="substitution-absence-multi-day-row" class="substitution-absence-inline">
-                  <label class="substitution-absence-check" for="substitution-absence-multi-day">
-                    <input id="substitution-absence-multi-day" type="checkbox">
-                    <span>Più giorni</span>
-                  </label>
-                </div>
-                <div class="substitution-absence-grid" style="margin-top:12px;">
-                  <div>
-                    <label id="substitution-absence-start-label" for="substitution-absence-start-date">Data</label>
-                    <input id="substitution-absence-start-date" class="input" type="date">
-                  </div>
-                  <div id="substitution-absence-end-wrap" style="display:none;">
-                    <label id="substitution-absence-end-label" for="substitution-absence-end-date">Data al</label>
-                    <input id="substitution-absence-end-date" class="input" type="date" disabled>
-                  </div>
-                </div>
-                <div id="substitution-absence-hours-section" class="substitution-absence-hours" style="display:none;">
-                  <div class="substitution-absence-section-title">Ore di servizio del docente</div>
-                  <div class="substitution-absence-meta">Selezionare le ore di permesso richieste</div>
-                  <div id="substitution-absence-hours-loading" class="substitution-absence-hours-loading" style="display:none;">
-                    <div class="room-panel-spinner"></div>
-                    <div>Caricamento ore disponibili...</div>
-                  </div>
-                  <div id="substitution-absence-hours-empty" class="substitution-absence-empty" style="display:none;"></div>
-                  <div id="substitution-absence-hours-grid" class="substitution-absence-hours-grid"></div>
-                  <div id="substitution-absence-recovery-wrap" class="substitution-absence-recovery" style="display:none;">
-                    <label class="substitution-absence-check" for="substitution-absence-recovery-required">
-                      <input id="substitution-absence-recovery-required" type="checkbox">
-                      <span>Da recuperare</span>
+                  <div id="substitution-absence-multi-day-row" class="substitution-absence-inline">
+                    <label class="substitution-absence-check" for="substitution-absence-multi-day">
+                      <input id="substitution-absence-multi-day" type="checkbox">
+                      <span>Più giorni</span>
                     </label>
                   </div>
+                  <div class="substitution-absence-grid" style="margin-top:12px;">
+                    <div>
+                      <label id="substitution-absence-start-label" for="substitution-absence-start-date">Data</label>
+                      <input id="substitution-absence-start-date" class="input" type="date">
+                    </div>
+                    <div id="substitution-absence-end-wrap" style="display:none;">
+                      <label id="substitution-absence-end-label" for="substitution-absence-end-date">Data al</label>
+                      <input id="substitution-absence-end-date" class="input" type="date" disabled>
+                    </div>
+                  </div>
+                  <div id="substitution-absence-hours-section" class="substitution-absence-hours" style="display:none;">
+                    <div class="substitution-absence-section-title">Ore di servizio del docente</div>
+                    <div class="substitution-absence-meta">Selezionare le ore di permesso richieste</div>
+                    <div id="substitution-absence-hours-loading" class="substitution-absence-hours-loading" style="display:none;">
+                      <div class="room-panel-spinner"></div>
+                      <div>Caricamento ore disponibili...</div>
+                    </div>
+                    <div id="substitution-absence-hours-empty" class="substitution-absence-empty" style="display:none;"></div>
+                    <div id="substitution-absence-hours-grid" class="substitution-absence-hours-grid"></div>
+                    <div id="substitution-absence-recovery-wrap" class="substitution-absence-recovery" style="display:none;">
+                      <label class="substitution-absence-check" for="substitution-absence-recovery-required">
+                        <input id="substitution-absence-recovery-required" type="checkbox">
+                        <span>Da recuperare</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;">
+                    <label for="substitution-absence-notes">Note</label>
+                    <textarea id="substitution-absence-notes" class="textarea" placeholder="Note operative"></textarea>
+                  </div>
+                  <div class="toolbar substitution-absence-toolbar">
+                    <button id="substitution-absence-add" class="button secondary" type="button">Aggiungi assenza</button>
+                    <button id="substitution-absence-save" class="button" type="button">Salva</button>
+                  </div>
+                  <div id="substitution-absence-draft-pill" class="status-pill" style="margin-top:10px;display:inline-flex;">Archivio assenze allineato</div>
+                  <div id="substitution-absence-mode-description" class="substitution-absence-meta">
+                    Le modifiche restano in bozza fino a Salva.
+                  </div>
+                  <div id="substitution-absence-notice" class="notice" style="display:none;margin-top:12px;"></div>
                 </div>
-                <div style="margin-top:12px;">
-                  <label for="substitution-absence-notes">Note</label>
-                  <textarea id="substitution-absence-notes" class="textarea" placeholder="Note operative"></textarea>
-                </div>
-                <div class="toolbar substitution-absence-toolbar">
-                  <button id="substitution-absence-add" class="button secondary" type="button">Aggiungi assenza</button>
-                  <button id="substitution-absence-save" class="button" type="button">Salva</button>
-                </div>
-                <div id="substitution-absence-draft-pill" class="status-pill" style="margin-top:10px;display:inline-flex;">Archivio assenze allineato</div>
-                <div id="substitution-absence-mode-description" class="substitution-absence-meta">
-                  Le modifiche restano in bozza fino a Salva.
-                </div>
-                <div id="substitution-absence-notice" class="notice" style="display:none;margin-top:12px;"></div>
               </section>
 
               <section class="panel table-card">
@@ -6731,6 +6758,9 @@
 <script>
       (function () {
         var model = window.ROOMS_SUBSTITUTION_SHELL_MODEL || {};
+        var safeArray = ROOMS_UI && typeof ROOMS_UI.safeArray === 'function'
+          ? ROOMS_UI.safeArray
+          : function (value) { return Array.isArray(value) ? value : []; };
         var reportsRoot = document.getElementById('substitution-reports-root');
         var absenceTeacherSelect = document.getElementById('substitution-absence-teacher');
         var absenceTypeSelect = document.getElementById('substitution-absence-type');
@@ -6757,6 +6787,9 @@
         var absenceDayTable = document.getElementById('substitution-day-absence-table');
         var absencePlannedTable = document.getElementById('substitution-planned-absence-table');
         var absenceNotice = document.getElementById('substitution-absence-notice');
+        var absenceStateView = document.getElementById('substitution-absence-state');
+        var absenceStateText = document.getElementById('substitution-absence-state-text');
+        var absenceFormBody = document.getElementById('substitution-absence-form-body');
         var adminBookingDate = document.getElementById('admin-booking-date');
         var adminBookingRoom = document.getElementById('admin-booking-room');
         var adminBookingTeacher = document.getElementById('admin-booking-teacher');
@@ -6787,7 +6820,9 @@
           periodCache: {},
           periodsLoading: false,
           periodsRequestToken: 0,
-          initialized: false
+          initialized: false,
+          status: 'idle',
+          errorMessage: ''
         };
         var adminBookingState = {
           model: null,
@@ -7427,6 +7462,27 @@
           absenceNotice.textContent = message;
         }
 
+        function setAbsenceViewState_(status, message) {
+          absenceState.status = status || 'idle';
+          absenceState.errorMessage = message || '';
+          if (absenceStateView) {
+            absenceStateView.classList.toggle('error', absenceState.status === 'error');
+            absenceStateView.style.display = absenceState.status === 'loaded' ? 'none' : 'flex';
+          }
+          if (absenceStateText) {
+            if (absenceState.status === 'error') {
+              absenceStateText.textContent = absenceState.errorMessage || 'Errore caricamento assenze.';
+            } else if (absenceState.status === 'loading') {
+              absenceStateText.textContent = message || 'Caricamento archivio assenze...';
+            } else {
+              absenceStateText.textContent = '';
+            }
+          }
+          if (absenceFormBody) {
+            absenceFormBody.classList.toggle('is-hidden', absenceState.status !== 'loaded');
+          }
+        }
+
         function updateAbsenceDraftStatus_() {
           if (absenceSaveButton) {
             absenceSaveButton.disabled = !absenceState.draftDirty;
@@ -7562,6 +7618,9 @@
             dayRows: [],
             plannedRows: []
           };
+          if (!safeArray(absenceState.model.teacherOptions).length) {
+            throw new Error('Nessun docente disponibile per il registro assenze.');
+          }
           absenceState.draftRows = ((absenceState.model.dayRows || []).concat(absenceState.model.plannedRows || [])).map(cloneAbsenceRow_);
           absenceState.draftDirty = false;
           absenceState.editingAbsenceId = '';
@@ -7574,6 +7633,7 @@
           }
           renderAbsenceTables_();
           absenceState.initialized = true;
+          setAbsenceViewState_('loaded', '');
           updateAbsenceDraftStatus_();
           updateAbsenceFormLayout_();
         }
@@ -7927,6 +7987,7 @@
         }
 
         function loadAbsenceRegistry_(referenceDate) {
+          setAbsenceViewState_('loading', 'Caricamento archivio assenze...');
           setAbsenceNotice_('Caricamento archivio assenze...', '');
           ROOMS_UI.call('getReplacementAbsenceRegistryModel', referenceDate || '')
             .then(function (result) {
@@ -7938,6 +7999,7 @@
               }
             })
             .catch(function (error) {
+              setAbsenceViewState_('error', 'Errore caricamento assenze: ' + (error && error.message ? error.message : 'errore imprevisto'));
               setAbsenceNotice_('Errore caricamento assenze: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
             });
         }

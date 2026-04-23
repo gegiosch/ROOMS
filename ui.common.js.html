@@ -87,6 +87,10 @@ window.ROOMS_UI = {
     return node;
   },
 
+  safeArray: function (value) {
+    return Array.isArray(value) ? value : [];
+  },
+
   fillSelect: function (select, options, valueField, labelField, selectedValue) {
     this.clearNode(select);
     options.forEach(function (option) {
