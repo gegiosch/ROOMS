@@ -100,6 +100,14 @@
         margin-bottom: 0;
         color: var(--muted);
       }
+      .substitution-landing-panel {
+        padding: 56px 28px;
+        text-align: center;
+      }
+      .substitution-landing-panel .subtitle {
+        max-width: 720px;
+        margin: 0 auto;
+      }
       .substitution-user-pill {
         margin-left: auto;
       }
@@ -320,13 +328,13 @@
           </div>
           <div class="status-pill substitution-user-pill" id="substitution-user-pill"></div>
         </header>
-        <div id="admin-shell-bootstrap" class="admin-shell-bootstrap" aria-live="polite" aria-busy="true">
+        <div id="admin-shell-bootstrap" class="admin-shell-bootstrap is-hidden" aria-live="polite" aria-busy="true">
           <div class="room-panel-spinner"></div>
           <div id="admin-shell-bootstrap-text" class="admin-shell-bootstrap-text">Caricamento amministrazione...</div>
         </div>
 
         <div class="substitution-tab-strip" id="substitution-tab-strip">
-          <button class="button secondary substitution-tab-button active" type="button" data-tab="absences">Inserimento assenze</button>
+          <button class="button secondary substitution-tab-button" type="button" data-tab="absences">Inserimento assenze</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="trips" data-panel="workbench" data-replacement-tab="trips">Uscite didattiche</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="long" data-panel="workbench" data-replacement-tab="long">Supplenze lunghe</button>
           <button class="button secondary substitution-tab-button" type="button" data-tab="daily" data-panel="workbench" data-replacement-tab="daily">Sostituzioni giornaliere</button>
@@ -335,6 +343,12 @@
         </div>
 
         <div id="substitution-root">
+          <section class="substitution-tab-content active" data-tab-panel="landing">
+            <section class="panel form-card substitution-landing-panel">
+              <h3>Amministrazione</h3>
+              <p class="subtitle">Selezionare l’operazione da eseguire.</p>
+            </section>
+          </section>
           <section class="substitution-tab-content substitution-workbench-shell" data-tab-panel="workbench">
 <div id="replacement-modal" class="replacement-modal" style="display:none;">
       <div class="replacement-dialog">
@@ -619,7 +633,7 @@
     </div>
 </section>
 
-          <section class="substitution-tab-content active" data-tab-panel="absences">
+          <section class="substitution-tab-content" data-tab-panel="absences">
             <div class="substitution-absence-layout">
               <section class="panel form-card">
                 <div class="replacement-detail-header">
@@ -6915,8 +6929,8 @@
         var adminBookingFormBody = document.getElementById('admin-booking-form-body');
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
-        var activeTabId = 'absences';
-        var adminShellReady = false;
+        var activeTabId = 'landing';
+        var adminShellReady = true;
         var absenceState = {
           mode: 'DAY',
           model: null,
@@ -6975,7 +6989,7 @@
         }
 
         function activateTab_(tabId) {
-          activeTabId = tabId || 'absences';
+          activeTabId = tabId || 'landing';
           var activePanelId = getPanelId_(activeTabId);
           var activeButton = tabButtons.find(function (entry) {
             return entry.getAttribute('data-tab') === activeTabId;
@@ -7154,12 +7168,20 @@
         function populateAdminBookingOptions_() {
           var previousRoom = adminBookingRoom ? adminBookingRoom.value : '';
           var previousTeacher = adminBookingTeacher ? adminBookingTeacher.value : '';
+          var preferredRoom = previousRoom || (adminBookingState.model && adminBookingState.model.resourceId) || '';
           if (adminBookingRoom) {
             adminBookingRoom.innerHTML = '';
+            adminBookingRoom.appendChild(new Option('Seleziona aula', ''));
             safeArray(adminBookingState.model && adminBookingState.model.resources).forEach(function (resource) {
               adminBookingRoom.appendChild(new Option(resource.displayName || resource.resourceId, resource.resourceId));
             });
-            adminBookingRoom.value = previousRoom || (adminBookingState.model && adminBookingState.model.resourceId) || '';
+            if (preferredRoom && Array.prototype.some.call(adminBookingRoom.options, function (entry) {
+              return entry.value === preferredRoom;
+            })) {
+              adminBookingRoom.value = preferredRoom;
+            } else {
+              adminBookingRoom.value = '';
+            }
           }
           if (adminBookingTeacher) {
             adminBookingTeacher.innerHTML = '';
@@ -7176,6 +7198,8 @@
         }
 
         function applyAdminBookingBootstrapModel_(nextModel) {
+          var currentDate = adminBookingDate ? adminBookingDate.value : '';
+          var currentRoom = adminBookingRoom ? adminBookingRoom.value : '';
           adminBookingState.model = Object.assign({}, adminBookingState.model || {}, nextModel || {
             date: '',
             resourceId: '',
@@ -7185,7 +7209,10 @@
           adminBookingState.initialized = true;
           setAdminBookingViewState_('loaded', '');
           if (adminBookingDate) {
-            adminBookingDate.value = adminBookingState.model.date || getReplacementCurrentDate_() || getDefaultDate();
+            adminBookingDate.value = adminBookingState.model.date || currentDate || '';
+          }
+          if (adminBookingRoom) {
+            adminBookingRoom.value = adminBookingState.model.resourceId || currentRoom || '';
           }
           if (adminBookingSplitHalfHour) {
             adminBookingSplitHalfHour.checked = Boolean(adminBookingState.splitFreeSlotsHalfHour);
@@ -7201,6 +7228,12 @@
             isOpen: false,
             statusSummary: ''
           });
+          if (adminBookingDate) {
+            adminBookingDate.value = adminBookingState.model && adminBookingState.model.date ? adminBookingState.model.date : '';
+          }
+          if (adminBookingRoom) {
+            adminBookingRoom.value = adminBookingState.model && adminBookingState.model.resourceId ? adminBookingState.model.resourceId : '';
+          }
           adminBookingState.splitFreeSlotsHalfHour = Boolean(adminBookingState.model && adminBookingState.model.options && adminBookingState.model.options.splitFreeSlotsHalfHour);
           if (adminBookingSplitHalfHour) {
             adminBookingSplitHalfHour.checked = adminBookingState.splitFreeSlotsHalfHour;
@@ -7216,13 +7249,38 @@
 
         function loadAdminBookingAvailability_(options) {
           var settings = options || {};
-          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultDate());
+          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : '';
           var targetRoom = adminBookingRoom && adminBookingRoom.value ? adminBookingRoom.value : '';
           var availabilityOptions = getAdminBookingAvailabilityOptions_();
           var loadKey = targetDate + '|' + targetRoom + '|' + (availabilityOptions.splitFreeSlotsHalfHour ? '30' : '60');
           var requestToken = String(Date.now()) + ':' + String(Math.random());
           if (adminBookingState.loading && adminBookingState.loadPromise && adminBookingState.loadKey === loadKey) {
             return adminBookingState.loadPromise;
+          }
+          if (!targetDate || !targetRoom) {
+            adminBookingState.model = Object.assign({}, adminBookingState.model || {}, {
+              date: targetDate || '',
+              resourceId: targetRoom || '',
+              freeSlots: [],
+              bookings: [],
+              isOpen: null,
+              statusSummary: '',
+              options: {
+                splitFreeSlotsHalfHour: Boolean(availabilityOptions.splitFreeSlotsHalfHour)
+              }
+            });
+            adminBookingState.loading = false;
+            adminBookingState.slotsErrorMessage = '';
+            adminBookingState.loadPromise = null;
+            adminBookingState.loadKey = '';
+            adminBookingState.loadRequestToken = '';
+            setAdminBookingViewState_('loaded', '');
+            setAdminBookingControlsLoading_(false);
+            if (!settings.preserveNotice) {
+              setAdminBookingNotice_('', '');
+            }
+            renderAdminBookingSlots_();
+            return Promise.resolve(adminBookingState.model);
           }
           adminBookingState.loading = true;
           adminBookingState.slotsErrorMessage = '';
@@ -7282,15 +7340,15 @@
 
         function loadAdminBookingModel_(options) {
           var settings = options || {};
-          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultDate());
+          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : '';
           var targetRoom = adminBookingRoom && adminBookingRoom.value ? adminBookingRoom.value : '';
           var loadKey = targetDate + '|' + targetRoom;
           var requestToken = String(Date.now()) + ':' + String(Math.random());
+          if (adminBookingState.initialized) {
+            return loadAdminBookingAvailability_(settings);
+          }
           if (adminBookingState.loading && adminBookingState.loadPromise && adminBookingState.loadKey === loadKey) {
             return adminBookingState.loadPromise;
-          }
-          if (adminBookingDate && !adminBookingDate.value && targetDate) {
-            adminBookingDate.value = targetDate;
           }
           adminBookingState.loading = true;
           adminBookingState.slotsErrorMessage = '';
@@ -7353,6 +7411,18 @@
             adminBookingSlots.appendChild(ROOMS_UI.el('div', 'substitution-absence-empty', 'Errore caricamento slot liberi: ' + adminBookingState.slotsErrorMessage));
             return;
           }
+          if (!(adminBookingDate && adminBookingDate.value) || !(adminBookingRoom && adminBookingRoom.value)) {
+            adminBookingSlots.appendChild(ROOMS_UI.el(
+              'div',
+              'substitution-absence-empty',
+              !(adminBookingDate && adminBookingDate.value) && !(adminBookingRoom && adminBookingRoom.value)
+                ? 'Seleziona data e aula per caricare gli slot liberi.'
+                : (!(adminBookingDate && adminBookingDate.value)
+                  ? 'Seleziona una data per caricare gli slot liberi.'
+                  : 'Seleziona un\'aula per caricare gli slot liberi.')
+            ));
+            return;
+          }
           safeArray(adminBookingState.draftRows).forEach(function (row) {
             if (row.draftId === selectedDraftId) {
               return;
@@ -7402,7 +7472,10 @@
         function clearAdminBookingForm_(preserveDateRoom) {
           if (!preserveDateRoom) {
             if (adminBookingDate) {
-              adminBookingDate.value = getReplacementCurrentDate_() || getDefaultDate();
+              adminBookingDate.value = '';
+            }
+            if (adminBookingRoom) {
+              adminBookingRoom.value = '';
             }
           }
           if (adminBookingTeacher) {
@@ -7683,11 +7756,14 @@
         }
 
         function confirmDiscardAdminBookingDraft_(onConfirm) {
-          confirmAction_(
-            'Sono presenti prenotazioni non salvate. Se continui, tutte le modifiche non salvate andranno perdute.',
-            onConfirm,
-            'Prenotazioni non salvate'
-          );
+          openAppDialog_({
+            title: 'Prenotazioni non salvate',
+            message: 'Ci sono prenotazioni non salvate. Si vuole uscire senza salvare?',
+            confirmLabel: 'Sì',
+            cancelLabel: 'No',
+            confirmClass: 'button warn',
+            onConfirm: onConfirm
+          });
         }
 
         function escapeAbsenceHtml_(value) {
@@ -8321,23 +8397,6 @@
           return absenceState.loadPromise;
         }
 
-        function bootstrapAdminShell_() {
-          setAdminShellReady_(false, 'Caricamento archivio assenze...');
-          renderAdminBookingDraft_();
-          return loadAbsenceRegistry_(getReplacementCurrentDate_() || '')
-            .catch(function () {
-              return null;
-            })
-            .finally(function () {
-              setAdminShellReady_(true, '');
-              if (activeTabId !== 'absences') {
-                activateTab_(activeTabId);
-              } else if (absenceState.initialized) {
-                renderAbsenceTables_();
-              }
-            });
-        }
-
         function swapReportsContent_(htmlText) {
           var parser = new DOMParser();
           var parsed = parser.parseFromString(String(htmlText || ''), 'text/html');
@@ -8512,7 +8571,9 @@
         setAbsenceMode_('DAY');
         clearAbsenceForm_(true);
         updateAbsenceDraftStatus_();
-        bootstrapAdminShell_();
+        renderAdminBookingDraft_();
+        setAdminShellReady_(true, '');
+        activateTab_('landing');
       }());
     </script>
   </body>

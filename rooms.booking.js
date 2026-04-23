@@ -477,11 +477,19 @@ ROOMS_APP.Booking = {
 
   buildAdminRoomBookingBaseModel_: function (dateString, resourceId, actor) {
     var bookingActor = actor || this.requireAdminRoomBookingActor_();
-    var requestedDate = dateString || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, bookingActor));
-    var dateState = ROOMS_APP.Replacements.resolveSelectedDate_(requestedDate, true);
-    var date = dateState.selectedDate;
+    var requestedDate = ROOMS_APP.normalizeString(dateString || '');
+    var dateState = requestedDate
+      ? ROOMS_APP.Replacements.resolveSelectedDate_(requestedDate, true)
+      : {
+        requestedDate: '',
+        selectedDate: '',
+        isValid: false,
+        autoShifted: false,
+        message: ''
+      };
+    var date = dateState.selectedDate || '';
     var resources = this.listAdminBookableResources_();
-    var selectedResourceId = ROOMS_APP.normalizeString(resourceId || (resources[0] && resources[0].resourceId) || '');
+    var selectedResourceId = ROOMS_APP.normalizeString(resourceId || '');
     return {
       date: date,
       dateState: dateState,
@@ -509,6 +517,7 @@ ROOMS_APP.Booking = {
       : null;
     return {
       date: baseModel.date,
+      dateState: baseModel.dateState,
       resourceId: selectedResourceId,
       freeSlots: roomModel && roomModel.freeSlots ? roomModel.freeSlots : [],
       bookings: roomModel && roomModel.bookings ? roomModel.bookings : [],
