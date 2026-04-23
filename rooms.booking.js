@@ -471,12 +471,15 @@ ROOMS_APP.Booking = {
     return this.buildAdminRoomBookingBaseModel_(dateString, resourceId, actor);
   },
 
-  getAdminRoomBookingAvailabilityModel: function (dateString, resourceId) {
+  getAdminRoomBookingAvailabilityModel: function (dateString, resourceId, options) {
     var actor = this.requireAdminRoomBookingActor_();
     var baseModel = this.buildAdminRoomBookingBaseModel_(dateString, resourceId, actor);
     var selectedResourceId = baseModel.resourceId;
+    var availabilityOptions = options && typeof options === 'object' ? options : {};
     var roomModel = selectedResourceId
-      ? this.getRoomViewModel(selectedResourceId, baseModel.date, { splitFreeSlotsHalfHour: true })
+      ? this.getRoomViewModel(selectedResourceId, baseModel.date, {
+        splitFreeSlotsHalfHour: Boolean(availabilityOptions.splitFreeSlotsHalfHour)
+      })
       : null;
     return {
       date: baseModel.date,
@@ -484,14 +487,17 @@ ROOMS_APP.Booking = {
       freeSlots: roomModel && roomModel.freeSlots ? roomModel.freeSlots : [],
       bookings: roomModel && roomModel.bookings ? roomModel.bookings : [],
       isOpen: roomModel ? Boolean(roomModel.isOpen) : false,
-      statusSummary: roomModel ? (roomModel.statusSummary || '') : ''
+      statusSummary: roomModel ? (roomModel.statusSummary || '') : '',
+      options: roomModel && roomModel.options ? roomModel.options : {
+        splitFreeSlotsHalfHour: Boolean(availabilityOptions.splitFreeSlotsHalfHour)
+      }
     };
   },
 
-  getAdminRoomBookingModel: function (dateString, resourceId) {
+  getAdminRoomBookingModel: function (dateString, resourceId, options) {
     var actor = this.requireAdminRoomBookingActor_();
     var baseModel = this.buildAdminRoomBookingBaseModel_(dateString, resourceId, actor);
-    var availabilityModel = this.getAdminRoomBookingAvailabilityModel(baseModel.date, baseModel.resourceId);
+    var availabilityModel = this.getAdminRoomBookingAvailabilityModel(baseModel.date, baseModel.resourceId, options);
     return {
       date: baseModel.date,
       dateState: baseModel.dateState,
@@ -501,6 +507,7 @@ ROOMS_APP.Booking = {
       bookings: availabilityModel.bookings,
       isOpen: availabilityModel.isOpen,
       statusSummary: availabilityModel.statusSummary,
+      options: availabilityModel.options,
       teacherOptions: baseModel.teacherOptions,
       user: actor
     };

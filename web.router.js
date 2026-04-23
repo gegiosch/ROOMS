@@ -254,9 +254,9 @@ function getAdminRoomBookingBootstrapModel(dateString, resourceId, requestContex
   });
 }
 
-function getAdminRoomBookingAvailabilityModel(dateString, resourceId, requestContext) {
-  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
-    return ROOMS_APP.Booking.getAdminRoomBookingAvailabilityModel(dateString, resourceId);
+function getAdminRoomBookingAvailabilityModel(dateString, resourceId, options, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Booking.getAdminRoomBookingAvailabilityModel(dateString, resourceId, options);
   });
 }
 
@@ -559,7 +559,13 @@ function routeApiRequest_(payload) {
     return ROOMS_APP.Booking.getAdminRoomBookingBootstrapModel(payload.date, normalizeRoomIdParam_(payload));
   }
   if (action === 'getAdminRoomBookingAvailabilityModel') {
-    return ROOMS_APP.Booking.getAdminRoomBookingAvailabilityModel(payload.date, normalizeRoomIdParam_(payload));
+    return ROOMS_APP.Booking.getAdminRoomBookingAvailabilityModel(
+      payload.date,
+      normalizeRoomIdParam_(payload),
+      payload.options || {
+        splitFreeSlotsHalfHour: payload.splitFreeSlotsHalfHour
+      }
+    );
   }
   if (action === 'saveAdminRoomBookingRegistry') {
     return ROOMS_APP.Booking.saveAdminRoomBookingRegistry(payload.rows || payload.draftRows || []);

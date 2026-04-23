@@ -215,6 +215,21 @@
         flex-wrap: wrap;
         margin-top: 10px;
       }
+      .admin-booking-toggle {
+        display: flex;
+        align-items: center;
+        min-height: 42px;
+      }
+      .admin-booking-toggle label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .admin-booking-toggle input {
+        margin: 0;
+      }
       .admin-booking-slot-chip {
         display: inline-flex;
         align-items: center;
@@ -697,6 +712,12 @@
                     </div>
                     <div>
                       <button id="admin-booking-load-slots" class="button secondary" type="button">Carica slot liberi</button>
+                      <div class="admin-booking-toggle">
+                        <label for="admin-booking-split-half-hour">
+                          <input id="admin-booking-split-half-hour" type="checkbox">
+                          <span>Dividi slot liberi in mezz'ore</span>
+                        </label>
+                      </div>
                     </div>
                     <div>
                       <label for="admin-booking-teacher">Docente / richiedente</label>
@@ -6801,6 +6822,7 @@
         var adminBookingActivity = document.getElementById('admin-booking-activity');
         var adminBookingNotes = document.getElementById('admin-booking-notes');
         var adminBookingLoadSlots = document.getElementById('admin-booking-load-slots');
+        var adminBookingSplitHalfHour = document.getElementById('admin-booking-split-half-hour');
         var adminBookingSlots = document.getElementById('admin-booking-slots');
         var adminBookingAddDraft = document.getElementById('admin-booking-add-draft');
         var adminBookingResetDraft = document.getElementById('admin-booking-reset-draft');
@@ -6840,6 +6862,7 @@
           loadPromise: null,
           loadKey: '',
           loadRequestToken: '',
+          splitFreeSlotsHalfHour: false,
           status: 'idle',
           errorMessage: ''
         };
@@ -6965,9 +6988,18 @@
           if (adminBookingLoadSlots) {
             adminBookingLoadSlots.disabled = Boolean(loading);
           }
+          if (adminBookingSplitHalfHour) {
+            adminBookingSplitHalfHour.disabled = Boolean(loading);
+          }
           if (adminBookingAddDraft) {
             adminBookingAddDraft.disabled = Boolean(loading);
           }
+        }
+
+        function getAdminBookingAvailabilityOptions_() {
+          return {
+            splitFreeSlotsHalfHour: Boolean(adminBookingSplitHalfHour && adminBookingSplitHalfHour.checked)
+          };
         }
 
         function showAdminBookingLoadingOptions_() {
@@ -7017,6 +7049,9 @@
           if (adminBookingDate) {
             adminBookingDate.value = adminBookingState.model.date || getReplacementCurrentDate_() || getDefaultPanelDate_();
           }
+          if (adminBookingSplitHalfHour) {
+            adminBookingSplitHalfHour.checked = Boolean(adminBookingState.splitFreeSlotsHalfHour);
+          }
           populateAdminBookingOptions_();
           renderAdminBookingDraft_();
         }
@@ -7028,6 +7063,10 @@
             isOpen: false,
             statusSummary: ''
           });
+          adminBookingState.splitFreeSlotsHalfHour = Boolean(adminBookingState.model && adminBookingState.model.options && adminBookingState.model.options.splitFreeSlotsHalfHour);
+          if (adminBookingSplitHalfHour) {
+            adminBookingSplitHalfHour.checked = adminBookingState.splitFreeSlotsHalfHour;
+          }
           adminBookingState.loading = false;
           adminBookingState.slotsErrorMessage = '';
           adminBookingState.loadPromise = null;
@@ -7035,6 +7074,72 @@
           adminBookingState.loadRequestToken = '';
           setAdminBookingControlsLoading_(false);
           renderAdminBookingSlots_();
+        }
+
+        function loadAdminBookingAvailability_(options) {
+          var settings = options || {};
+          var targetDate = adminBookingDate && adminBookingDate.value ? adminBookingDate.value : (getReplacementCurrentDate_() || getDefaultPanelDate_());
+          var targetRoom = adminBookingRoom && adminBookingRoom.value ? adminBookingRoom.value : '';
+          var availabilityOptions = getAdminBookingAvailabilityOptions_();
+          var loadKey = targetDate + '|' + targetRoom + '|' + (availabilityOptions.splitFreeSlotsHalfHour ? '30' : '60');
+          var requestToken = String(Date.now()) + ':' + String(Math.random());
+          if (adminBookingState.loading && adminBookingState.loadPromise && adminBookingState.loadKey === loadKey) {
+            return adminBookingState.loadPromise;
+          }
+          adminBookingState.loading = true;
+          adminBookingState.slotsErrorMessage = '';
+          adminBookingState.loadKey = loadKey;
+          adminBookingState.loadRequestToken = requestToken;
+          if (settings.showViewLoading) {
+            setAdminBookingViewState_('loading', 'Caricamento prenotazioni aule...');
+          }
+          setAdminBookingControlsLoading_(true);
+          if (!settings.preserveNotice) {
+            setAdminBookingNotice_('Caricamento slot liberi...', '');
+          }
+          renderAdminBookingSlots_();
+          adminBookingState.loadPromise = ROOMS_UI.call('getAdminRoomBookingAvailabilityModel', targetDate, targetRoom, availabilityOptions)
+            .then(function (result) {
+              if (adminBookingState.loadRequestToken !== requestToken) {
+                return;
+              }
+              if (!result) {
+                return;
+              }
+              applyAdminBookingAvailabilityModel_(result);
+              if (!settings.preserveNotice) {
+                if (adminBookingState.model && adminBookingState.model.dateState && adminBookingState.model.dateState.message) {
+                  setAdminBookingNotice_(adminBookingState.model.dateState.message, adminBookingState.model.dateState.autoShifted ? 'warn' : '');
+                } else {
+                  setAdminBookingNotice_('', '');
+                }
+              }
+            })
+            .catch(function (error) {
+              if (adminBookingState.loadRequestToken !== requestToken) {
+                return;
+              }
+              if (!adminBookingState.initialized) {
+                adminBookingState.loading = false;
+                adminBookingState.loadPromise = null;
+                adminBookingState.loadKey = '';
+                adminBookingState.loadRequestToken = '';
+                setAdminBookingViewState_('error', 'Errore caricamento prenotazioni aule: ' + (error && error.message ? error.message : 'errore imprevisto'));
+                setAdminBookingControlsLoading_(false);
+                renderAdminBookingSlots_();
+                setAdminBookingNotice_('Errore caricamento prenotazioni aule: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
+                return;
+              }
+              adminBookingState.loading = false;
+              adminBookingState.loadPromise = null;
+              adminBookingState.loadKey = '';
+              adminBookingState.loadRequestToken = '';
+              adminBookingState.slotsErrorMessage = error && error.message ? error.message : 'errore imprevisto';
+              setAdminBookingControlsLoading_(false);
+              renderAdminBookingSlots_();
+              setAdminBookingNotice_('Errore caricamento slot liberi: ' + adminBookingState.slotsErrorMessage, 'error');
+            });
+          return adminBookingState.loadPromise;
         }
 
         function loadAdminBookingModel_(options) {
@@ -7072,22 +7177,9 @@
                 throw new Error('Nessun docente disponibile per le prenotazioni amministrative.');
               }
               applyAdminBookingBootstrapModel_(result);
-              adminBookingState.loading = true;
-              renderAdminBookingSlots_();
-              return ROOMS_UI.call('getAdminRoomBookingAvailabilityModel', result.date, result.resourceId || '');
-            })
-            .then(function (result) {
-              if (adminBookingState.loadRequestToken !== requestToken || !result) {
-                return;
-              }
-              applyAdminBookingAvailabilityModel_(result);
-              if (!settings.preserveNotice) {
-                if (adminBookingState.model && adminBookingState.model.dateState && adminBookingState.model.dateState.message) {
-                  setAdminBookingNotice_(adminBookingState.model.dateState.message, adminBookingState.model.dateState.autoShifted ? 'warn' : '');
-                } else {
-                  setAdminBookingNotice_('', '');
-                }
-              }
+              return loadAdminBookingAvailability_({
+                preserveNotice: settings.preserveNotice
+              });
             })
             .catch(function (error) {
               if (adminBookingState.loadRequestToken !== requestToken) {
@@ -7102,16 +7194,7 @@
                 setAdminBookingControlsLoading_(false);
                 renderAdminBookingSlots_();
                 setAdminBookingNotice_('Errore caricamento prenotazioni aule: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
-                return;
               }
-              adminBookingState.loading = false;
-              adminBookingState.loadPromise = null;
-              adminBookingState.loadKey = '';
-              adminBookingState.loadRequestToken = '';
-              adminBookingState.slotsErrorMessage = error && error.message ? error.message : 'errore imprevisto';
-              setAdminBookingControlsLoading_(false);
-              renderAdminBookingSlots_();
-              setAdminBookingNotice_('Errore caricamento slot liberi: ' + adminBookingState.slotsErrorMessage, 'error');
             });
           return adminBookingState.loadPromise;
         }
@@ -8066,13 +8149,29 @@
         });
 
         if (adminBookingLoadSlots) {
-          adminBookingLoadSlots.addEventListener('click', loadAdminBookingModel_);
+          adminBookingLoadSlots.addEventListener('click', function () {
+            if (!adminBookingState.initialized) {
+              loadAdminBookingModel_();
+              return;
+            }
+            loadAdminBookingAvailability_();
+          });
         }
         if (adminBookingDate) {
           adminBookingDate.addEventListener('change', loadAdminBookingModel_);
         }
         if (adminBookingRoom) {
           adminBookingRoom.addEventListener('change', loadAdminBookingModel_);
+        }
+        if (adminBookingSplitHalfHour) {
+          adminBookingSplitHalfHour.addEventListener('change', function () {
+            if (!adminBookingState.initialized) {
+              return;
+            }
+            loadAdminBookingAvailability_({
+              preserveNotice: true
+            });
+          });
         }
         if (adminBookingAddDraft) {
           adminBookingAddDraft.addEventListener('click', addAdminBookingDraft_);
