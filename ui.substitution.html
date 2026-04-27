@@ -248,6 +248,12 @@
         flex-wrap: wrap;
         margin-top: 10px;
       }
+      .admin-booking-slot-loading {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+      }
       .admin-booking-toggle {
         display: flex;
         align-items: center;
@@ -7068,12 +7074,13 @@
             currentTabId === 'room-bookings' &&
             targetTab !== 'room-bookings' &&
             hasAdminBookingDraftChanges_()) {
-            confirmDiscardAdminBookingDraft_(function () {
-              discardAdminBookingDraft_();
-              requestTabActivation_(targetTab, Object.assign({}, settings, {
-                skipBookingDraftConfirm: true
-              }));
-            });
+            if (!window.confirm('Ci sono prenotazioni non salvate. Si vuole uscire senza salvare?')) {
+              return;
+            }
+            discardAdminBookingDraft_();
+            requestTabActivation_(targetTab, Object.assign({}, settings, {
+              skipBookingDraftConfirm: true
+            }));
             return;
           }
           if (!settings.skipTripDraftConfirm &&
@@ -7472,7 +7479,15 @@
           }
           adminBookingSlots.innerHTML = '';
           if (adminBookingState.loading) {
-            adminBookingSlots.appendChild(ROOMS_UI.el('div', 'substitution-absence-empty', 'Caricamento slot liberi...'));
+            var loadingState = document.createElement('div');
+            var loadingSpinner = document.createElement('div');
+            var loadingText = document.createElement('div');
+            loadingState.className = 'admin-booking-slot-loading';
+            loadingSpinner.className = 'room-panel-spinner';
+            loadingText.textContent = 'Caricamento slot liberi...';
+            loadingState.appendChild(loadingSpinner);
+            loadingState.appendChild(loadingText);
+            adminBookingSlots.appendChild(loadingState);
             return;
           }
           if (adminBookingState.slotsErrorMessage) {
@@ -7664,7 +7679,12 @@
           adminBookingState.dirty = true;
           clearAdminBookingForm_(true);
           renderAdminBookingDraft_();
-          setAdminBookingNotice_(rowsToAdd.length + ' prenotazioni aggiunte alla bozza. Premere Salva prenotazioni per persistere.', 'success');
+          setAdminBookingNotice_(
+            rowsToAdd.length === 1
+              ? '1 prenotazione aggiunta alla bozza. Premere Salva prenotazioni per salvare le modifiche.'
+              : String(rowsToAdd.length) + ' prenotazioni aggiunte alla bozza. Premere Salva prenotazioni per salvare le modifiche.',
+            'success'
+          );
         }
 
         function editAdminBookingDraft_(draftId) {
