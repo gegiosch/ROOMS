@@ -5361,6 +5361,13 @@
           return String(startTime || '') + '_' + String(endTime || '');
         }
 
+        function slotIntervalsOverlap_(leftStart, leftEnd, rightStart, rightEnd) {
+          if (!leftStart || !leftEnd || !rightStart || !rightEnd) {
+            return false;
+          }
+          return String(leftStart) < String(rightEnd) && String(leftEnd) > String(rightStart);
+        }
+
         function occupancySourceLabel_(booking) {
           if (!booking) {
             return '';
@@ -5500,27 +5507,35 @@
         }
 
         function getAvailableFreeSlots_(model, mergedBookings) {
-          var includeDraftCreates = arguments.length > 2 && Boolean(arguments[2] && arguments[2].includeDraftCreates);
           var hasExplicitFreeSlots = Boolean(model) && Array.isArray(model.freeSlots);
           var candidateSlots = hasExplicitFreeSlots ? safeArray(model && model.freeSlots) : [];
           if (!hasExplicitFreeSlots) {
             candidateSlots = safeArray(model && (model.dailySlots || model.slots));
           }
-          var occupiedSlotKeys = {};
-          safeArray(mergedBookings).forEach(function (booking) {
-            var startTime = booking && booking.StartTime;
-            var endTime = booking && booking.EndTime;
-            if (startTime && endTime) {
-              occupiedSlotKeys[normalizeSlotKey_(startTime, endTime)] = true;
+          var occupiedIntervals = safeArray(mergedBookings).map(function (booking) {
+            return {
+              startTime: booking && booking.StartTime,
+              endTime: booking && booking.EndTime
+            };
+          }).filter(function (interval) {
+            return Boolean(interval.startTime && interval.endTime);
+          });
+          Object.keys(panelState.draft.creates || {}).forEach(function (slotKey) {
+            var draft = panelState.draft.creates[slotKey];
+            if (draft && draft.startTime && draft.endTime) {
+              occupiedIntervals.push({
+                startTime: draft.startTime,
+                endTime: draft.endTime
+              });
             }
           });
-          var draftCreates = panelState.draft.creates || {};
           return candidateSlots.filter(function (slot) {
-            var key = normalizeSlotKey_(slot.startTime, slot.endTime);
-            if (!key || !slot.startTime || !slot.endTime) {
+            if (!slot || !slot.startTime || !slot.endTime) {
               return false;
             }
-            return !occupiedSlotKeys[key] && (includeDraftCreates || !draftCreates[key]);
+            return !occupiedIntervals.some(function (interval) {
+              return slotIntervalsOverlap_(slot.startTime, slot.endTime, interval.startTime, interval.endTime);
+            });
           }).map(function (slot) {
             return {
               startTime: slot.startTime,
@@ -5976,28 +5991,11 @@
           var slotBookings = mergeDraftOnBookings_(effectiveModel.bookings).filter(function (booking) {
             return !(booking && booking._draftAction === 'CREATE');
           });
-          var freeSlots = getAvailableFreeSlots_(effectiveModel, slotBookings, { includeDraftCreates: true });
-          var freeSlotKeySet = {};
-          var freeSlotByKey = {};
-          freeSlots.forEach(function (slot) {
-            var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
-            freeSlotKeySet[slotKey] = true;
-            freeSlotByKey[slotKey] = slot;
-          });
-          Object.keys(panelState.draft.creates || {}).forEach(function (slotKey) {
-            if (!freeSlotKeySet[slotKey]) {
-              delete panelState.draft.creates[slotKey];
-              delete panelState.selectedFreeSlotKeys[slotKey];
-            }
-          });
-          Object.keys(panelState.selectedFreeSlotKeys || {}).forEach(function (slotKey) {
-            if (!freeSlotKeySet[slotKey]) {
-              delete panelState.selectedFreeSlotKeys[slotKey];
-              delete panelState.draft.creates[slotKey];
-              return;
-            }
-            ensureDraftCreateForSlot_(freeSlotByKey[slotKey]);
-          });
+          var freeSlots = getAvailableFreeSlots_(effectiveModel, slotBookings);
+          panelState.selectedFreeSlotKeys = Object.keys(panelState.draft.creates || {}).reduce(function (selected, slotKey) {
+            selected[slotKey] = true;
+            return selected;
+          }, {});
           var bookings = mergeDraftOnBookings_(effectiveModel.bookings);
           var identity = getUserIdentity_(effectiveModel);
 
@@ -6320,6 +6318,19 @@
               date: dateValue || getDefaultPanelDate_(),
               silentNotice: Boolean(silentNotice)
             });
+          });
+        }
+
+        function refreshPanelSlotSplitView_() {
+          if (!panelState.resourceId) {
+            return;
+          }
+          pendingDiscardRollbackDate = '';
+          loadRoomPanelData(panelState.resourceId, {
+            date: getPanelSelectedDate_(),
+            keepDraft: true,
+            silentNotice: true,
+            loadingMessage: 'Aggiornamento slot liberi...'
           });
         }
 
@@ -6759,7 +6770,7 @@
             if (!panelState.resourceId) {
               return;
             }
-            requestPanelDateReload_(getPanelSelectedDate_(), true);
+            refreshPanelSlotSplitView_();
           });
         }
         if (occupantEditorSave) {
