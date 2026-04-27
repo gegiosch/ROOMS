@@ -7228,6 +7228,48 @@
           return String((slot && slot.startTime) || '') + '|' + String((slot && slot.endTime) || '');
         }
 
+        function getAdminBookingTimeMinutes_(timeString) {
+          var parts = String(timeString || '').split(':');
+          if (parts.length < 2) {
+            return -1;
+          }
+          return (Number(parts[0]) * 60) + Number(parts[1]);
+        }
+
+        function doAdminBookingIntervalsOverlap_(leftStart, leftEnd, rightStart, rightEnd) {
+          var startLeft = getAdminBookingTimeMinutes_(leftStart);
+          var endLeft = getAdminBookingTimeMinutes_(leftEnd);
+          var startRight = getAdminBookingTimeMinutes_(rightStart);
+          var endRight = getAdminBookingTimeMinutes_(rightEnd);
+          if (startLeft < 0 || endLeft < 0 || startRight < 0 || endRight < 0) {
+            return false;
+          }
+          return startLeft < endRight && startRight < endLeft;
+        }
+
+        function getAdminBookingDraftRowsForCurrentSelection_(selectedDraftId) {
+          var targetDate = adminBookingDate ? adminBookingDate.value : '';
+          var targetRoom = adminBookingRoom ? adminBookingRoom.value : '';
+          return safeArray(adminBookingState.draftRows).filter(function (row) {
+            if (!row || row.draftId === selectedDraftId) {
+              return false;
+            }
+            return String(row.date || '') === String(targetDate || '') &&
+              String(row.resourceId || '') === String(targetRoom || '');
+          });
+        }
+
+        function isAdminBookingSlotBlockedByDraft_(slot, selectedDraftId) {
+          return getAdminBookingDraftRowsForCurrentSelection_(selectedDraftId).some(function (row) {
+            return doAdminBookingIntervalsOverlap_(
+              slot && slot.startTime,
+              slot && slot.endTime,
+              row && row.startTime,
+              row && row.endTime
+            );
+          });
+        }
+
         function getAdminBookingRoomName_(resourceId) {
           var target = String(resourceId || '');
           var resource = safeArray(adminBookingState.model && adminBookingState.model.resources).filter(function (entry) {
@@ -7528,7 +7570,6 @@
 
         function renderAdminBookingSlots_() {
           var selectedDraftId = adminBookingState.editingDraftId || '';
-          var occupiedDraftKeys = {};
           var availableSlotKeys = {};
           if (!adminBookingSlots) {
             return;
@@ -7562,20 +7603,8 @@
             ));
             return;
           }
-          safeArray(adminBookingState.draftRows).forEach(function (row) {
-            if (row.draftId === selectedDraftId) {
-              return;
-            }
-            occupiedDraftKeys[[row.date, row.resourceId, row.startTime, row.endTime].join('|')] = true;
-          });
           var freeSlots = safeArray(adminBookingState.model && adminBookingState.model.freeSlots).filter(function (slot) {
-            var key = [
-              adminBookingDate ? adminBookingDate.value : '',
-              adminBookingRoom ? adminBookingRoom.value : '',
-              slot.startTime,
-              slot.endTime
-            ].join('|');
-            return !occupiedDraftKeys[key];
+            return !isAdminBookingSlotBlockedByDraft_(slot, selectedDraftId);
           });
           freeSlots.forEach(function (slot) {
             availableSlotKeys[getAdminBookingSlotKey_(slot)] = true;
@@ -7633,22 +7662,9 @@
         }
 
         function getAdminBookingAvailableFreeSlots_() {
-          var occupiedDraftKeys = {};
           var selectedDraftId = adminBookingState.editingDraftId || '';
-          safeArray(adminBookingState.draftRows).forEach(function (row) {
-            if (row.draftId === selectedDraftId) {
-              return;
-            }
-            occupiedDraftKeys[[row.date, row.resourceId, row.startTime, row.endTime].join('|')] = true;
-          });
           return safeArray(adminBookingState.model && adminBookingState.model.freeSlots).filter(function (slot) {
-            var key = [
-              adminBookingDate ? adminBookingDate.value : '',
-              adminBookingRoom ? adminBookingRoom.value : '',
-              slot.startTime,
-              slot.endTime
-            ].join('|');
-            return !occupiedDraftKeys[key];
+            return !isAdminBookingSlotBlockedByDraft_(slot, selectedDraftId);
           });
         }
 
@@ -8612,19 +8628,19 @@
           adminBookingSave.addEventListener('click', saveAdminBookingDraft_);
         }
         if (adminBookingResetDraft) {
-          adminBookingResetDraft.addEventListener('click', function () {
+          adminBookingResetDraft.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
             if (!hasAdminBookingDraftChanges_()) {
               discardAdminBookingDraft_({
                 preserveDateRoom: true
               });
               return;
             }
-            confirmDiscardAdminBookingDraft_(function () {
-              discardAdminBookingDraft_({
-                preserveDateRoom: true,
-                noticeMessage: 'Bozza prenotazioni svuotata.',
-                noticeKind: 'success'
-              });
+            discardAdminBookingDraft_({
+              preserveDateRoom: true,
+              noticeMessage: 'Bozza prenotazioni svuotata.',
+              noticeKind: 'success'
             });
           });
         }
