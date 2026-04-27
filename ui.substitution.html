@@ -1240,7 +1240,7 @@
 
           var lines = ROOMS_UI.el('div', 'room-lines');
           lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
-          lines.appendChild(ROOMS_UI.el('div', '', 'NEXT: ' + tile.nextLabel));
+          lines.appendChild(ROOMS_UI.el('div', '', tile.nextLabel === 'LIBERA' ? 'NEXT: LIBERA' : ('NEXT ' + tile.nextLabel)));
           tileNode.appendChild(lines);
           return tileNode;
         }
@@ -5383,6 +5383,10 @@
               booking.TeacherName || booking.DisplayLabel || booking.ClassCode || booking.BookerSurname || 'N/D'
             );
           }
+          if (String(booking.DisplayMode || booking.displayMode || 'TEACHER').toUpperCase() === 'ACTIVITY' &&
+            getBookingActivityDescription_(booking)) {
+            return getBookingActivityDescription_(booking);
+          }
           var fromEmail = deriveIdentityFromEmailLocal_(booking.BookerEmail || '');
           return formatOccupantLabel_(
             booking.BookerSurname || fromEmail.surname || '',
@@ -5469,6 +5473,8 @@
               StartTime: draft.startTime,
               EndTime: draft.endTime,
               Title: draft.title || '',
+              ActivityDescription: draft.activityDescription || '',
+              DisplayMode: draft.displayMode || 'TEACHER',
               BookerName: draft.bookerName || '',
               BookerSurname: draft.bookerSurname || '',
               BookerEmail: draft.bookerEmail || '',
@@ -5535,6 +5541,8 @@
             startTime: slot.startTime,
             endTime: slot.endTime,
             title: currentDraft.title || ((panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || ''),
+            activityDescription: currentDraft.activityDescription || '',
+            displayMode: currentDraft.displayMode || 'TEACHER',
             notes: currentDraft.notes || '',
             bookerName: currentDraft.bookerName || identity.firstName || '',
             bookerSurname: currentDraft.bookerSurname || identity.surname || '',
@@ -5691,6 +5699,8 @@
               startTime: currentDraft.startTime,
               endTime: currentDraft.endTime,
               title: currentDraft.title,
+              activityDescription: currentDraft.activityDescription || '',
+              displayMode: currentDraft.displayMode || 'TEACHER',
               notes: currentDraft.notes,
               bookerEmail: currentDraft.bookerEmail || '',
               bookerSurname: surname,
@@ -5804,7 +5814,7 @@
         }
 
         function slotSelectionNode(slot) {
-          var wrap = ROOMS_UI.el('div', 'chip-row');
+          var wrap = ROOMS_UI.el('div', 'slot-booking-control');
           if (!slot || slot.isOccupied) {
             wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Occupato'));
             return wrap;
@@ -5820,8 +5830,82 @@
           checkbox.addEventListener('change', function () {
             syncFreeSlotSelection_(slot, checkbox.checked);
           });
-          wrap.appendChild(checkbox);
-          wrap.appendChild(ROOMS_UI.el('span', 'muted', 'Seleziona'));
+          var selector = ROOMS_UI.el('label', 'slot-booking-selector');
+          selector.appendChild(checkbox);
+          selector.appendChild(ROOMS_UI.el('span', 'muted', 'Seleziona'));
+          wrap.appendChild(selector);
+          if (checkbox.checked) {
+            var draft = panelState.draft.creates[key] || {};
+            if (!panelState.draft.creates[key]) {
+              ensureDraftCreateForSlot_(slot);
+              draft = panelState.draft.creates[key] || {};
+            }
+            var descriptionLabel = ROOMS_UI.el('label', 'slot-booking-description-label', 'Descrizione attività');
+            var descriptionInput = document.createElement('textarea');
+            var displayModeWrap = ROOMS_UI.el('div', 'booking-display-mode-group');
+            var teacherLabel = ROOMS_UI.el('label', 'booking-display-mode-option');
+            var teacherRadio = document.createElement('input');
+            var activityLabel = ROOMS_UI.el('label', 'booking-display-mode-option');
+            var activityRadio = document.createElement('input');
+            var radioName = 'panel-display-mode-' + key;
+            descriptionInput.className = 'textarea slot-booking-description';
+            descriptionInput.placeholder = 'Descrizione attività';
+            descriptionInput.value = draft.activityDescription || '';
+            descriptionInput.addEventListener('input', function () {
+              if (!panelState.draft.creates[key]) {
+                ensureDraftCreateForSlot_(slot);
+              }
+              if (panelState.draft.creates[key]) {
+                panelState.draft.creates[key].activityDescription = descriptionInput.value;
+              }
+              updateDraftUiState_();
+            });
+            descriptionInput.addEventListener('click', function (event) {
+              event.stopPropagation();
+            });
+            teacherRadio.type = 'radio';
+            teacherRadio.name = radioName;
+            teacherRadio.value = 'TEACHER';
+            teacherRadio.checked = String(draft.displayMode || 'TEACHER').toUpperCase() !== 'ACTIVITY';
+            teacherRadio.addEventListener('change', function () {
+              if (!panelState.draft.creates[key]) {
+                ensureDraftCreateForSlot_(slot);
+              }
+              if (panelState.draft.creates[key]) {
+                panelState.draft.creates[key].displayMode = 'TEACHER';
+              }
+              updateDraftUiState_();
+              renderRoomPanel(panelState.model);
+            });
+            activityRadio.type = 'radio';
+            activityRadio.name = radioName;
+            activityRadio.value = 'ACTIVITY';
+            activityRadio.checked = String(draft.displayMode || 'TEACHER').toUpperCase() === 'ACTIVITY';
+            activityRadio.addEventListener('change', function () {
+              if (!panelState.draft.creates[key]) {
+                ensureDraftCreateForSlot_(slot);
+              }
+              if (panelState.draft.creates[key]) {
+                panelState.draft.creates[key].displayMode = 'ACTIVITY';
+              }
+              updateDraftUiState_();
+              renderRoomPanel(panelState.model);
+            });
+            [teacherRadio, activityRadio].forEach(function (input) {
+              input.addEventListener('click', function (event) {
+                event.stopPropagation();
+              });
+            });
+            teacherLabel.appendChild(teacherRadio);
+            teacherLabel.appendChild(ROOMS_UI.el('span', '', 'Mostra docente'));
+            activityLabel.appendChild(activityRadio);
+            activityLabel.appendChild(ROOMS_UI.el('span', '', 'Mostra attività'));
+            displayModeWrap.appendChild(teacherLabel);
+            displayModeWrap.appendChild(activityLabel);
+            wrap.appendChild(descriptionLabel);
+            wrap.appendChild(descriptionInput);
+            wrap.appendChild(displayModeWrap);
+          }
           return wrap;
         }
 
@@ -6131,6 +6215,8 @@
                 startTime: slot.startTime,
                 endTime: slot.endTime,
                 title: slot.title || '',
+                activityDescription: slot.activityDescription || '',
+                displayMode: slot.displayMode || 'TEACHER',
                 notes: slot.notes || '',
                 bookerName: canManageReplacement ? (slot.bookerName || identity.firstName) : identity.firstName,
                 bookerSurname: canManageReplacement ? (slot.bookerSurname || identity.surname) : identity.surname

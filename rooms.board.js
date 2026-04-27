@@ -113,7 +113,7 @@ ROOMS_APP.Board = {
         layoutCol: Number(resource.LayoutCol || 0),
         state: state,
         currentLabel: visibleCurrent ? ROOMS_APP.Board.getOccupancyLabel_(visibleCurrent) : 'LIBERA',
-        nextLabel: visibleNext ? ROOMS_APP.Board.getOccupancyLabel_(visibleNext) : 'LIBERA'
+        nextLabel: visibleNext ? ROOMS_APP.Board.getNextOccupancyLabel_(visibleNext) : 'LIBERA'
       });
     });
 
@@ -425,6 +425,15 @@ ROOMS_APP.Board = {
       return this.getBookingActivityDescription_(occupancy);
     }
     return ROOMS_APP.normalizeString(occupancy && occupancy.DisplayLabel) || this.getBookingSurname_(occupancy);
+  },
+
+  getNextOccupancyLabel_: function (occupancy) {
+    if (!occupancy) {
+      return 'LIBERA';
+    }
+    var startTime = ROOMS_APP.toTimeString(occupancy.StartTime || occupancy.startTime || '');
+    var label = this.getOccupancyLabel_(occupancy);
+    return startTime ? (startTime + ': ' + label) : label;
   },
 
   uniqueByKey_: function (rows, keyField) {
