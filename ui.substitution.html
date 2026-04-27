@@ -7074,13 +7074,15 @@
             currentTabId === 'room-bookings' &&
             targetTab !== 'room-bookings' &&
             hasAdminBookingDraftChanges_()) {
-            if (!window.confirm('Ci sono prenotazioni non salvate. Si vuole uscire senza salvare?')) {
-              return;
-            }
-            discardAdminBookingDraft_();
-            requestTabActivation_(targetTab, Object.assign({}, settings, {
-              skipBookingDraftConfirm: true
-            }));
+            confirmDiscardAdminBookingDraft_(function () {
+              discardAdminBookingDraft_();
+              requestTabActivation_(targetTab, Object.assign({}, settings, {
+                skipBookingDraftConfirm: true
+              }));
+            }, {
+              confirmLabel: 'Esci senza salvare',
+              cancelLabel: 'Resta nella pagina'
+            });
             return;
           }
           if (!settings.skipTripDraftConfirm &&
@@ -7843,12 +7845,13 @@
           return Boolean(adminBookingState.dirty && adminBookingState.draftRows.length);
         }
 
-        function confirmDiscardAdminBookingDraft_(onConfirm) {
+        function confirmDiscardAdminBookingDraft_(onConfirm, options) {
+          var settings = options || {};
           openAppDialog_({
-            title: 'Prenotazioni non salvate',
-            message: 'Ci sono prenotazioni non salvate. Si vuole uscire senza salvare?',
-            confirmLabel: 'Sì',
-            cancelLabel: 'No',
+            title: settings.title || 'Prenotazioni non salvate',
+            message: settings.message || 'Ci sono prenotazioni non salvate. Si vuole uscire senza salvare?',
+            confirmLabel: settings.confirmLabel || 'Sì',
+            cancelLabel: settings.cancelLabel || 'No',
             confirmClass: 'button warn',
             onConfirm: onConfirm
           });
