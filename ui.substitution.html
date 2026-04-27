@@ -7043,10 +7043,30 @@
             if (!adminBookingState.initialized) {
               loadAdminBookingModel_();
             } else {
-              renderAdminBookingDraft_();
-              renderAdminBookingSlots_();
-              refreshAdminBookingNoticeFromState_();
+              syncAdminBookingDraftUi_({
+                syncNotice: true
+              });
             }
+          }
+        }
+
+        function syncAdminBookingDraftUi_(options) {
+          var settings = options || {};
+          if (adminBookingDraftTable && !safeArray(adminBookingState.draftRows).length) {
+            ROOMS_UI.clearNode(adminBookingDraftTable);
+          }
+          renderAdminBookingDraft_();
+          renderAdminBookingSlots_();
+          if (Object.prototype.hasOwnProperty.call(settings, 'noticeMessage')) {
+            setAdminBookingNotice_(settings.noticeMessage || '', settings.noticeKind || '');
+            return;
+          }
+          if (settings.clearNoticeWhenEmpty && !safeArray(adminBookingState.draftRows).length) {
+            setAdminBookingNotice_('', '');
+            return;
+          }
+          if (settings.syncNotice) {
+            refreshAdminBookingNoticeFromState_();
           }
         }
 
@@ -7056,12 +7076,11 @@
           adminBookingState.dirty = false;
           adminBookingState.editingDraftId = '';
           clearAdminBookingForm_(settings.preserveDateRoom !== false);
-          renderAdminBookingDraft_();
-          if (settings.noticeMessage) {
-            setAdminBookingNotice_(settings.noticeMessage, settings.noticeKind || 'success');
-          } else {
-            refreshAdminBookingNoticeFromState_();
-          }
+          syncAdminBookingDraftUi_({
+            noticeMessage: settings.noticeMessage || '',
+            noticeKind: settings.noticeMessage ? (settings.noticeKind || 'success') : '',
+            syncNotice: !settings.noticeMessage
+          });
         }
 
         function requestTabActivation_(tabId, options) {
@@ -7714,13 +7733,12 @@
           });
           adminBookingState.dirty = true;
           clearAdminBookingForm_(true);
-          renderAdminBookingDraft_();
-          setAdminBookingNotice_(
-            rowsToAdd.length === 1
+          syncAdminBookingDraftUi_({
+            noticeMessage: rowsToAdd.length === 1
               ? '1 prenotazione aggiunta alla bozza. Premere Salva prenotazioni per salvare le modifiche.'
               : String(rowsToAdd.length) + ' prenotazioni aggiunte alla bozza. Premere Salva prenotazioni per salvare le modifiche.',
-            'success'
-          );
+            noticeKind: 'success'
+          });
         }
 
         function editAdminBookingDraft_(draftId) {
@@ -7765,9 +7783,13 @@
             clearAdminBookingForm_(true);
           }
           adminBookingState.dirty = true;
-          renderAdminBookingDraft_();
-          renderAdminBookingSlots_();
-          setAdminBookingNotice_('Prenotazione rimossa dalla bozza.', 'success');
+          syncAdminBookingDraftUi_({
+            noticeMessage: safeArray(adminBookingState.draftRows).length
+              ? 'Prenotazione rimossa dalla bozza.'
+              : '',
+            noticeKind: 'success',
+            clearNoticeWhenEmpty: true
+          });
         }
 
         function updateAdminBookingDraftStatus_() {
@@ -7860,7 +7882,7 @@
                 return row;
               });
               adminBookingState.dirty = adminBookingState.draftRows.length > 0;
-              renderAdminBookingDraft_();
+              syncAdminBookingDraftUi_();
               loadAdminBookingModel_({ preserveNotice: true });
               setAdminBookingNotice_(
                 String((result && result.savedCount) || 0) + ' prenotazioni salvate, ' + String((result && result.failedCount) || 0) + ' non salvate per conflitto o validazione.',
