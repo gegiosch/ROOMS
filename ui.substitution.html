@@ -6979,7 +6979,9 @@
           selectedSlotKeys: {},
           splitFreeSlotsHalfHour: false,
           status: 'idle',
-          errorMessage: ''
+          errorMessage: '',
+          noticeMessage: '',
+          noticeKind: ''
         };
 
         function getPanelId_(tabId) {
@@ -7043,16 +7045,23 @@
             } else {
               renderAdminBookingDraft_();
               renderAdminBookingSlots_();
+              refreshAdminBookingNoticeFromState_();
             }
           }
         }
 
-        function discardAdminBookingDraft_() {
+        function discardAdminBookingDraft_(options) {
+          var settings = options || {};
           adminBookingState.draftRows = [];
           adminBookingState.dirty = false;
           adminBookingState.editingDraftId = '';
+          clearAdminBookingForm_(settings.preserveDateRoom !== false);
           renderAdminBookingDraft_();
-          renderAdminBookingSlots_();
+          if (settings.noticeMessage) {
+            setAdminBookingNotice_(settings.noticeMessage, settings.noticeKind || 'success');
+          } else {
+            refreshAdminBookingNoticeFromState_();
+          }
         }
 
         function requestTabActivation_(tabId, options) {
@@ -7106,6 +7115,8 @@
         }
 
         function setAdminBookingNotice_(message, kind) {
+          adminBookingState.noticeMessage = message || '';
+          adminBookingState.noticeKind = kind || '';
           if (!adminBookingNotice) {
             return;
           }
@@ -7118,6 +7129,29 @@
           adminBookingNotice.style.display = 'block';
           adminBookingNotice.className = 'notice' + (kind ? (' ' + kind) : '');
           adminBookingNotice.textContent = message;
+        }
+
+        function refreshAdminBookingNoticeFromState_() {
+          if (adminBookingState.status === 'error' && adminBookingState.errorMessage) {
+            setAdminBookingNotice_(adminBookingState.errorMessage, 'error');
+            return;
+          }
+          if (adminBookingState.slotsErrorMessage) {
+            setAdminBookingNotice_('Errore caricamento slot liberi: ' + adminBookingState.slotsErrorMessage, 'error');
+            return;
+          }
+          if (adminBookingState.loading) {
+            setAdminBookingNotice_('Caricamento slot liberi...', '');
+            return;
+          }
+          if (adminBookingState.model && adminBookingState.model.dateState && adminBookingState.model.dateState.message) {
+            setAdminBookingNotice_(
+              adminBookingState.model.dateState.message,
+              adminBookingState.model.dateState.autoShifted ? 'warn' : ''
+            );
+            return;
+          }
+          setAdminBookingNotice_('', '');
         }
 
         function setAdminBookingViewState_(status, message) {
@@ -8557,20 +8591,17 @@
         if (adminBookingResetDraft) {
           adminBookingResetDraft.addEventListener('click', function () {
             if (!hasAdminBookingDraftChanges_()) {
-              adminBookingState.draftRows = [];
-              adminBookingState.dirty = false;
-              adminBookingState.editingDraftId = '';
-              clearAdminBookingForm_(true);
-              renderAdminBookingDraft_();
+              discardAdminBookingDraft_({
+                preserveDateRoom: true
+              });
               return;
             }
             confirmDiscardAdminBookingDraft_(function () {
-              adminBookingState.draftRows = [];
-              adminBookingState.dirty = false;
-              adminBookingState.editingDraftId = '';
-              clearAdminBookingForm_(true);
-              renderAdminBookingDraft_();
-              setAdminBookingNotice_('Bozza prenotazioni svuotata.', 'success');
+              discardAdminBookingDraft_({
+                preserveDateRoom: true,
+                noticeMessage: 'Bozza prenotazioni svuotata.',
+                noticeKind: 'success'
+              });
             });
           });
         }
