@@ -372,11 +372,10 @@ ROOMS_APP.Auth = {
 
   buildPermissionsFromEntry_: function (entry, email) {
     var role = ROOMS_APP.normalizeString(entry && entry.Role || 'USER').toUpperCase() || 'USER';
-    var directBookingEntry = this.resolveDirectBookingEntry_(email);
     if (role === 'SUPERADMIN') {
       return {
         role: 'SUPERADMIN',
-        canBook: Boolean(directBookingEntry),
+        canBook: this.readPermissionValue_(entry && entry.CanBook, false),
         canManageReplacement: true,
         canManageAulaMagna: true,
         canUseSimulation: true,
@@ -386,24 +385,12 @@ ROOMS_APP.Auth = {
 
     return {
       role: role,
-      canBook: Boolean(directBookingEntry),
+      canBook: this.readPermissionValue_(entry && entry.CanBook, false),
       canManageReplacement: this.readPermissionValue_(entry && entry.CanManageReplacement, false),
       canManageAulaMagna: this.readPermissionValue_(entry && entry.CanManageAulaMagna, false),
       canUseSimulation: this.readPermissionValue_(entry && entry.CanUseSimulation, false),
       canAccessAdmin: this.readPermissionValue_(entry && entry.CanAccessAdmin, role === 'ADMIN')
     };
-  },
-
-  resolveDirectBookingEntry_: function (email) {
-    var normalizedEmail = ROOMS_APP.normalizeEmail(email);
-    if (!normalizedEmail) {
-      return null;
-    }
-    return this.getAdminEntries_().filter(function (entry) {
-      return entry &&
-        entry.Email === normalizedEmail &&
-        ROOMS_APP.asBoolean(entry.CanBook);
-    })[0] || null;
   },
 
   buildFallbackPermissions_: function () {
@@ -420,10 +407,9 @@ ROOMS_APP.Auth = {
   normalizePermissionPayload_: function (permissions, email) {
     var source = permissions || {};
     var role = ROOMS_APP.normalizeString(source.role || source.Role || 'USER').toUpperCase() || 'USER';
-    var directBookingEntry = this.resolveDirectBookingEntry_(email);
     return {
       role: role,
-      canBook: Boolean(directBookingEntry),
+      canBook: this.readPermissionValue_(source.canBook, false),
       canManageReplacement: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canManageReplacement, false),
       canManageAulaMagna: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canManageAulaMagna, false),
       canUseSimulation: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canUseSimulation, false),
