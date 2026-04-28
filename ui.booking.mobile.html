@@ -8,25 +8,34 @@
       body.booking-mobile-page {
         min-height: 100vh;
         background: #020817;
+        font-size: 18px;
+        line-height: 1.48;
+        -webkit-text-size-adjust: 100%;
       }
 
       .mobile-booking-shell {
         width: min(100%, 640px);
         margin: 0 auto;
-        padding: 18px 14px 96px;
+        padding: 22px 16px 116px;
       }
 
       .mobile-booking-header {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        margin-bottom: 16px;
+        gap: 8px;
+        margin-bottom: 20px;
       }
 
       .mobile-booking-header h1 {
         margin: 0;
-        font-size: 30px;
+        font-size: 36px;
         line-height: 1.05;
+      }
+
+      .mobile-booking-header .subtitle,
+      .mobile-booking-shell .subtitle {
+        font-size: 17px;
+        line-height: 1.45;
       }
 
       .mobile-user-pill {
@@ -35,26 +44,43 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-size: 15px;
+        padding: 8px 12px;
+      }
+
+      .mobile-booking-shell .notice {
+        font-size: 17px;
+        line-height: 1.45;
+        padding: 14px 16px;
+        border-radius: 14px;
+        margin-bottom: 16px;
+      }
+
+      .mobile-booking-shell .status-pill {
+        font-size: 15px;
+        line-height: 1.25;
       }
 
       .mobile-segments {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        gap: 10px;
         position: sticky;
         top: 0;
         z-index: 20;
-        padding: 8px 0 12px;
+        padding: 10px 0 16px;
         background: linear-gradient(180deg, #020817 76%, rgba(2, 8, 23, 0));
       }
 
       .mobile-segment {
-        min-height: 46px;
-        border-radius: 12px;
+        min-height: 58px;
+        border-radius: 14px;
         border: 1px solid rgba(148, 163, 184, 0.22);
         background: rgba(15, 23, 42, 0.86);
         color: #e5e7eb;
+        font-size: 17px;
         font-weight: 700;
+        padding: 0 12px;
       }
 
       .mobile-segment.active {
@@ -65,28 +91,61 @@
 
       .mobile-card {
         border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 14px;
+        border-radius: 16px;
         background: rgba(15, 23, 42, 0.92);
-        padding: 14px;
-        margin-bottom: 12px;
+        padding: 18px;
+        margin-bottom: 16px;
         box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
       }
 
       .mobile-card h2,
       .mobile-card h3 {
-        margin: 0 0 10px;
+        margin: 0 0 14px;
+        line-height: 1.16;
+      }
+
+      .mobile-card h2 {
+        font-size: 24px;
+      }
+
+      .mobile-card h3 {
+        font-size: 21px;
       }
 
       .mobile-field {
-        margin-bottom: 12px;
+        margin-bottom: 16px;
       }
 
       .mobile-field label,
       .mobile-label {
         display: block;
+        font-size: 17px;
         font-weight: 700;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
         color: #e5e7eb;
+      }
+
+      .mobile-booking-shell .input,
+      .mobile-booking-shell .textarea,
+      .mobile-booking-shell select {
+        min-height: 56px;
+        font-size: 18px;
+        border-radius: 14px;
+        padding: 12px 14px;
+      }
+
+      .mobile-booking-shell .textarea {
+        min-height: 112px;
+        line-height: 1.45;
+      }
+
+      .mobile-booking-shell .button,
+      .mobile-modal .button {
+        min-height: 54px;
+        border-radius: 14px;
+        font-size: 17px;
+        font-weight: 800;
+        padding: 0 18px;
       }
 
       .mobile-required::after {
@@ -97,51 +156,61 @@
       .mobile-switch {
         display: flex;
         align-items: center;
-        gap: 10px;
-        min-height: 44px;
+        gap: 12px;
+        min-height: 56px;
         color: #e5e7eb;
+        font-size: 17px;
         font-weight: 700;
+      }
+
+      .mobile-switch input,
+      .mobile-radio input {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 auto;
       }
 
       .mobile-radio-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        gap: 10px;
       }
 
       .mobile-radio {
         display: flex;
         align-items: center;
-        gap: 8px;
-        min-height: 46px;
-        padding: 0 12px;
+        gap: 10px;
+        min-height: 58px;
+        padding: 0 14px;
         border: 1px solid rgba(148, 163, 184, 0.22);
-        border-radius: 12px;
+        border-radius: 14px;
         color: #e5e7eb;
         background: rgba(2, 6, 23, 0.54);
+        font-size: 16px;
         font-weight: 700;
       }
 
       .mobile-slot-grid {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 8px;
+        gap: 10px;
       }
 
       .mobile-slot-button,
       .mobile-selected-slot {
         width: 100%;
-        min-height: 48px;
-        border-radius: 12px;
+        min-height: 60px;
+        border-radius: 14px;
         border: 1px solid rgba(96, 165, 250, 0.34);
         background: rgba(30, 41, 59, 0.78);
         color: #e5e7eb;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
-        padding: 10px 12px;
+        gap: 12px;
+        padding: 13px 14px;
         text-align: left;
+        font-size: 17px;
       }
 
       .mobile-slot-button {
@@ -154,16 +223,16 @@
       }
 
       .mobile-selected-slot button {
-        min-width: 40px;
-        min-height: 36px;
+        min-width: 92px;
+        min-height: 44px;
       }
 
       .mobile-booking-card {
         border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 14px;
+        border-radius: 16px;
         background: rgba(15, 23, 42, 0.88);
-        padding: 14px;
-        margin-bottom: 10px;
+        padding: 18px;
+        margin-bottom: 14px;
       }
 
       .mobile-booking-card-title {
@@ -171,21 +240,23 @@
         justify-content: space-between;
         gap: 8px;
         align-items: flex-start;
+        font-size: 19px;
         font-weight: 800;
         color: #f8fafc;
       }
 
       .mobile-booking-meta {
         color: #cbd5e1;
-        margin-top: 6px;
-        line-height: 1.45;
+        margin-top: 8px;
+        font-size: 17px;
+        line-height: 1.5;
       }
 
       .mobile-card-actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-top: 12px;
+        gap: 10px;
+        margin-top: 16px;
       }
 
       .mobile-primary-bar {
@@ -196,7 +267,7 @@
         z-index: 30;
         background: rgba(2, 8, 23, 0.94);
         border-top: 1px solid rgba(148, 163, 184, 0.18);
-        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
       }
 
       .mobile-primary-bar-inner {
@@ -204,19 +275,22 @@
         margin: 0 auto;
         display: grid;
         grid-template-columns: 1fr;
-        gap: 8px;
+        gap: 10px;
       }
 
       .mobile-primary-bar .button {
-        min-height: 48px;
+        min-height: 60px;
+        font-size: 18px;
       }
 
       .mobile-empty {
         color: #cbd5e1;
-        padding: 12px;
+        padding: 16px;
         border: 1px dashed rgba(148, 163, 184, 0.26);
-        border-radius: 12px;
+        border-radius: 14px;
         background: rgba(2, 6, 23, 0.35);
+        font-size: 17px;
+        line-height: 1.45;
       }
 
       .mobile-modal {
@@ -226,28 +300,29 @@
         display: none;
         align-items: center;
         justify-content: center;
-        padding: 18px;
+        padding: 20px;
         background: rgba(2, 6, 23, 0.72);
       }
 
       .mobile-modal-dialog {
         width: min(100%, 420px);
-        border-radius: 16px;
+        border-radius: 18px;
         border: 1px solid rgba(148, 163, 184, 0.22);
         background: #0f172a;
-        padding: 18px;
+        padding: 22px;
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
       }
 
       .mobile-modal-dialog h3 {
-        margin: 0 0 8px;
+        margin: 0 0 10px;
+        font-size: 23px;
       }
 
       .mobile-modal-actions {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 8px;
-        margin-top: 16px;
+        gap: 10px;
+        margin-top: 18px;
       }
 
       .is-hidden {
@@ -726,7 +801,11 @@
               }
             })
             .catch(function (error) {
-              setNotice_(error && error.message ? error.message : 'Errore caricamento pagina.', 'error');
+              var message = error && error.message ? error.message : 'Errore caricamento pagina.';
+              if (message === 'Booking permission required.') {
+                message = 'Utente non autorizzato alla prenotazione aule.';
+              }
+              setNotice_(message, 'error');
             });
         }
 

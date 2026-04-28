@@ -2,7 +2,7 @@ var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.BookingMobile = {
   getBootstrapModel: function () {
-    var user = ROOMS_APP.Auth.getUserContext();
+    var user = ROOMS_APP.Auth.requireCanBook();
     ROOMS_APP.Auth.assertAllowedDomain(user.email);
     return {
       ok: true,
