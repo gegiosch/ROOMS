@@ -282,7 +282,7 @@ ROOMS_APP.Auth = {
     return {
       email: ROOMS_APP.normalizeEmail(payload.email || email),
       orgUnitPath: this.normalizeOrgUnitPath_(payload.orgUnitPath),
-      permissions: this.normalizePermissionPayload_(payload.permissions)
+      permissions: this.normalizePermissionPayload_(payload.permissions, email)
     };
   },
 
@@ -293,7 +293,7 @@ ROOMS_APP.Auth = {
         version: this.getUserContextCacheVersion_(),
         email: ROOMS_APP.normalizeEmail(payload && payload.email),
         orgUnitPath: this.normalizeOrgUnitPath_(payload && payload.orgUnitPath),
-        permissions: this.normalizePermissionPayload_(payload && payload.permissions)
+        permissions: this.normalizePermissionPayload_(payload && payload.permissions, email)
       }),
       this.USER_CONTEXT_CACHE_TTL_
     );
@@ -343,7 +343,7 @@ ROOMS_APP.Auth = {
     if (!entry) {
       return this.buildFallbackPermissions_();
     }
-    return this.buildPermissionsFromEntry_(entry);
+    return this.buildPermissionsFromEntry_(entry, email);
   },
 
   resolvePermissionEntry_: function (email, orgUnitPath) {
@@ -370,12 +370,13 @@ ROOMS_APP.Auth = {
     return null;
   },
 
-  buildPermissionsFromEntry_: function (entry) {
+  buildPermissionsFromEntry_: function (entry, email) {
     var role = ROOMS_APP.normalizeString(entry && entry.Role || 'USER').toUpperCase() || 'USER';
+    var directBookingEntry = this.resolveDirectBookingEntry_(email);
     if (role === 'SUPERADMIN') {
       return {
         role: 'SUPERADMIN',
-        canBook: true,
+        canBook: Boolean(directBookingEntry),
         canManageReplacement: true,
         canManageAulaMagna: true,
         canUseSimulation: true,
@@ -385,12 +386,24 @@ ROOMS_APP.Auth = {
 
     return {
       role: role,
-      canBook: this.readPermissionValue_(entry && entry.CanBook, false),
+      canBook: Boolean(directBookingEntry),
       canManageReplacement: this.readPermissionValue_(entry && entry.CanManageReplacement, false),
       canManageAulaMagna: this.readPermissionValue_(entry && entry.CanManageAulaMagna, false),
       canUseSimulation: this.readPermissionValue_(entry && entry.CanUseSimulation, false),
       canAccessAdmin: this.readPermissionValue_(entry && entry.CanAccessAdmin, role === 'ADMIN')
     };
+  },
+
+  resolveDirectBookingEntry_: function (email) {
+    var normalizedEmail = ROOMS_APP.normalizeEmail(email);
+    if (!normalizedEmail) {
+      return null;
+    }
+    return this.getAdminEntries_().filter(function (entry) {
+      return entry &&
+        entry.Email === normalizedEmail &&
+        ROOMS_APP.asBoolean(entry.CanBook);
+    })[0] || null;
   },
 
   buildFallbackPermissions_: function () {
@@ -404,19 +417,17 @@ ROOMS_APP.Auth = {
     };
   },
 
-  normalizePermissionPayload_: function (permissions) {
+  normalizePermissionPayload_: function (permissions, email) {
     var source = permissions || {};
     var role = ROOMS_APP.normalizeString(source.role || source.Role || 'USER').toUpperCase() || 'USER';
-    if (role === 'SUPERADMIN') {
-      return this.buildPermissionsFromEntry_({ Role: role });
-    }
+    var directBookingEntry = this.resolveDirectBookingEntry_(email);
     return {
       role: role,
-      canBook: this.readPermissionValue_(source.canBook, false),
-      canManageReplacement: this.readPermissionValue_(source.canManageReplacement, false),
-      canManageAulaMagna: this.readPermissionValue_(source.canManageAulaMagna, false),
-      canUseSimulation: this.readPermissionValue_(source.canUseSimulation, false),
-      canAccessAdmin: this.readPermissionValue_(source.canAccessAdmin, false)
+      canBook: Boolean(directBookingEntry),
+      canManageReplacement: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canManageReplacement, false),
+      canManageAulaMagna: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canManageAulaMagna, false),
+      canUseSimulation: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canUseSimulation, false),
+      canAccessAdmin: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessAdmin, false)
     };
   },
 
