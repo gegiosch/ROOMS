@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <?!= include_('ui.common.css.html'); ?>
+    <style>
+      body.booking-mobile-page {
+        min-height: 100vh;
+        background: #020817;
+      }
+
+      .mobile-booking-shell {
+        width: min(100%, 640px);
+        margin: 0 auto;
+        padding: 18px 14px 96px;
+      }
+
+      .mobile-booking-header {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 16px;
+      }
+
+      .mobile-booking-header h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.05;
+      }
+
+      .mobile-user-pill {
+        align-self: flex-start;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .mobile-segments {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        padding: 8px 0 12px;
+        background: linear-gradient(180deg, #020817 76%, rgba(2, 8, 23, 0));
+      }
+
+      .mobile-segment {
+        min-height: 46px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: rgba(15, 23, 42, 0.86);
+        color: #e5e7eb;
+        font-weight: 700;
+      }
+
+      .mobile-segment.active {
+        border-color: rgba(96, 165, 250, 0.8);
+        background: rgba(37, 99, 235, 0.28);
+        color: #ffffff;
+      }
+
+      .mobile-card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.92);
+        padding: 14px;
+        margin-bottom: 12px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+      }
+
+      .mobile-card h2,
+      .mobile-card h3 {
+        margin: 0 0 10px;
+      }
+
+      .mobile-field {
+        margin-bottom: 12px;
+      }
+
+      .mobile-field label,
+      .mobile-label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: 6px;
+        color: #e5e7eb;
+      }
+
+      .mobile-required::after {
+        content: " *";
+        color: #93c5fd;
+      }
+
+      .mobile-switch {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        color: #e5e7eb;
+        font-weight: 700;
+      }
+
+      .mobile-radio-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .mobile-radio {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 46px;
+        padding: 0 12px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 12px;
+        color: #e5e7eb;
+        background: rgba(2, 6, 23, 0.54);
+        font-weight: 700;
+      }
+
+      .mobile-slot-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .mobile-slot-button,
+      .mobile-selected-slot {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 12px;
+        border: 1px solid rgba(96, 165, 250, 0.34);
+        background: rgba(30, 41, 59, 0.78);
+        color: #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        text-align: left;
+      }
+
+      .mobile-slot-button {
+        cursor: pointer;
+      }
+
+      .mobile-selected-slot {
+        border-color: rgba(16, 185, 129, 0.45);
+        background: rgba(6, 78, 59, 0.22);
+      }
+
+      .mobile-selected-slot button {
+        min-width: 40px;
+        min-height: 36px;
+      }
+
+      .mobile-booking-card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.88);
+        padding: 14px;
+        margin-bottom: 10px;
+      }
+
+      .mobile-booking-card-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: flex-start;
+        font-weight: 800;
+        color: #f8fafc;
+      }
+
+      .mobile-booking-meta {
+        color: #cbd5e1;
+        margin-top: 6px;
+        line-height: 1.45;
+      }
+
+      .mobile-card-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .mobile-primary-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        background: rgba(2, 8, 23, 0.94);
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+      }
+
+      .mobile-primary-bar-inner {
+        width: min(100%, 640px);
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .mobile-primary-bar .button {
+        min-height: 48px;
+      }
+
+      .mobile-empty {
+        color: #cbd5e1;
+        padding: 12px;
+        border: 1px dashed rgba(148, 163, 184, 0.26);
+        border-radius: 12px;
+        background: rgba(2, 6, 23, 0.35);
+      }
+
+      .mobile-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(2, 6, 23, 0.72);
+      }
+
+      .mobile-modal-dialog {
+        width: min(100%, 420px);
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: #0f172a;
+        padding: 18px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+      }
+
+      .mobile-modal-dialog h3 {
+        margin: 0 0 8px;
+      }
+
+      .mobile-modal-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .is-hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="booking-mobile-page">
+    <main class="mobile-booking-shell">
+      <header class="mobile-booking-header">
+        <div class="eyebrow">ROOMS mobile</div>
+        <h1>Prenotazione aule</h1>
+        <p class="subtitle">Prenota, modifica o cancella le tue prenotazioni.</p>
+        <span id="mobile-user-pill" class="status-pill mobile-user-pill">Caricamento utente...</span>
+      </header>
+
+      <nav class="mobile-segments" aria-label="Sezioni prenotazione">
+        <button id="segment-new" class="mobile-segment active" type="button">Nuova prenotazione</button>
+        <button id="segment-my" class="mobile-segment" type="button">Le mie prenotazioni</button>
+      </nav>
+
+      <div id="mobile-notice" class="notice" style="display:none;"></div>
+
+      <section id="view-new">
+        <div class="mobile-card">
+          <h2 id="form-title">Nuova prenotazione</h2>
+          <div class="mobile-field">
+            <label class="mobile-required" for="booking-date">Data</label>
+            <input id="booking-date" class="input" type="date">
+          </div>
+          <div class="mobile-field">
+            <label class="mobile-required" for="booking-room">Aula</label>
+            <select id="booking-room" class="input">
+              <option value="">Caricamento aule...</option>
+            </select>
+          </div>
+          <label class="mobile-switch" for="booking-split">
+            <input id="booking-split" type="checkbox">
+            <span>Dividi slot in mezz'ore</span>
+          </label>
+          <button id="load-slots" class="button" type="button" style="width:100%;margin-top:10px;">Carica slot liberi</button>
+        </div>
+
+        <div class="mobile-card">
+          <h3>Slot disponibili</h3>
+          <div id="slot-status" class="subtitle">Seleziona data e aula, poi carica gli slot.</div>
+          <div id="slot-list" class="mobile-slot-grid"></div>
+        </div>
+
+        <div class="mobile-card">
+          <h3>Riepilogo</h3>
+          <div id="selected-summary" class="mobile-slot-grid"></div>
+        </div>
+
+        <div class="mobile-card">
+          <div class="mobile-field">
+            <label class="mobile-required" for="activity-description">Descrizione attività</label>
+            <textarea id="activity-description" class="textarea" placeholder="Descrizione attività"></textarea>
+          </div>
+          <div class="mobile-field">
+            <span class="mobile-label mobile-required">Visualizza sul monitor</span>
+            <div class="mobile-radio-row">
+              <label class="mobile-radio">
+                <input type="radio" name="display-mode" value="TEACHER" checked>
+                <span>Mostra docente</span>
+              </label>
+              <label class="mobile-radio">
+                <input type="radio" name="display-mode" value="ACTIVITY">
+                <span>Mostra attività</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-my" class="is-hidden">
+        <div class="mobile-card">
+          <h2>Le mie prenotazioni</h2>
+          <p class="subtitle">Sono mostrate le prenotazioni da oggi in poi.</p>
+          <button id="refresh-my-bookings" class="button secondary" type="button" style="width:100%;">Aggiorna</button>
+        </div>
+        <div id="my-bookings-list"></div>
+      </section>
+    </main>
+
+    <div class="mobile-primary-bar">
+      <div class="mobile-primary-bar-inner">
+        <button id="save-booking" class="button" type="button">Conferma prenotazione</button>
+        <button id="cancel-edit" class="button secondary is-hidden" type="button">Annulla modifica</button>
+      </div>
+    </div>
+
+    <div id="mobile-modal" class="mobile-modal" role="dialog" aria-modal="true" aria-labelledby="mobile-modal-title">
+      <div class="mobile-modal-dialog">
+        <h3 id="mobile-modal-title">Conferma</h3>
+        <p id="mobile-modal-message" class="subtitle">-</p>
+        <div class="mobile-modal-actions">
+          <button id="mobile-modal-confirm" class="button warn" type="button">Conferma</button>
+          <button id="mobile-modal-cancel" class="button secondary" type="button">Annulla</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.ROOMS_INITIAL_MODEL = <?!= initialModelJson ?>;
+    </script>
+    <?!= include_('ui.common.js.html'); ?>
+    <script>
+      (function () {
+        var state = {
+          user: null,
+          resources: [],
+          activeView: 'new',
+          form: {
+            bookingDate: '',
+            resourceId: '',
+            splitFreeSlotsHalfHour: false,
+            backendSlots: [],
+            backendBookings: [],
+            selectedSlots: {},
+            activityDescription: '',
+            displayMode: 'TEACHER',
+            availabilityLoaded: false,
+            loadingSlots: false,
+            editingBooking: null
+          },
+          myBookings: {
+            status: 'idle',
+            rows: []
+          },
+          modal: {
+            onConfirm: null
+          }
+        };
+
+        var nodes = {};
+
+        function bindNodes_() {
+          [
+            'mobile-user-pill',
+            'segment-new',
+            'segment-my',
+            'mobile-notice',
+            'view-new',
+            'view-my',
+            'booking-date',
+            'booking-room',
+            'booking-split',
+            'load-slots',
+            'slot-status',
+            'slot-list',
+            'selected-summary',
+            'activity-description',
+            'save-booking',
+            'cancel-edit',
+            'refresh-my-bookings',
+            'my-bookings-list',
+            'form-title',
+            'mobile-modal',
+            'mobile-modal-title',
+            'mobile-modal-message',
+            'mobile-modal-confirm',
+            'mobile-modal-cancel'
+          ].forEach(function (id) {
+            nodes[id] = document.getElementById(id);
+          });
+        }
+
+        function safeArray_(value) {
+          return Array.isArray(value) ? value : [];
+        }
+
+        function slotKey_(slot) {
+          return String(slot && slot.startTime || '') + '_' + String(slot && slot.endTime || '');
+        }
+
+        function intervalsOverlap_(left, right) {
+          return left && right &&
+            left.startTime && left.endTime && right.startTime && right.endTime &&
+            String(left.startTime) < String(right.endTime) &&
+            String(left.endTime) > String(right.startTime);
+        }
+
+        function selectedSlots_() {
+          return Object.keys(state.form.selectedSlots || {}).map(function (key) {
+            return state.form.selectedSlots[key];
+          }).filter(function (slot) {
+            return Boolean(slot && slot.startTime && slot.endTime);
+          }).sort(function (left, right) {
+            return [left.startTime, left.endTime].join('|').localeCompare([right.startTime, right.endTime].join('|'));
+          });
+        }
+
+        function residualSlots_() {
+          var selected = selectedSlots_();
+          return safeArray_(state.form.backendSlots).filter(function (slot) {
+            return slot && slot.startTime && slot.endTime && !selected.some(function (draftSlot) {
+              return intervalsOverlap_(slot, draftSlot);
+            });
+          });
+        }
+
+        function setNotice_(message, kind) {
+          if (!nodes['mobile-notice']) {
+            return;
+          }
+          nodes['mobile-notice'].textContent = message || '';
+          nodes['mobile-notice'].className = 'notice' + (kind ? ' ' + kind : '');
+          nodes['mobile-notice'].style.display = message ? 'block' : 'none';
+        }
+
+        function clearNotice_() {
+          setNotice_('', '');
+        }
+
+        function setSlotStatus_(message) {
+          if (nodes['slot-status']) {
+            nodes['slot-status'].textContent = message || '';
+          }
+        }
+
+        function getDisplayMode_() {
+          var checked = document.querySelector('input[name="display-mode"]:checked');
+          return checked ? checked.value : 'TEACHER';
+        }
+
+        function setDisplayMode_(value) {
+          var normalized = String(value || '').toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
+          Array.prototype.slice.call(document.querySelectorAll('input[name="display-mode"]')).forEach(function (input) {
+            input.checked = input.value === normalized;
+          });
+          state.form.displayMode = normalized;
+        }
+
+        function readForm_() {
+          state.form.bookingDate = nodes['booking-date'] ? nodes['booking-date'].value : '';
+          state.form.resourceId = nodes['booking-room'] ? nodes['booking-room'].value : '';
+          state.form.splitFreeSlotsHalfHour = Boolean(nodes['booking-split'] && nodes['booking-split'].checked);
+          state.form.activityDescription = nodes['activity-description'] ? nodes['activity-description'].value.trim() : '';
+          state.form.displayMode = getDisplayMode_();
+        }
+
+        function resetAvailability_(clearSelection) {
+          state.form.backendSlots = [];
+          state.form.backendBookings = [];
+          state.form.availabilityLoaded = false;
+          if (clearSelection) {
+            state.form.selectedSlots = {};
+          }
+          renderSlots_();
+          renderSummary_();
+        }
+
+        function renderResourceOptions_() {
+          var select = nodes['booking-room'];
+          if (!select) {
+            return;
+          }
+          ROOMS_UI.clearNode(select);
+          select.appendChild(new Option('Seleziona aula', ''));
+          state.resources.forEach(function (resource) {
+            select.appendChild(new Option(resource.displayName || resource.resourceId, resource.resourceId));
+          });
+          select.value = state.form.resourceId || '';
+        }
+
+        function renderSegments_() {
+          nodes['segment-new'].classList.toggle('active', state.activeView === 'new');
+          nodes['segment-my'].classList.toggle('active', state.activeView === 'my');
+          nodes['view-new'].classList.toggle('is-hidden', state.activeView !== 'new');
+          nodes['view-my'].classList.toggle('is-hidden', state.activeView !== 'my');
+          nodes['save-booking'].classList.toggle('is-hidden', state.activeView !== 'new');
+          nodes['cancel-edit'].classList.toggle('is-hidden', state.activeView !== 'new' || !state.form.editingBooking);
+        }
+
+        function renderForm_() {
+          if (nodes['booking-date']) {
+            nodes['booking-date'].value = state.form.bookingDate || '';
+          }
+          if (nodes['booking-room']) {
+            nodes['booking-room'].value = state.form.resourceId || '';
+          }
+          if (nodes['booking-split']) {
+            nodes['booking-split'].checked = Boolean(state.form.splitFreeSlotsHalfHour);
+          }
+          if (nodes['activity-description']) {
+            nodes['activity-description'].value = state.form.activityDescription || '';
+          }
+          setDisplayMode_(state.form.displayMode);
+          if (nodes['form-title']) {
+            nodes['form-title'].textContent = state.form.editingBooking ? 'Modifica prenotazione' : 'Nuova prenotazione';
+          }
+          if (nodes['save-booking']) {
+            nodes['save-booking'].textContent = state.form.editingBooking ? 'Salva modifica' : 'Conferma prenotazione';
+          }
+          renderSummary_();
+          renderSegments_();
+        }
+
+        function renderSlots_() {
+          var mount = nodes['slot-list'];
+          var slots = residualSlots_();
+          if (!mount) {
+            return;
+          }
+          ROOMS_UI.clearNode(mount);
+          if (state.form.loadingSlots) {
+            setSlotStatus_('Caricamento slot liberi...');
+            return;
+          }
+          if (!state.form.availabilityLoaded) {
+            setSlotStatus_('Seleziona data e aula, poi carica gli slot.');
+            return;
+          }
+          if (!slots.length) {
+            setSlotStatus_('Nessuno slot libero disponibile per le scelte effettuate.');
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-empty', 'Nessuno slot disponibile.'));
+            return;
+          }
+          setSlotStatus_(slots.length + ' slot disponibili');
+          slots.forEach(function (slot) {
+            var button = ROOMS_UI.el('button', 'mobile-slot-button');
+            button.type = 'button';
+            button.appendChild(ROOMS_UI.el('strong', '', (slot.startTime || '') + ' - ' + (slot.endTime || '')));
+            button.appendChild(ROOMS_UI.el('span', 'status-pill', 'Seleziona'));
+            button.addEventListener('click', function () {
+              addSelectedSlot_(slot);
+            });
+            mount.appendChild(button);
+          });
+        }
+
+        function renderSummary_() {
+          var mount = nodes['selected-summary'];
+          var selected = selectedSlots_();
+          if (!mount) {
+            return;
+          }
+          ROOMS_UI.clearNode(mount);
+          if (!selected.length) {
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-empty', 'Nessuno slot selezionato.'));
+            return;
+          }
+          selected.forEach(function (slot) {
+            var row = ROOMS_UI.el('div', 'mobile-selected-slot');
+            row.appendChild(ROOMS_UI.el('strong', '', (slot.startTime || '') + ' - ' + (slot.endTime || '')));
+            var remove = ROOMS_UI.el('button', 'button secondary', 'Rimuovi');
+            remove.type = 'button';
+            remove.addEventListener('click', function () {
+              removeSelectedSlot_(slotKey_(slot));
+            });
+            row.appendChild(remove);
+            mount.appendChild(row);
+          });
+        }
+
+        function renderMyBookings_() {
+          var mount = nodes['my-bookings-list'];
+          if (!mount) {
+            return;
+          }
+          ROOMS_UI.clearNode(mount);
+          if (state.myBookings.status === 'loading') {
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-card', 'Caricamento prenotazioni...'));
+            return;
+          }
+          if (!state.myBookings.rows.length) {
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-empty', 'Nessuna prenotazione futura.'));
+            return;
+          }
+          state.myBookings.rows.forEach(function (booking) {
+            var card = ROOMS_UI.el('article', 'mobile-booking-card');
+            var title = ROOMS_UI.el('div', 'mobile-booking-card-title');
+            title.appendChild(ROOMS_UI.el('span', '', booking.roomName || booking.resourceId || 'Aula'));
+            title.appendChild(ROOMS_UI.el('span', 'status-pill', booking.displayModeLabel || 'Docente'));
+            card.appendChild(title);
+            card.appendChild(ROOMS_UI.el('div', 'mobile-booking-meta', [
+              formatDate_(booking.bookingDate),
+              (booking.startTime || '') + ' - ' + (booking.endTime || '')
+            ].join(' · ')));
+            card.appendChild(ROOMS_UI.el('div', 'mobile-booking-meta', booking.activityDescription || booking.title || '-'));
+            var actions = ROOMS_UI.el('div', 'mobile-card-actions');
+            var edit = ROOMS_UI.el('button', 'button secondary', 'Modifica');
+            var cancel = ROOMS_UI.el('button', 'button warn', 'Cancella');
+            edit.type = 'button';
+            cancel.type = 'button';
+            edit.addEventListener('click', function () {
+              beginEdit_(booking);
+            });
+            cancel.addEventListener('click', function () {
+              askCancelBooking_(booking);
+            });
+            actions.appendChild(edit);
+            actions.appendChild(cancel);
+            card.appendChild(actions);
+            mount.appendChild(card);
+          });
+        }
+
+        function addSelectedSlot_(slot) {
+          readForm_();
+          if (state.form.editingBooking) {
+            state.form.selectedSlots = {};
+          }
+          state.form.selectedSlots[slotKey_(slot)] = {
+            startTime: slot.startTime,
+            endTime: slot.endTime
+          };
+          clearNotice_();
+          renderSlots_();
+          renderSummary_();
+        }
+
+        function removeSelectedSlot_(slotKey) {
+          delete state.form.selectedSlots[slotKey];
+          clearNotice_();
+          renderSlots_();
+          renderSummary_();
+        }
+
+        function validateForm_() {
+          readForm_();
+          if (!state.form.bookingDate) {
+            return 'Selezionare la data.';
+          }
+          if (!state.form.resourceId) {
+            return 'Selezionare un\'aula.';
+          }
+          if (!selectedSlots_().length) {
+            return 'Selezionare almeno uno slot libero.';
+          }
+          if (!state.form.activityDescription) {
+            return 'Inserire la descrizione attività.';
+          }
+          if (!state.form.displayMode) {
+            return 'Selezionare cosa visualizzare sul monitor.';
+          }
+          if (state.form.editingBooking && selectedSlots_().length !== 1) {
+            return 'Per modificare una prenotazione selezionare un solo slot.';
+          }
+          return '';
+        }
+
+        function buildPayloadForSlot_(slot) {
+          var room = state.resources.filter(function (entry) {
+            return entry.resourceId === state.form.resourceId;
+          })[0] || {};
+          return {
+            draftId: slotKey_(slot),
+            bookingId: state.form.editingBooking ? state.form.editingBooking.bookingId : '',
+            resourceId: state.form.resourceId,
+            bookingDate: state.form.bookingDate,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            title: room.displayName || state.form.activityDescription,
+            activityDescription: state.form.activityDescription,
+            displayMode: state.form.displayMode
+          };
+        }
+
+        function loadBootstrap_() {
+          setNotice_('Caricamento dati iniziali...', '');
+          return ROOMS_UI.call('getMobileBookingBootstrap')
+            .then(function (model) {
+              state.user = model.user || {};
+              state.resources = safeArray_(model.resources);
+              state.form.bookingDate = model.defaultDate || '';
+              if (nodes['mobile-user-pill']) {
+                nodes['mobile-user-pill'].textContent = state.user.email || 'Utente';
+              }
+              renderResourceOptions_();
+              renderForm_();
+              clearNotice_();
+              if (!state.user.canBook) {
+                setNotice_('Utente non autorizzato alla prenotazione aule.', 'error');
+              }
+            })
+            .catch(function (error) {
+              setNotice_(error && error.message ? error.message : 'Errore caricamento pagina.', 'error');
+            });
+        }
+
+        function loadAvailability_(preserveNotice) {
+          readForm_();
+          if (!state.form.bookingDate) {
+            setNotice_('Selezionare la data.', 'warn');
+            return Promise.resolve();
+          }
+          if (!state.form.resourceId) {
+            setNotice_('Selezionare un\'aula.', 'warn');
+            return Promise.resolve();
+          }
+          state.form.loadingSlots = true;
+          renderSlots_();
+          if (!preserveNotice) {
+            clearNotice_();
+          }
+          return ROOMS_UI.call('getMobileBookingAvailability', state.form.bookingDate, state.form.resourceId, {
+            splitFreeSlotsHalfHour: state.form.splitFreeSlotsHalfHour
+          }).then(function (model) {
+            state.form.backendSlots = safeArray_(model.freeSlots);
+            state.form.backendBookings = safeArray_(model.bookings);
+            state.form.availabilityLoaded = true;
+            state.form.loadingSlots = false;
+            renderSlots_();
+            if (model.errorMessage) {
+              setNotice_(model.errorMessage, 'error');
+            }
+          }).catch(function (error) {
+            state.form.loadingSlots = false;
+            state.form.availabilityLoaded = false;
+            state.form.backendSlots = [];
+            renderSlots_();
+            setNotice_(error && error.message ? error.message : 'Errore caricamento slot liberi.', 'error');
+          });
+        }
+
+        function saveBooking_() {
+          var validationMessage = validateForm_();
+          var slots = selectedSlots_();
+          if (validationMessage) {
+            setNotice_(validationMessage, 'warn');
+            return;
+          }
+          nodes['save-booking'].disabled = true;
+          if (state.form.editingBooking) {
+            ROOMS_UI.call('updateMobileBooking', state.form.editingBooking.bookingId, buildPayloadForSlot_(slots[0]))
+              .then(function () {
+                setNotice_('Prenotazione aggiornata.', 'success');
+                resetFormAfterSave_();
+                return afterMutationRefresh_();
+              })
+              .catch(function (error) {
+                setNotice_(error && error.message ? error.message : 'Errore salvataggio modifica.', 'error');
+              })
+              .then(function () {
+                nodes['save-booking'].disabled = false;
+              });
+            return;
+          }
+
+          ROOMS_UI.call('saveMobileBookings', slots.map(buildPayloadForSlot_))
+            .then(function (result) {
+              var failedIds = {};
+              safeArray_(result.failed).forEach(function (entry) {
+                failedIds[entry.draftId] = true;
+              });
+              safeArray_(result.saved).forEach(function (entry) {
+                delete state.form.selectedSlots[entry.draftId];
+              });
+              if (result.failedCount) {
+                setNotice_(result.savedCount + ' prenotazioni salvate, ' + result.failedCount + ' non salvate. ' + safeArray_(result.failed).map(function (entry) {
+                  return entry.message;
+                }).join(' '), 'warn');
+              } else {
+                setNotice_(result.savedCount + ' prenotazioni salvate.', 'success');
+                state.form.activityDescription = '';
+                state.form.displayMode = 'TEACHER';
+              }
+              Object.keys(state.form.selectedSlots).forEach(function (slotKey) {
+                if (!failedIds[slotKey] && result.savedCount) {
+                  delete state.form.selectedSlots[slotKey];
+                }
+              });
+              renderForm_();
+              return afterMutationRefresh_();
+            })
+            .catch(function (error) {
+              setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni.', 'error');
+            })
+            .then(function () {
+              nodes['save-booking'].disabled = false;
+            });
+        }
+
+        function afterMutationRefresh_() {
+          var tasks = [];
+          if (state.form.availabilityLoaded && state.form.resourceId && state.form.bookingDate) {
+            tasks.push(loadAvailability_(true));
+          }
+          if (state.myBookings.status === 'loaded') {
+            tasks.push(loadMyBookings_());
+          }
+          return Promise.all(tasks);
+        }
+
+        function loadMyBookings_() {
+          state.myBookings.status = 'loading';
+          renderMyBookings_();
+          return ROOMS_UI.call('listMobileMyBookings')
+            .then(function (rows) {
+              state.myBookings.status = 'loaded';
+              state.myBookings.rows = safeArray_(rows);
+              renderMyBookings_();
+            })
+            .catch(function (error) {
+              state.myBookings.status = 'error';
+              state.myBookings.rows = [];
+              renderMyBookings_();
+              setNotice_(error && error.message ? error.message : 'Errore caricamento prenotazioni.', 'error');
+            });
+        }
+
+        function beginEdit_(booking) {
+          state.activeView = 'new';
+          state.form.editingBooking = booking;
+          state.form.bookingDate = booking.bookingDate || '';
+          state.form.resourceId = booking.resourceId || '';
+          state.form.splitFreeSlotsHalfHour = false;
+          state.form.backendSlots = [];
+          state.form.backendBookings = [];
+          state.form.availabilityLoaded = false;
+          state.form.selectedSlots = {};
+          state.form.selectedSlots[slotKey_({
+            startTime: booking.startTime,
+            endTime: booking.endTime
+          })] = {
+            startTime: booking.startTime,
+            endTime: booking.endTime
+          };
+          state.form.activityDescription = booking.activityDescription || booking.title || '';
+          state.form.displayMode = booking.displayMode || 'TEACHER';
+          renderForm_();
+          clearNotice_();
+          loadAvailability_();
+        }
+
+        function resetFormAfterSave_() {
+          state.form.editingBooking = null;
+          state.form.selectedSlots = {};
+          state.form.backendSlots = [];
+          state.form.backendBookings = [];
+          state.form.availabilityLoaded = false;
+          state.form.activityDescription = '';
+          state.form.displayMode = 'TEACHER';
+          renderForm_();
+          renderSlots_();
+        }
+
+        function askCancelBooking_(booking) {
+          openModal_({
+            title: 'Cancella prenotazione',
+            message: 'Cancellare la prenotazione ' + formatDate_(booking.bookingDate) + ' ' + booking.startTime + ' - ' + booking.endTime + '?',
+            confirmLabel: 'Cancella prenotazione',
+            cancelLabel: 'Annulla',
+            onConfirm: function () {
+              setNotice_('Cancellazione in corso...', '');
+              ROOMS_UI.call('cancelMobileBooking', booking.bookingId, 'Cancellata da mobile.')
+                .then(function () {
+                  setNotice_('Prenotazione cancellata.', 'success');
+                  return afterMutationRefresh_();
+                })
+                .catch(function (error) {
+                  setNotice_(error && error.message ? error.message : 'Errore cancellazione prenotazione.', 'error');
+                });
+            }
+          });
+        }
+
+        function openModal_(settings) {
+          state.modal.onConfirm = typeof settings.onConfirm === 'function' ? settings.onConfirm : null;
+          nodes['mobile-modal-title'].textContent = settings.title || 'Conferma';
+          nodes['mobile-modal-message'].textContent = settings.message || '';
+          nodes['mobile-modal-confirm'].textContent = settings.confirmLabel || 'Conferma';
+          nodes['mobile-modal-cancel'].textContent = settings.cancelLabel || 'Annulla';
+          nodes['mobile-modal'].style.display = 'flex';
+        }
+
+        function closeModal_() {
+          state.modal.onConfirm = null;
+          nodes['mobile-modal'].style.display = 'none';
+        }
+
+        function switchView_(viewName) {
+          state.activeView = viewName;
+          renderSegments_();
+          clearNotice_();
+          if (viewName === 'my' && state.myBookings.status === 'idle') {
+            loadMyBookings_();
+          }
+        }
+
+        function formatDate_(dateString) {
+          var parts = String(dateString || '').split('-');
+          if (parts.length !== 3) {
+            return dateString || '-';
+          }
+          return parts[2] + '/' + parts[1] + '/' + parts[0];
+        }
+
+        function bindEvents_() {
+          nodes['segment-new'].addEventListener('click', function () {
+            switchView_('new');
+          });
+          nodes['segment-my'].addEventListener('click', function () {
+            switchView_('my');
+          });
+          nodes['booking-date'].addEventListener('change', function () {
+            readForm_();
+            resetAvailability_(true);
+            clearNotice_();
+          });
+          nodes['booking-room'].addEventListener('change', function () {
+            readForm_();
+            resetAvailability_(true);
+            clearNotice_();
+          });
+          nodes['booking-split'].addEventListener('change', function () {
+            readForm_();
+            if (state.form.availabilityLoaded) {
+              loadAvailability_();
+            }
+          });
+          nodes['activity-description'].addEventListener('input', function () {
+            readForm_();
+            clearNotice_();
+          });
+          Array.prototype.slice.call(document.querySelectorAll('input[name="display-mode"]')).forEach(function (input) {
+            input.addEventListener('change', function () {
+              readForm_();
+              clearNotice_();
+            });
+          });
+          nodes['load-slots'].addEventListener('click', loadAvailability_);
+          nodes['save-booking'].addEventListener('click', saveBooking_);
+          nodes['cancel-edit'].addEventListener('click', function () {
+            resetFormAfterSave_();
+            clearNotice_();
+          });
+          nodes['refresh-my-bookings'].addEventListener('click', loadMyBookings_);
+          nodes['mobile-modal-confirm'].addEventListener('click', function () {
+            var action = state.modal.onConfirm;
+            closeModal_();
+            if (typeof action === 'function') {
+              action();
+            }
+          });
+          nodes['mobile-modal-cancel'].addEventListener('click', closeModal_);
+          nodes['mobile-modal'].addEventListener('click', function (event) {
+            if (event.target === nodes['mobile-modal']) {
+              closeModal_();
+            }
+          });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+          bindNodes_();
+          bindEvents_();
+          renderSegments_();
+          renderSlots_();
+          renderSummary_();
+          loadBootstrap_();
+        });
+      }());
+    </script>
+  </body>
+</html>

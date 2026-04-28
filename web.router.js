@@ -45,6 +45,15 @@ function doGet(e) {
       return response;
     }
 
+    if (fn === 'booking-mobile') {
+      response = renderMobileBookingPage_(params);
+      logTiming_('doGet', startedAt, {
+        fn: fn,
+        mode: 'render-booking-mobile'
+      });
+      return response;
+    }
+
     if (page === 'api') {
       response = jsonResponse_(withRuntimeContext_(extractRuntimeContext_(params), function () {
         return routeApiRequest_(params);
@@ -551,6 +560,30 @@ function routeApiRequest_(payload) {
       payload.date,
       payload.changes || payload
     );
+  }
+  if (action === 'getMobileBookingBootstrap') {
+    return ROOMS_APP.BookingMobile.getBootstrapModel();
+  }
+  if (action === 'getMobileBookingAvailability') {
+    return ROOMS_APP.BookingMobile.getAvailabilityModel(
+      payload.date,
+      normalizeRoomIdParam_(payload),
+      payload.options || {
+        splitFreeSlotsHalfHour: payload.splitFreeSlotsHalfHour
+      }
+    );
+  }
+  if (action === 'listMobileMyBookings') {
+    return ROOMS_APP.BookingMobile.listMyBookings();
+  }
+  if (action === 'saveMobileBookings') {
+    return ROOMS_APP.BookingMobile.createBookings(payload.rows || payload.draftRows || []);
+  }
+  if (action === 'updateMobileBooking') {
+    return ROOMS_APP.BookingMobile.updateBooking(payload.bookingId, payload);
+  }
+  if (action === 'cancelMobileBooking') {
+    return ROOMS_APP.BookingMobile.cancelBooking(payload.bookingId, payload.notes);
   }
   if (action === 'getAdminRoomBookingModel') {
     return ROOMS_APP.Booking.getAdminRoomBookingModel(payload.date, normalizeRoomIdParam_(payload));

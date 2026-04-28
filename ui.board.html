@@ -4432,6 +4432,31 @@
           });
         }
 
+        function getDraftCreateSlots_() {
+          return Object.keys(panelState.draft.creates || {}).map(function (slotKey) {
+            var draft = panelState.draft.creates[slotKey] || {};
+            return {
+              startTime: draft.startTime,
+              endTime: draft.endTime,
+              isDraftCreate: true
+            };
+          }).filter(function (slot) {
+            return Boolean(slot.startTime && slot.endTime);
+          });
+        }
+
+        function sortSlotsByTime_(slots) {
+          return safeArray(slots).sort(function (left, right) {
+            return [
+              left.startTime || '',
+              left.endTime || ''
+            ].join('|').localeCompare([
+              right.startTime || '',
+              right.endTime || ''
+            ].join('|'));
+          });
+        }
+
         function ensureDraftCreateForSlot_(slot) {
           if (!slot || !slot.startTime || !slot.endTime || !canBookUser_(panelState.model)) {
             return;
@@ -4900,6 +4925,7 @@
             return !(booking && booking._draftAction === 'CREATE');
           });
           var freeSlots = getAvailableFreeSlots_(effectiveModel, slotBookings);
+          var dailySlotRows = sortSlotsByTime_(freeSlots.concat(getDraftCreateSlots_()));
           panelState.selectedFreeSlotKeys = Object.keys(panelState.draft.creates || {}).reduce(function (selected, slotKey) {
             selected[slotKey] = true;
             return selected;
@@ -4945,12 +4971,12 @@
           renderTable(
             'panel-daily-slots-table',
             ['Orario', 'Stato', 'Occupante', 'Fonte', 'Azione'],
-            freeSlots.map(function (slot) {
+            dailySlotRows.map(function (slot) {
               return [
                 '🕒 ' + (slot.startTime || '') + ' - ' + (slot.endTime || ''),
-                'Libero',
-                'LIBERO',
-                '-',
+                slot.isDraftCreate ? 'In bozza' : 'Libero',
+                slot.isDraftCreate ? 'BOZZA' : 'LIBERO',
+                slot.isDraftCreate ? 'BOZZA' : '-',
                 slotSelectionNode(slot)
               ];
             }),
