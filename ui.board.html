@@ -97,6 +97,16 @@
                 <span>Dividi slot liberi in mezz'ore</span>
               </label>
             </div>
+            <div class="room-panel-control split-toggle-wrap">
+              <label class="split-toggle">
+                <input type="checkbox" id="panel-repeat-weekly">
+                <span>Ripeti ogni settimana</span>
+              </label>
+            </div>
+            <div class="room-panel-control" id="panel-repeat-until-wrap" style="display:none;">
+              <label for="panel-repeat-until">Ripeti fino al</label>
+              <input class="input" type="date" id="panel-repeat-until" disabled>
+            </div>
             <div class="room-panel-control">
               <label for="panel-interval-from">Intervallo da</label>
               <input class="input" type="date" id="panel-interval-from">
@@ -312,6 +322,9 @@
         var panelLoading = document.getElementById('room-panel-loading');
         var panelDateInput = document.getElementById('panel-date-input');
         var panelSplitFreeSlots = document.getElementById('panel-split-free-slots');
+        var panelRepeatWeekly = document.getElementById('panel-repeat-weekly');
+        var panelRepeatUntil = document.getElementById('panel-repeat-until');
+        var panelRepeatUntilWrap = document.getElementById('panel-repeat-until-wrap');
         var panelIntervalFrom = document.getElementById('panel-interval-from');
         var panelIntervalTo = document.getElementById('panel-interval-to');
         var panelSaveAllButtons = Array.prototype.slice.call(document.querySelectorAll('.room-panel-save'));
@@ -4123,6 +4136,19 @@
           });
         }
 
+        function syncPanelRepeatUi_() {
+          var repeat = Boolean(panelRepeatWeekly && panelRepeatWeekly.checked);
+          if (panelRepeatUntil) {
+            panelRepeatUntil.disabled = !repeat;
+            if (!repeat) {
+              panelRepeatUntil.value = '';
+            }
+          }
+          if (panelRepeatUntilWrap) {
+            panelRepeatUntilWrap.style.display = repeat ? 'block' : 'none';
+          }
+        }
+
         function openPanelShell() {
           if (shouldBlockRoomPanel_()) {
             return;
@@ -4966,6 +4992,7 @@
           if (panelSplitFreeSlots) {
             panelSplitFreeSlots.checked = Boolean(effectiveModel.options && effectiveModel.options.splitFreeSlotsHalfHour);
           }
+          syncPanelRepeatUi_();
           panelState.dateContext = effectiveDate;
 
           renderTable(
@@ -5126,7 +5153,15 @@
           var selectedDate = getPanelSelectedDate_();
           var fromDate = (panelIntervalFrom && panelIntervalFrom.value) || selectedDate;
           var toDate = (panelIntervalTo && panelIntervalTo.value) || selectedDate;
-          var intervalDates = buildIntervalDates_(fromDate, toDate);
+          var repeatWeekly = Boolean(panelRepeatWeekly && panelRepeatWeekly.checked);
+          var repeatUntil = repeatWeekly && panelRepeatUntil ? panelRepeatUntil.value : '';
+          if (repeatWeekly && !repeatUntil) {
+            throw new Error('Selezionare la data finale della ricorrenza.');
+          }
+          if (repeatWeekly && repeatUntil < selectedDate) {
+            throw new Error('La data finale della ricorrenza non può precedere la data iniziale.');
+          }
+          var intervalDates = repeatWeekly ? [selectedDate] : buildIntervalDates_(fromDate, toDate);
           var identity = getUserIdentity_(model);
           var canManageReplacement = canManageReplacementUser_(model);
           var draftCreates = panelState.draft.creates || {};
@@ -5150,6 +5185,8 @@
                 activityDescription: slot.activityDescription || '',
                 displayMode: slot.displayMode || 'TEACHER',
                 notes: slot.notes || '',
+                repeatWeekly: repeatWeekly,
+                repeatUntil: repeatUntil,
                 bookerName: canManageReplacement ? (slot.bookerName || identity.firstName) : identity.firstName,
                 bookerSurname: canManageReplacement ? (slot.bookerSurname || identity.surname) : identity.surname
               });
@@ -5218,6 +5255,9 @@
           panelSaveAllButtons.forEach(function (button) {
             button.disabled = true;
           });
+          if (payload.creates.some(function (row) { return Boolean(row.repeatWeekly); })) {
+            return previewAndApplyRecurringPanelChanges_(payload, targetDate);
+          }
           return ROOMS_UI.call('applyRoomPanelChanges', panelState.resourceId, targetDate, payload)
             .then(function (model) {
               panelState.model = model && typeof model === 'object' ? model : {};
@@ -5234,6 +5274,79 @@
               updateDraftUiState_();
               ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore salvataggio modifiche', 'error');
               throw error;
+            });
+        }
+
+        function finishPanelRecurringSave_(result, targetDate) {
+          clearDraftState_();
+          hideRoomPanelLoading();
+          ROOMS_UI.setNotice(
+            panelNotice,
+            String((result && result.savedCount) || 0) + ' prenotazioni salvate, ' + String((result && result.failedCount) || 0) + ' non inserite per conflitto.',
+            result && result.failedCount ? 'warn' : 'success'
+          );
+          loadRoomPanelData(panelState.resourceId, {
+            date: targetDate,
+            silentNotice: true
+          });
+          refresh({
+            skipPanelRefresh: true,
+            preservePanelDate: targetDate
+          });
+        }
+
+        function previewAndApplyRecurringPanelChanges_(payload, targetDate) {
+          return ROOMS_UI.call('previewRecurringBookingRows', payload.creates)
+            .then(function (preview) {
+              if (preview && (preview.conflictCount || preview.invalidCount)) {
+                hideRoomPanelLoading();
+                panelSaveAllButtons.forEach(function (button) {
+                  button.disabled = false;
+                });
+                openAppDialog_({
+                  title: 'Conflitti nelle prenotazioni ricorrenti',
+                  message: 'Alcune occorrenze della prenotazione non possono essere inserite perché sono in conflitto con prenotazioni già esistenti. Vuoi continuare salvando solo le occorrenze disponibili, oppure annullare il salvataggio?',
+                  confirmLabel: 'Salva quelle disponibili',
+                  cancelLabel: 'Annulla',
+                  confirmClass: 'button warn',
+                  onConfirm: function () {
+                    showRoomPanelLoading('Salvataggio prenotazioni ricorrenti...');
+                    panelSaveAllButtons.forEach(function (button) {
+                      button.disabled = true;
+                    });
+                    ROOMS_UI.call('saveRecurringBookingRows', payload.creates, { allowPartial: true })
+                      .then(function (result) {
+                        finishPanelRecurringSave_(result, targetDate);
+                      })
+                      .catch(function (error) {
+                        hideRoomPanelLoading();
+                        updateDraftUiState_();
+                        ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore salvataggio prenotazioni ricorrenti.', 'error');
+                      })
+                      .then(function () {
+                        panelSaveAllButtons.forEach(function (button) {
+                          button.disabled = false;
+                        });
+                      });
+                  }
+                });
+                return null;
+              }
+              return ROOMS_UI.call('saveRecurringBookingRows', payload.creates, { allowPartial: false })
+                .then(function (result) {
+                  finishPanelRecurringSave_(result, targetDate);
+                });
+            })
+            .catch(function (error) {
+              hideRoomPanelLoading();
+              updateDraftUiState_();
+              ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore salvataggio prenotazioni ricorrenti.', 'error');
+              throw error;
+            })
+            .then(function () {
+              panelSaveAllButtons.forEach(function (button) {
+                button.disabled = false;
+              });
             });
         }
 
@@ -5659,6 +5772,9 @@
             }
             refreshPanelSlotSplitView_();
           });
+        }
+        if (panelRepeatWeekly) {
+          panelRepeatWeekly.addEventListener('change', syncPanelRepeatUi_);
         }
         if (occupantEditorSave) {
           occupantEditorSave.addEventListener('click', saveOccupantEditor_);

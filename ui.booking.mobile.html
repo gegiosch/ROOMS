@@ -369,6 +369,14 @@
             <input id="booking-split" type="checkbox">
             <span>Dividi slot in mezz'ore</span>
           </label>
+          <label class="mobile-switch" for="booking-repeat-weekly">
+            <input id="booking-repeat-weekly" type="checkbox">
+            <span>Ripeti ogni settimana</span>
+          </label>
+          <div id="booking-repeat-until-wrap" class="mobile-field is-hidden">
+            <label class="mobile-required" for="booking-repeat-until">Ripeti fino al</label>
+            <input id="booking-repeat-until" class="input" type="date">
+          </div>
           <button id="load-slots" class="button" type="button" style="width:100%;margin-top:10px;">Carica slot liberi</button>
         </div>
 
@@ -451,6 +459,8 @@
             selectedSlots: {},
             activityDescription: '',
             displayMode: 'TEACHER',
+            repeatWeekly: false,
+            repeatUntil: '',
             availabilityLoaded: false,
             loadingSlots: false,
             editingBooking: null
@@ -477,6 +487,9 @@
             'booking-date',
             'booking-room',
             'booking-split',
+            'booking-repeat-weekly',
+            'booking-repeat-until',
+            'booking-repeat-until-wrap',
             'load-slots',
             'slot-status',
             'slot-list',
@@ -567,6 +580,8 @@
           state.form.bookingDate = nodes['booking-date'] ? nodes['booking-date'].value : '';
           state.form.resourceId = nodes['booking-room'] ? nodes['booking-room'].value : '';
           state.form.splitFreeSlotsHalfHour = Boolean(nodes['booking-split'] && nodes['booking-split'].checked);
+          state.form.repeatWeekly = Boolean(nodes['booking-repeat-weekly'] && nodes['booking-repeat-weekly'].checked);
+          state.form.repeatUntil = nodes['booking-repeat-until'] ? nodes['booking-repeat-until'].value : '';
           state.form.activityDescription = nodes['activity-description'] ? nodes['activity-description'].value.trim() : '';
           state.form.displayMode = getDisplayMode_();
         }
@@ -613,6 +628,16 @@
           }
           if (nodes['booking-split']) {
             nodes['booking-split'].checked = Boolean(state.form.splitFreeSlotsHalfHour);
+          }
+          if (nodes['booking-repeat-weekly']) {
+            nodes['booking-repeat-weekly'].checked = Boolean(state.form.repeatWeekly);
+          }
+          if (nodes['booking-repeat-until']) {
+            nodes['booking-repeat-until'].value = state.form.repeatUntil || '';
+            nodes['booking-repeat-until'].disabled = !state.form.repeatWeekly;
+          }
+          if (nodes['booking-repeat-until-wrap']) {
+            nodes['booking-repeat-until-wrap'].classList.toggle('is-hidden', !state.form.repeatWeekly);
           }
           if (nodes['activity-description']) {
             nodes['activity-description'].value = state.form.activityDescription || '';
@@ -766,6 +791,12 @@
           if (!state.form.displayMode) {
             return 'Selezionare cosa visualizzare sul monitor.';
           }
+          if (state.form.repeatWeekly && !state.form.repeatUntil) {
+            return 'Selezionare la data finale della ricorrenza.';
+          }
+          if (state.form.repeatWeekly && state.form.repeatUntil < state.form.bookingDate) {
+            return 'La data finale della ricorrenza non può precedere la data iniziale.';
+          }
           if (state.form.editingBooking && selectedSlots_().length !== 1) {
             return 'Per modificare una prenotazione selezionare un solo slot.';
           }
@@ -785,7 +816,9 @@
             endTime: slot.endTime,
             title: room.displayName || state.form.activityDescription,
             activityDescription: state.form.activityDescription,
-            displayMode: state.form.displayMode
+            displayMode: state.form.displayMode,
+            repeatWeekly: Boolean(state.form.repeatWeekly),
+            repeatUntil: state.form.repeatWeekly ? state.form.repeatUntil : ''
           };
         }
 
@@ -874,7 +907,15 @@
             return;
           }
 
-          ROOMS_UI.call('saveMobileBookings', slots.map(buildPayloadForSlot_))
+          var payloadRows = slots.map(buildPayloadForSlot_);
+          var hasRecurring = payloadRows.some(function (row) {
+            return row.repeatWeekly;
+          });
+          if (hasRecurring) {
+            return saveRecurringMobileRows_(payloadRows);
+          }
+
+          ROOMS_UI.call('saveMobileBookings', payloadRows)
             .then(function (result) {
               var failedIds = {};
               safeArray_(result.failed).forEach(function (entry) {
@@ -904,6 +945,68 @@
               setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni.', 'error');
             })
             .then(function () {
+              nodes['save-booking'].disabled = false;
+            });
+        }
+
+        function finishMobileSaveResult_(result) {
+          var failedIds = {};
+          safeArray_(result.failed).forEach(function (entry) {
+            failedIds[entry.draftId] = true;
+          });
+          safeArray_(result.saved).forEach(function (entry) {
+            delete state.form.selectedSlots[entry.draftId];
+          });
+          if (result.failedCount) {
+            setNotice_(result.savedCount + ' prenotazioni salvate, ' + result.failedCount + ' non inserite per conflitto.', 'warn');
+          } else {
+            setNotice_(result.savedCount + ' prenotazioni salvate.', 'success');
+            state.form.activityDescription = '';
+            state.form.displayMode = 'TEACHER';
+            state.form.repeatWeekly = false;
+            state.form.repeatUntil = '';
+          }
+          Object.keys(state.form.selectedSlots).forEach(function (slotKey) {
+            if (!failedIds[slotKey] && result.savedCount) {
+              delete state.form.selectedSlots[slotKey];
+            }
+          });
+          renderForm_();
+          return afterMutationRefresh_();
+        }
+
+        function saveRecurringMobileRows_(payloadRows) {
+          return ROOMS_UI.call('previewRecurringBookingRows', payloadRows)
+            .then(function (preview) {
+              if (preview && (preview.conflictCount || preview.invalidCount)) {
+                nodes['save-booking'].disabled = false;
+                openModal_({
+                  title: 'Conflitti nelle prenotazioni ricorrenti',
+                  message: 'Alcune occorrenze della prenotazione non possono essere inserite perché sono in conflitto con prenotazioni già esistenti. Vuoi continuare salvando solo le occorrenze disponibili, oppure annullare il salvataggio?',
+                  confirmLabel: 'Salva quelle disponibili',
+                  cancelLabel: 'Annulla',
+                  onConfirm: function () {
+                    nodes['save-booking'].disabled = true;
+                    ROOMS_UI.call('saveRecurringBookingRows', payloadRows, { allowPartial: true })
+                      .then(finishMobileSaveResult_)
+                      .catch(function (error) {
+                        setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni ricorrenti.', 'error');
+                      })
+                      .then(function () {
+                        nodes['save-booking'].disabled = false;
+                      });
+                  }
+                });
+                return null;
+              }
+              return ROOMS_UI.call('saveRecurringBookingRows', payloadRows, { allowPartial: false })
+                .then(finishMobileSaveResult_)
+                .then(function () {
+                  nodes['save-booking'].disabled = false;
+                });
+            })
+            .catch(function (error) {
+              setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni ricorrenti.', 'error');
               nodes['save-booking'].disabled = false;
             });
         }
@@ -955,6 +1058,8 @@
           };
           state.form.activityDescription = booking.activityDescription || booking.title || '';
           state.form.displayMode = booking.displayMode || 'TEACHER';
+          state.form.repeatWeekly = false;
+          state.form.repeatUntil = '';
           renderForm_();
           clearNotice_();
           loadAvailability_();
@@ -968,6 +1073,8 @@
           state.form.availabilityLoaded = false;
           state.form.activityDescription = '';
           state.form.displayMode = 'TEACHER';
+          state.form.repeatWeekly = false;
+          state.form.repeatUntil = '';
           renderForm_();
           renderSlots_();
         }
@@ -1045,6 +1152,15 @@
             if (state.form.availabilityLoaded) {
               loadAvailability_();
             }
+          });
+          nodes['booking-repeat-weekly'].addEventListener('change', function () {
+            readForm_();
+            renderForm_();
+            clearNotice_();
+          });
+          nodes['booking-repeat-until'].addEventListener('change', function () {
+            readForm_();
+            clearNotice_();
           });
           nodes['activity-description'].addEventListener('input', function () {
             readForm_();

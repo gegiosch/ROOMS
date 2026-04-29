@@ -385,6 +385,18 @@ function commitRecurringRoomBooking(payload) {
   return ROOMS_APP.Recurring.commitWeekly(payload);
 }
 
+function previewRecurringBookingRows(rows, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Recurring.buildRowsPreview(rows || []);
+  });
+}
+
+function saveRecurringBookingRows(rows, options, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Recurring.commitRows(rows || [], options || {});
+  });
+}
+
 function importTimetableClassrooms() {
   ROOMS_APP.Auth.requireAdmin();
   return ROOMS_APP.Timetable.importTimetableClassrooms();
@@ -671,6 +683,12 @@ function routeApiRequest_(payload) {
   }
   if (action === 'commitRecurring') {
     return ROOMS_APP.Recurring.commitWeekly(payload);
+  }
+  if (action === 'previewRecurringBookingRows') {
+    return ROOMS_APP.Recurring.buildRowsPreview(payload.rows || payload.draftRows || []);
+  }
+  if (action === 'saveRecurringBookingRows') {
+    return ROOMS_APP.Recurring.commitRows(payload.rows || payload.draftRows || [], payload.options || {});
   }
   if (action === 'importTimetableClassrooms') {
     ROOMS_APP.Auth.requireAdmin();

@@ -783,6 +783,16 @@
                     </div>
                   </div>
                   <div class="substitution-absence-inline" style="margin-top:12px;">
+                    <label class="substitution-absence-check" for="admin-booking-repeat-weekly">
+                      <input id="admin-booking-repeat-weekly" type="checkbox">
+                      <span>Ripeti ogni settimana</span>
+                    </label>
+                    <label id="admin-booking-repeat-until-wrap" for="admin-booking-repeat-until" style="display:none;">
+                      <span class="substitution-absence-section-title" style="margin-right:8px;">Ripeti fino al *</span>
+                      <input id="admin-booking-repeat-until" class="input" type="date" disabled>
+                    </label>
+                  </div>
+                  <div class="substitution-absence-inline" style="margin-top:12px;">
                     <span class="substitution-absence-section-title" style="margin:0 12px 0 0;">Visualizza su monitor *</span>
                     <label class="substitution-absence-check" for="admin-booking-display-teacher">
                       <input id="admin-booking-display-teacher" name="admin-booking-display-mode" type="radio" value="TEACHER" checked>
@@ -7054,6 +7064,9 @@
         var adminBookingTeacher = document.getElementById('admin-booking-teacher');
         var adminBookingActivity = document.getElementById('admin-booking-activity');
         var adminBookingNotes = document.getElementById('admin-booking-notes');
+        var adminBookingRepeatWeekly = document.getElementById('admin-booking-repeat-weekly');
+        var adminBookingRepeatUntil = document.getElementById('admin-booking-repeat-until');
+        var adminBookingRepeatUntilWrap = document.getElementById('admin-booking-repeat-until-wrap');
         var adminBookingDisplayTeacher = document.getElementById('admin-booking-display-teacher');
         var adminBookingDisplayActivity = document.getElementById('admin-booking-display-activity');
         var adminBookingLoadSlots = document.getElementById('admin-booking-load-slots');
@@ -7432,6 +7445,19 @@
           return String(mode || '').toUpperCase() === 'ACTIVITY' ? 'Attività' : 'Docente';
         }
 
+        function syncAdminBookingRepeatUi_() {
+          var repeat = Boolean(adminBookingRepeatWeekly && adminBookingRepeatWeekly.checked);
+          if (adminBookingRepeatUntil) {
+            adminBookingRepeatUntil.disabled = !repeat;
+            if (!repeat) {
+              adminBookingRepeatUntil.value = '';
+            }
+          }
+          if (adminBookingRepeatUntilWrap) {
+            adminBookingRepeatUntilWrap.style.display = repeat ? 'inline-flex' : 'none';
+          }
+        }
+
         function setAdminBookingControlsLoading_(loading) {
           if (adminBookingLoadSlots) {
             adminBookingLoadSlots.disabled = Boolean(loading);
@@ -7778,6 +7804,10 @@
           if (adminBookingNotes) {
             adminBookingNotes.value = '';
           }
+          if (adminBookingRepeatWeekly) {
+            adminBookingRepeatWeekly.checked = false;
+          }
+          syncAdminBookingRepeatUi_();
           clearAdminBookingSelectedSlots_();
           setAdminBookingDisplayMode_('TEACHER');
           adminBookingState.editingDraftId = '';
@@ -7807,6 +7837,12 @@
           if (!getAdminBookingDisplayMode_()) {
             return 'Selezionare cosa visualizzare sul monitor.';
           }
+          if (adminBookingRepeatWeekly && adminBookingRepeatWeekly.checked && !(adminBookingRepeatUntil && adminBookingRepeatUntil.value)) {
+            return 'Selezionare la data finale della ricorrenza.';
+          }
+          if (adminBookingRepeatWeekly && adminBookingRepeatWeekly.checked && adminBookingRepeatUntil.value < adminBookingDate.value) {
+            return 'La data finale della ricorrenza non può precedere la data iniziale.';
+          }
           if (adminBookingState.loading) {
             return 'Attendere il completamento del caricamento degli slot liberi.';
           }
@@ -7830,6 +7866,8 @@
           var activityDescription = adminBookingActivity ? String(adminBookingActivity.value || '').trim() : '';
           var notes = adminBookingNotes ? adminBookingNotes.value : '';
           var displayMode = getAdminBookingDisplayMode_();
+          var repeatWeekly = Boolean(adminBookingRepeatWeekly && adminBookingRepeatWeekly.checked);
+          var repeatUntil = repeatWeekly && adminBookingRepeatUntil ? adminBookingRepeatUntil.value : '';
           var parsedTeacher = parseFullName(teacher.teacherName);
           var validationMessage = getAdminBookingDraftValidationMessage_();
           var rowsToAdd = [];
@@ -7856,6 +7894,8 @@
               activityDescription: activityDescription,
               displayMode: displayMode,
               notes: notes,
+              repeatWeekly: repeatWeekly,
+              repeatUntil: repeatUntil,
               error: ''
             });
           });
@@ -7904,6 +7944,13 @@
           if (adminBookingNotes) {
             adminBookingNotes.value = row.notes || '';
           }
+          if (adminBookingRepeatWeekly) {
+            adminBookingRepeatWeekly.checked = Boolean(row.repeatWeekly);
+          }
+          if (adminBookingRepeatUntil) {
+            adminBookingRepeatUntil.value = row.repeatUntil || '';
+          }
+          syncAdminBookingRepeatUi_();
           setAdminBookingDisplayMode_(row.displayMode || 'TEACHER');
           loadAdminBookingModel_().then(function () {
             clearAdminBookingSelectedSlots_();
@@ -7956,7 +8003,7 @@
         function renderAdminBookingDraft_() {
           renderTable(
             'admin-booking-draft-table',
-            ['Data', 'Aula', 'Orario', 'Docente', 'Descrizione attività', 'Visualizza', 'Stato', 'Azioni'],
+            ['Data', 'Aula', 'Orario', 'Docente', 'Descrizione attività', 'Visualizza', 'Ripetizione', 'Stato', 'Azioni'],
             safeArray(adminBookingState.draftRows).map(function (row) {
               var actions = document.createElement('div');
               var edit = document.createElement('button');
@@ -7988,6 +8035,7 @@
                 row.teacherName || '-',
                 row.activityDescription || '-',
                 getAdminBookingDisplayModeLabel_(row.displayMode),
+                row.repeatWeekly && row.repeatUntil ? ('Ogni settimana fino al ' + formatIsoDateLabel_(row.repeatUntil)) : '-',
                 status,
                 actions
               ];
@@ -8005,34 +8053,74 @@
             adminBookingSave.disabled = true;
           }
           setAdminBookingNotice_('Salvataggio prenotazioni in corso...', '');
-          ROOMS_UI.call('saveAdminRoomBookingRegistry', adminBookingState.draftRows)
+          if (safeArray(adminBookingState.draftRows).some(function (row) { return Boolean(row && row.repeatWeekly); })) {
+            previewAndSaveAdminRecurringDraft_();
+            return;
+          }
+          saveAdminBookingRows_(adminBookingState.draftRows, 'saveAdminRoomBookingRegistry');
+        }
+
+        function applyAdminBookingSaveResult_(result) {
+          var savedMap = {};
+          var failedMap = {};
+          safeArray(result && result.saved).forEach(function (entry) {
+            savedMap[entry.draftId] = true;
+          });
+          safeArray(result && result.failed).forEach(function (entry) {
+            failedMap[entry.draftId] = entry.message || 'Slot non più disponibile al momento del salvataggio.';
+          });
+          adminBookingState.draftRows = safeArray(adminBookingState.draftRows).filter(function (row) {
+            return !savedMap[row.draftId];
+          }).map(function (row) {
+            row.error = failedMap[row.draftId] || row.error || '';
+            return row;
+          });
+          adminBookingState.dirty = adminBookingState.draftRows.length > 0;
+          syncAdminBookingDraftUi_();
+          loadAdminBookingModel_({ preserveNotice: true });
+          setAdminBookingNotice_(
+            String((result && result.savedCount) || 0) + ' prenotazioni salvate, ' + String((result && result.failedCount) || 0) + ' non inserite per conflitto o validazione.',
+            result && result.failedCount ? 'warn' : 'success'
+          );
+        }
+
+        function saveAdminBookingRows_(rows, actionName, options) {
+          ROOMS_UI.call(actionName || 'saveAdminRoomBookingRegistry', rows, options || {})
             .then(function (result) {
-              var savedMap = {};
-              var failedMap = {};
-              safeArray(result && result.saved).forEach(function (entry) {
-                savedMap[entry.draftId] = true;
-              });
-              safeArray(result && result.failed).forEach(function (entry) {
-                failedMap[entry.draftId] = entry.message || 'Slot non più disponibile al momento del salvataggio.';
-              });
-              adminBookingState.draftRows = safeArray(adminBookingState.draftRows).filter(function (row) {
-                return !savedMap[row.draftId];
-              }).map(function (row) {
-                row.error = failedMap[row.draftId] || row.error || '';
-                return row;
-              });
-              adminBookingState.dirty = adminBookingState.draftRows.length > 0;
-              syncAdminBookingDraftUi_();
-              loadAdminBookingModel_({ preserveNotice: true });
-              setAdminBookingNotice_(
-                String((result && result.savedCount) || 0) + ' prenotazioni salvate, ' + String((result && result.failedCount) || 0) + ' non salvate per conflitto o validazione.',
-                result && result.failedCount ? 'warn' : 'success'
-              );
+              applyAdminBookingSaveResult_(result);
             })
             .catch(function (error) {
               setAdminBookingNotice_('Errore salvataggio prenotazioni: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
             })
             .finally(function () {
+              updateAdminBookingDraftStatus_();
+            });
+        }
+
+        function previewAndSaveAdminRecurringDraft_() {
+          ROOMS_UI.call('previewRecurringBookingRows', adminBookingState.draftRows)
+            .then(function (preview) {
+              if (preview && (preview.conflictCount || preview.invalidCount)) {
+                if (adminBookingSave) {
+                  adminBookingSave.disabled = false;
+                }
+                openAppDialog_({
+                  title: 'Conflitti nelle prenotazioni ricorrenti',
+                  message: 'Alcune occorrenze della prenotazione non possono essere inserite perché sono in conflitto con prenotazioni già esistenti. Vuoi continuare salvando solo le occorrenze disponibili, oppure annullare il salvataggio?',
+                  confirmLabel: 'Salva quelle disponibili',
+                  cancelLabel: 'Annulla',
+                  confirmClass: 'button warn',
+                  onConfirm: function () {
+                    setAdminBookingNotice_('Salvataggio prenotazioni ricorrenti in corso...', '');
+                    saveAdminBookingRows_(adminBookingState.draftRows, 'saveRecurringBookingRows', { allowPartial: true });
+                  }
+                });
+                return;
+              }
+              saveAdminBookingRows_(adminBookingState.draftRows, 'saveRecurringBookingRows', { allowPartial: false });
+            })
+            .catch(function (error) {
+              setAdminBookingNotice_('Errore anteprima prenotazioni ricorrenti: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
               updateAdminBookingDraftStatus_();
             });
         }
@@ -8742,6 +8830,17 @@
             loadAdminBookingAvailability_({
               preserveNotice: true
             });
+          });
+        }
+        if (adminBookingRepeatWeekly) {
+          adminBookingRepeatWeekly.addEventListener('change', function () {
+            syncAdminBookingRepeatUi_();
+            setAdminBookingNotice_('', '');
+          });
+        }
+        if (adminBookingRepeatUntil) {
+          adminBookingRepeatUntil.addEventListener('change', function () {
+            setAdminBookingNotice_('', '');
           });
         }
         if (adminBookingAddDraft) {
