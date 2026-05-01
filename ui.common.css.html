@@ -506,8 +506,8 @@ body.board-monitor #board-root {
 }
 
 .board-shell.monitor-mode .aula-magna-special {
-  height: calc(470px * var(--monitor-ui-scale));
-  min-height: calc(470px * var(--monitor-ui-scale));
+  height: calc(244px * var(--monitor-ui-scale));
+  min-height: calc(244px * var(--monitor-ui-scale));
 }
 
 .board-shell.monitor-mode .aula-magna-current-title {
@@ -531,13 +531,13 @@ body.board-monitor #board-root {
 }
 
 .tree-left-column .branch-pa1-aula {
-  margin-top: 18px;
+  margin-top: 8px;
 }
 
 .branch-panel.aula-magna-special {
   grid-template-rows: auto minmax(0, 1fr);
-  height: 470px;
-  min-height: 470px;
+  height: 244px;
+  min-height: 244px;
   padding: 10px;
   gap: 10px;
   border-color: rgba(96, 165, 250, 0.48);
@@ -1413,11 +1413,11 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 }
 
 .tree-left-column .branch-pa1 {
-  margin-top: 34px;
+  margin-top: 12px;
 }
 
 .tree-left-column .branch-pa1-aula {
-  margin-top: 18px;
+  margin-top: 8px;
 }
 
 .tree-center-column {
@@ -1671,6 +1671,31 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 
 .room-lines div:last-child {
   color: #94a3b8;
+}
+
+.room-next-line-text {
+  display: inline-block;
+  max-width: none;
+  will-change: transform;
+}
+
+.room-next-line-compact.is-overflow-scrolling {
+  text-overflow: clip;
+}
+
+.room-next-line-compact.is-overflow-scrolling .room-next-line-text {
+  animation: room-next-line-scroll var(--room-next-scroll-duration, 14s) linear infinite;
+}
+
+@keyframes room-next-line-scroll {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  86%,
+  100% {
+    transform: translateX(calc(-1 * var(--room-next-scroll-distance, 0px)));
+  }
 }
 
 .stack {
