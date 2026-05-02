@@ -643,7 +643,7 @@
           var rows = safeArray(model && model.afternoonBookings);
           var viewport = ROOMS_UI.el('div', 'auto-scroll-viewport afternoon-summary-viewport');
           var list = ROOMS_UI.el('div', 'auto-scroll-track afternoon-summary-list');
-          section.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'PRENOTAZIONI POMERIDIANE SUCCESSIVE'));
+          section.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label afternoon-summary-label', 'PRENOTAZIONI POMERIDIANE SUCCESSIVE'));
           if (!rows.length) {
             list.appendChild(ROOMS_UI.el('div', 'aula-magna-empty', 'Nessuna prenotazione pomeridiana successiva.'));
           } else {
@@ -666,10 +666,11 @@
           var eventBlock = model && model.aulaMagna ? model.aulaMagna : {};
           var resourceId = eventBlock.resourceId || 'AULA_MAGNA';
           branch.dataset.resourceId = resourceId;
-          branch.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || 'AULA MAGNA'));
 
           var content = ROOMS_UI.el('div', 'aula-magna-content');
+          var aulaCard = ROOMS_UI.el('div', 'monitor-side-card aula-magna-card');
           var aulaSection = ROOMS_UI.el('div', 'service-block-section aula-magna-main-section');
+          aulaCard.appendChild(ROOMS_UI.el('div', 'branch-label', fallbackTitle || 'AULA MAGNA'));
           var currentSection = ROOMS_UI.el('div', 'aula-magna-current');
           currentSection.appendChild(ROOMS_UI.el('div', 'aula-magna-section-label', 'ORA'));
           var currentEvent = eventBlock.currentEvent || null;
@@ -692,7 +693,8 @@
           eventViewport.appendChild(list);
           upcomingSection.appendChild(eventViewport);
           aulaSection.appendChild(upcomingSection);
-          content.appendChild(aulaSection);
+          aulaCard.appendChild(aulaSection);
+          content.appendChild(aulaCard);
           content.appendChild(createAfternoonSummarySection(model));
           branch.appendChild(content);
           if (shouldBlockRoomPanel_()) {
