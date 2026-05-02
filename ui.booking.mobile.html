@@ -151,6 +151,47 @@
         padding: 0 14px;
       }
 
+      .mobile-booking-shell .button.is-loading,
+      .mobile-modal .button.is-loading {
+        cursor: wait;
+      }
+
+      .mobile-button-content,
+      .mobile-loading-row {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+      }
+
+      .mobile-loading-row {
+        width: 100%;
+        min-height: 74px;
+        padding: 18px 14px;
+        border: 1px solid rgba(96, 165, 250, 0.34);
+        border-radius: 10px;
+        background: rgba(30, 41, 59, 0.78);
+        color: #e5e7eb;
+        font-size: 23px;
+        font-weight: 800;
+      }
+
+      .mobile-spinner {
+        width: 1.1em;
+        height: 1.1em;
+        flex: 0 0 auto;
+        border: 3px solid rgba(226, 232, 240, 0.28);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: mobile-spinner-rotate 0.85s linear infinite;
+      }
+
+      @keyframes mobile-spinner-rotate {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       .mobile-required::after {
         content: " *";
         color: #93c5fd;
@@ -463,6 +504,7 @@
             repeatUntil: '',
             availabilityLoaded: false,
             loadingSlots: false,
+            savingBooking: false,
             editingBooking: null
           },
           myBookings: {
@@ -563,6 +605,45 @@
           }
         }
 
+        function renderButtonContent_(button, label, isLoading) {
+          var content;
+          if (!button) {
+            return;
+          }
+          ROOMS_UI.clearNode(button);
+          content = ROOMS_UI.el('span', 'mobile-button-content');
+          if (isLoading) {
+            content.appendChild(ROOMS_UI.el('span', 'mobile-spinner'));
+          }
+          content.appendChild(ROOMS_UI.el('span', '', label));
+          button.appendChild(content);
+          button.classList.toggle('is-loading', Boolean(isLoading));
+        }
+
+        function createLoadingRow_(message) {
+          var row = ROOMS_UI.el('div', 'mobile-loading-row');
+          row.appendChild(ROOMS_UI.el('span', 'mobile-spinner'));
+          row.appendChild(ROOMS_UI.el('span', '', message || 'Caricamento...'));
+          return row;
+        }
+
+        function renderLoadingControls_() {
+          var saveLabel = state.form.editingBooking ? 'Salva modifica' : 'Conferma prenotazione';
+          renderButtonContent_(nodes['load-slots'], state.form.loadingSlots ? 'Caricamento slot...' : 'Carica slot liberi', state.form.loadingSlots);
+          if (nodes['load-slots']) {
+            nodes['load-slots'].disabled = Boolean(state.form.loadingSlots);
+          }
+          renderButtonContent_(nodes['save-booking'], state.form.savingBooking ? 'Salvataggio...' : saveLabel, state.form.savingBooking);
+          if (nodes['save-booking']) {
+            nodes['save-booking'].disabled = Boolean(state.form.savingBooking);
+          }
+        }
+
+        function setSavingBooking_(isSaving) {
+          state.form.savingBooking = Boolean(isSaving);
+          renderLoadingControls_();
+        }
+
         function getDisplayMode_() {
           var checked = document.querySelector('input[name="display-mode"]:checked');
           return checked ? checked.value : 'TEACHER';
@@ -646,9 +727,7 @@
           if (nodes['form-title']) {
             nodes['form-title'].textContent = state.form.editingBooking ? 'Modifica prenotazione' : 'Nuova prenotazione';
           }
-          if (nodes['save-booking']) {
-            nodes['save-booking'].textContent = state.form.editingBooking ? 'Salva modifica' : 'Conferma prenotazione';
-          }
+          renderLoadingControls_();
           renderSummary_();
           renderSegments_();
         }
@@ -660,8 +739,10 @@
             return;
           }
           ROOMS_UI.clearNode(mount);
+          renderLoadingControls_();
           if (state.form.loadingSlots) {
             setSlotStatus_('Caricamento slot liberi...');
+            mount.appendChild(createLoadingRow_('Caricamento slot liberi...'));
             return;
           }
           if (!state.form.availabilityLoaded) {
@@ -886,11 +967,14 @@
         function saveBooking_() {
           var validationMessage = validateForm_();
           var slots = selectedSlots_();
+          if (state.form.savingBooking) {
+            return;
+          }
           if (validationMessage) {
             setNotice_(validationMessage, 'warn');
             return;
           }
-          nodes['save-booking'].disabled = true;
+          setSavingBooking_(true);
           if (state.form.editingBooking) {
             ROOMS_UI.call('updateMobileBooking', state.form.editingBooking.bookingId, buildPayloadForSlot_(slots[0]))
               .then(function () {
@@ -902,7 +986,7 @@
                 setNotice_(error && error.message ? error.message : 'Errore salvataggio modifica.', 'error');
               })
               .then(function () {
-                nodes['save-booking'].disabled = false;
+                setSavingBooking_(false);
               });
             return;
           }
@@ -945,7 +1029,7 @@
               setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni.', 'error');
             })
             .then(function () {
-              nodes['save-booking'].disabled = false;
+              setSavingBooking_(false);
             });
         }
 
@@ -979,21 +1063,21 @@
           return ROOMS_UI.call('previewRecurringBookingRows', payloadRows)
             .then(function (preview) {
               if (preview && (preview.conflictCount || preview.invalidCount)) {
-                nodes['save-booking'].disabled = false;
+                setSavingBooking_(false);
                 openModal_({
                   title: 'Conflitti nelle prenotazioni ricorrenti',
                   message: 'Alcune occorrenze della prenotazione non possono essere inserite perché sono in conflitto con prenotazioni già esistenti. Vuoi continuare salvando solo le occorrenze disponibili, oppure annullare il salvataggio?',
                   confirmLabel: 'Salva quelle disponibili',
                   cancelLabel: 'Annulla',
                   onConfirm: function () {
-                    nodes['save-booking'].disabled = true;
+                    setSavingBooking_(true);
                     ROOMS_UI.call('saveRecurringBookingRows', payloadRows, { allowPartial: true })
                       .then(finishMobileSaveResult_)
                       .catch(function (error) {
                         setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni ricorrenti.', 'error');
                       })
                       .then(function () {
-                        nodes['save-booking'].disabled = false;
+                        setSavingBooking_(false);
                       });
                   }
                 });
@@ -1002,12 +1086,12 @@
               return ROOMS_UI.call('saveRecurringBookingRows', payloadRows, { allowPartial: false })
                 .then(finishMobileSaveResult_)
                 .then(function () {
-                  nodes['save-booking'].disabled = false;
+                  setSavingBooking_(false);
                 });
             })
             .catch(function (error) {
               setNotice_(error && error.message ? error.message : 'Errore salvataggio prenotazioni ricorrenti.', 'error');
-              nodes['save-booking'].disabled = false;
+              setSavingBooking_(false);
             });
         }
 
