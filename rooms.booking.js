@@ -26,11 +26,15 @@ ROOMS_APP.Booking = {
     return actorLabel || activityLabel || ROOMS_APP.normalizeString(booking && (booking.BookerEmail || booking.bookerEmail)) || 'N/D';
   },
 
+  isBookingCancelled_: function (booking) {
+    return ROOMS_APP.normalizeString(booking && booking.Status).toUpperCase() === 'CANCELLED';
+  },
+
   listBookingsForDay: function (resourceId, dateString) {
     var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
       return row.ResourceId === resourceId &&
         row.BookingDate === dateString &&
-        row.Status !== 'CANCELLED';
+        !ROOMS_APP.Booking.isBookingCancelled_(row);
     });
 
     return ROOMS_APP.sortBy(rows, ['StartTime', 'EndTime', 'CreatedAtISO']);
@@ -39,7 +43,7 @@ ROOMS_APP.Booking = {
   listBookingsForDate: function (dateString) {
     return ROOMS_APP.sortBy(
       ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
-        return row.BookingDate === dateString && row.Status !== 'CANCELLED';
+        return row.BookingDate === dateString && !ROOMS_APP.Booking.isBookingCancelled_(row);
       }),
       ['ResourceId', 'StartTime', 'EndTime']
     );
@@ -51,7 +55,7 @@ ROOMS_APP.Booking = {
       ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).filter(function (row) {
         return row.ResourceId === resourceId &&
           row.BookingDate >= startDate &&
-          row.Status !== 'CANCELLED';
+          !ROOMS_APP.Booking.isBookingCancelled_(row);
       }),
       ['BookingDate', 'StartTime', 'EndTime']
     );
@@ -195,7 +199,7 @@ ROOMS_APP.Booking = {
         throw new Error('Only the creator or an authorized manager can cancel this booking.');
       }
 
-      if (existing.Status === 'CANCELLED') {
+      if (self.isBookingCancelled_(existing)) {
         return existing;
       }
 
@@ -320,7 +324,7 @@ ROOMS_APP.Booking = {
           if (!ROOMS_APP.Auth.canManageBooking(existing, actor)) {
             throw new Error('Only the creator or an authorized manager can cancel this booking.');
           }
-          if (existing.Status === 'CANCELLED') {
+          if (self.isBookingCancelled_(existing)) {
             return;
           }
 
@@ -344,7 +348,7 @@ ROOMS_APP.Booking = {
             throw new Error('Booking not found.');
           }
           var existing = workingRows[existingIndex];
-          if (existing.Status === 'CANCELLED') {
+          if (self.isBookingCancelled_(existing)) {
             throw new Error('Booking not found.');
           }
           if (existing.ResourceId !== targetResourceId) {
@@ -1002,6 +1006,7 @@ ROOMS_APP.Booking = {
       var bookingIndex = self.findBookingIndexById_(bookingRows, targetBookingId);
       var booking;
       var nowIso;
+      var cancelledIds = [];
       if (bookingIndex < 0) {
         throw new Error('Prenotazione non trovata.');
       }
@@ -1013,15 +1018,24 @@ ROOMS_APP.Booking = {
       if (!ROOMS_APP.Auth.canManageBooking(booking, actor)) {
         throw new Error('Only the creator or an authorized manager can cancel this booking.');
       }
-      if (booking.Status === 'CANCELLED') {
-        return booking;
-      }
       nowIso = ROOMS_APP.toIsoDateTime(new Date());
-      booking.Status = 'CANCELLED';
-      booking.UpdatedAtISO = nowIso;
-      booking.CancelledAtISO = nowIso;
-      booking.Notes = ROOMS_APP.normalizeString(notes || booking.Notes);
-      bookingRows[bookingIndex] = booking;
+      bookingRows = bookingRows.map(function (row) {
+        if (!self.isSameAdminExistingManualOccurrence_(row, booking, targetBookingId)) {
+          return row;
+        }
+        if (!ROOMS_APP.Auth.canManageBooking(row, actor)) {
+          throw new Error('Only the creator or an authorized manager can cancel this booking.');
+        }
+        if (self.isBookingCancelled_(row)) {
+          return row;
+        }
+        row.Status = 'CANCELLED';
+        row.UpdatedAtISO = nowIso;
+        row.CancelledAtISO = nowIso;
+        row.Notes = ROOMS_APP.normalizeString(notes || row.Notes);
+        cancelledIds.push(ROOMS_APP.normalizeString(row.BookingId));
+        return row;
+      });
       ROOMS_APP.DB.replaceRows(
         ROOMS_APP.SHEET_NAMES.BOOKINGS,
         ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.BOOKINGS),
@@ -1029,10 +1043,27 @@ ROOMS_APP.Booking = {
       );
       self.writeAudit_('ADMIN_EXISTING_BOOKING_CANCEL', targetBookingId, booking.SeriesId, targetResourceId, actor.email, 'OK', {
         bookingDate: targetDate,
+        cancelledIds: cancelledIds,
         notes: notes
       });
       return booking;
     });
+  },
+
+  isSameAdminExistingManualOccurrence_: function (row, targetBooking, targetBookingId) {
+    if (!row || this.isBookingCancelled_(row)) {
+      return false;
+    }
+    if (ROOMS_APP.normalizeString(row.BookingId) === targetBookingId) {
+      return true;
+    }
+    return ROOMS_APP.normalizeString(row.ResourceId) === ROOMS_APP.normalizeString(targetBooking.ResourceId) &&
+      ROOMS_APP.toIsoDate(row.BookingDate) === ROOMS_APP.toIsoDate(targetBooking.BookingDate) &&
+      ROOMS_APP.toTimeString(row.StartTime) === ROOMS_APP.toTimeString(targetBooking.StartTime) &&
+      ROOMS_APP.toTimeString(row.EndTime) === ROOMS_APP.toTimeString(targetBooking.EndTime) &&
+      ROOMS_APP.normalizeString(row.ActivityDescription || row.Title) === ROOMS_APP.normalizeString(targetBooking.ActivityDescription || targetBooking.Title) &&
+      ROOMS_APP.normalizeString(row.BookerName) === ROOMS_APP.normalizeString(targetBooking.BookerName) &&
+      ROOMS_APP.normalizeString(row.BookerSurname) === ROOMS_APP.normalizeString(targetBooking.BookerSurname);
   },
 
   validateAdminBookingDraftRow_: function (row, actor, workingRows, timetableCache, validationContext) {
@@ -1719,7 +1750,7 @@ ROOMS_APP.Booking = {
 
   hasConflictInRows_: function (rows, resourceId, bookingDate, startTime, endTime, ignoreBookingId) {
     return (rows || []).some(function (row) {
-      if (!row || row.Status === 'CANCELLED') {
+      if (!row || ROOMS_APP.Booking.isBookingCancelled_(row)) {
         return false;
       }
       if (row.ResourceId !== resourceId || row.BookingDate !== bookingDate) {

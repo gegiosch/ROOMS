@@ -7767,11 +7767,13 @@
           setAdminExistingLoading_(true);
           setAdminExistingNotice_('Applicazione modifica in corso...', '');
           ROOMS_UI.call('applyAdminExistingRoomOccupancyChange', payload)
-            .then(function (result) {
-              adminExistingState.model = result || {};
-              adminExistingState.rows = safeArray(result && result.rows);
+            .then(function () {
               closeAdminExistingEdit_();
-              setAdminExistingNotice_('Modifica applicata.', 'success');
+              return loadAdminExistingOccupancies_().then(function () {
+                setAdminExistingNotice_('Modifica applicata.', 'success');
+              });
+            })
+            .then(function () {
               if (adminBookingState.initialized) {
                 loadAdminBookingAvailability_({ preserveNotice: true });
               }
