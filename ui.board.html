@@ -598,6 +598,7 @@
           var tileNode = document.createElement('button');
           var isOccupiedNextLine = tile.state === 'OCCUPIED' && tile.nextLabel !== 'LIBERA';
           var nextLineText = tile.nextLabel === 'LIBERA' ? 'NEXT: LIBERA' : (isOccupiedNextLine ? tile.nextLabel : ('NEXT ' + tile.nextLabel));
+          var titleLine;
           var nextLine;
           tileNode.type = 'button';
           tileNode.className = 'room-tile ' + tile.state.toLowerCase().replace('_', '-');
@@ -611,7 +612,9 @@
               openRoomPanel(tile.resourceId);
             });
           }
-          tileNode.appendChild(ROOMS_UI.el('div', 'room-title', tile.displayName));
+          titleLine = ROOMS_UI.el('div', 'room-title');
+          titleLine.appendChild(ROOMS_UI.el('span', 'room-title-text', tile.displayName));
+          tileNode.appendChild(titleLine);
 
           var lines = ROOMS_UI.el('div', 'room-lines');
           lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
@@ -904,10 +907,12 @@
           root.appendChild(fitShell);
           applyFitScale();
           configureAutoScrollAreas_();
+          configureRoomTitleOverflow_();
           configureRoomNextLineOverflow_();
           window.requestAnimationFrame(function () {
             applyFitScale();
             configureAutoScrollAreas_();
+            configureRoomTitleOverflow_();
             configureRoomNextLineOverflow_();
           });
         }
@@ -947,6 +952,29 @@
             track.style.setProperty('--auto-scroll-distance', String(distance + gap) + 'px');
             track.style.setProperty('--auto-scroll-duration', String(Math.max(24, Math.ceil((distance + gap) / 10))) + 's');
             viewport.classList.add('is-auto-scrolling');
+          });
+        }
+
+        function configureRoomTitleOverflow_() {
+          if (!isMonitorModeEffective_(state)) {
+            return;
+          }
+          Array.prototype.slice.call(document.querySelectorAll('.room-title')).forEach(function (line) {
+            var text = line.querySelector('.room-title-text');
+            var overflowDistance;
+            if (!text) {
+              return;
+            }
+            line.classList.remove('is-overflow-scrolling');
+            text.style.removeProperty('--room-title-scroll-distance');
+            text.style.removeProperty('--room-title-scroll-duration');
+            overflowDistance = Math.ceil(text.scrollWidth - line.clientWidth);
+            if (overflowDistance <= 2) {
+              return;
+            }
+            text.style.setProperty('--room-title-scroll-distance', String(overflowDistance) + 'px');
+            text.style.setProperty('--room-title-scroll-duration', String(Math.max(14, Math.ceil((text.scrollWidth + overflowDistance) / 16))) + 's');
+            line.classList.add('is-overflow-scrolling');
           });
         }
 

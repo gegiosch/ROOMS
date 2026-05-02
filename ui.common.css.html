@@ -1721,6 +1721,31 @@ body.substitution-standalone #replacement-close-button-long-bottom {
   text-overflow: ellipsis;
 }
 
+.room-title-text {
+  display: inline-block;
+  max-width: none;
+  will-change: transform;
+}
+
+.room-title.is-overflow-scrolling {
+  text-overflow: clip;
+}
+
+.room-title.is-overflow-scrolling .room-title-text {
+  animation: room-title-scroll var(--room-title-scroll-duration, 16s) linear infinite;
+}
+
+@keyframes room-title-scroll {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  86%,
+  100% {
+    transform: translateX(calc(-1 * var(--room-title-scroll-distance, 0px)));
+  }
+}
+
 .room-lines {
   color: #cbd5f5;
   display: grid;
