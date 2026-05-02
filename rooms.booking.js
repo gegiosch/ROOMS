@@ -696,10 +696,13 @@ ROOMS_APP.Booking = {
           bookingId: bookingId,
           payload: replacementPayload
         }];
-        this.applyRoomChanges(targetResourceId, targetDate, changes);
       } else {
-        this.cancelAdminExistingManualBooking_(targetResourceId, targetDate, bookingId, notes, actor);
+        changes.deletes = [{
+          bookingId: bookingId,
+          notes: notes
+        }];
       }
+      this.applyRoomChanges(targetResourceId, targetDate, changes);
       return this.getAdminExistingRoomOccupancies(targetDate, targetResourceId);
     }
 
@@ -991,79 +994,6 @@ ROOMS_APP.Booking = {
       });
       return true;
     });
-  },
-
-  cancelAdminExistingManualBooking_: function (resourceId, dateString, bookingId, notes, actor) {
-    var self = this;
-    var targetResourceId = ROOMS_APP.normalizeString(resourceId);
-    var targetDate = ROOMS_APP.toIsoDate(dateString);
-    var targetBookingId = ROOMS_APP.normalizeString(bookingId);
-    if (!targetBookingId) {
-      throw new Error('Prenotazione non trovata.');
-    }
-    return this.withBookingLock_(function () {
-      var bookingRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS);
-      var bookingIndex = self.findBookingIndexById_(bookingRows, targetBookingId);
-      var booking;
-      var nowIso;
-      var cancelledIds = [];
-      if (bookingIndex < 0) {
-        throw new Error('Prenotazione non trovata.');
-      }
-      booking = bookingRows[bookingIndex];
-      if (ROOMS_APP.normalizeString(booking.ResourceId) !== targetResourceId ||
-        ROOMS_APP.toIsoDate(booking.BookingDate) !== targetDate) {
-        throw new Error('Prenotazione non coerente con data e aula selezionate.');
-      }
-      if (!ROOMS_APP.Auth.canManageBooking(booking, actor)) {
-        throw new Error('Only the creator or an authorized manager can cancel this booking.');
-      }
-      nowIso = ROOMS_APP.toIsoDateTime(new Date());
-      bookingRows = bookingRows.map(function (row) {
-        if (!self.isSameAdminExistingManualOccurrence_(row, booking, targetBookingId)) {
-          return row;
-        }
-        if (!ROOMS_APP.Auth.canManageBooking(row, actor)) {
-          throw new Error('Only the creator or an authorized manager can cancel this booking.');
-        }
-        if (self.isBookingCancelled_(row)) {
-          return row;
-        }
-        row.Status = 'CANCELLED';
-        row.UpdatedAtISO = nowIso;
-        row.CancelledAtISO = nowIso;
-        row.Notes = ROOMS_APP.normalizeString(notes || row.Notes);
-        cancelledIds.push(ROOMS_APP.normalizeString(row.BookingId));
-        return row;
-      });
-      ROOMS_APP.DB.replaceRows(
-        ROOMS_APP.SHEET_NAMES.BOOKINGS,
-        ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.BOOKINGS),
-        bookingRows
-      );
-      self.writeAudit_('ADMIN_EXISTING_BOOKING_CANCEL', targetBookingId, booking.SeriesId, targetResourceId, actor.email, 'OK', {
-        bookingDate: targetDate,
-        cancelledIds: cancelledIds,
-        notes: notes
-      });
-      return booking;
-    });
-  },
-
-  isSameAdminExistingManualOccurrence_: function (row, targetBooking, targetBookingId) {
-    if (!row || this.isBookingCancelled_(row)) {
-      return false;
-    }
-    if (ROOMS_APP.normalizeString(row.BookingId) === targetBookingId) {
-      return true;
-    }
-    return ROOMS_APP.normalizeString(row.ResourceId) === ROOMS_APP.normalizeString(targetBooking.ResourceId) &&
-      ROOMS_APP.toIsoDate(row.BookingDate) === ROOMS_APP.toIsoDate(targetBooking.BookingDate) &&
-      ROOMS_APP.toTimeString(row.StartTime) === ROOMS_APP.toTimeString(targetBooking.StartTime) &&
-      ROOMS_APP.toTimeString(row.EndTime) === ROOMS_APP.toTimeString(targetBooking.EndTime) &&
-      ROOMS_APP.normalizeString(row.ActivityDescription || row.Title) === ROOMS_APP.normalizeString(targetBooking.ActivityDescription || targetBooking.Title) &&
-      ROOMS_APP.normalizeString(row.BookerName) === ROOMS_APP.normalizeString(targetBooking.BookerName) &&
-      ROOMS_APP.normalizeString(row.BookerSurname) === ROOMS_APP.normalizeString(targetBooking.BookerSurname);
   },
 
   validateAdminBookingDraftRow_: function (row, actor, workingRows, timetableCache, validationContext) {

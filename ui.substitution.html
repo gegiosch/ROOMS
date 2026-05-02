@@ -7766,7 +7766,15 @@
           adminExistingState.saving = true;
           setAdminExistingLoading_(true);
           setAdminExistingNotice_('Applicazione modifica in corso...', '');
-          ROOMS_UI.call('applyAdminExistingRoomOccupancyChange', payload)
+          (row.sourceType === 'PRENOTAZIONE'
+            ? ROOMS_UI.call('applyRoomPanelChanges', row.resourceId, row.bookingDate, {
+              creates: [],
+              updates: [],
+              deletes: [{ bookingId: row.bookingId }],
+              timetableDeletes: [],
+              timetableUpdates: []
+            })
+            : ROOMS_UI.call('applyAdminExistingRoomOccupancyChange', payload))
             .then(function () {
               closeAdminExistingEdit_();
               return loadAdminExistingOccupancies_().then(function () {
