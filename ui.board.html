@@ -160,6 +160,7 @@
         <div class="room-panel-unsaved-dialog">
           <h3 id="app-dialog-title">Conferma</h3>
           <p id="app-dialog-message">-</p>
+          <div id="app-dialog-extra"></div>
           <div class="toolbar">
             <button id="app-dialog-confirm" class="button" type="button">Conferma</button>
             <button id="app-dialog-cancel" class="button secondary" type="button">Chiudi</button>
@@ -336,6 +337,7 @@
         var appDialogModal = document.getElementById('app-dialog-modal');
         var appDialogTitle = document.getElementById('app-dialog-title');
         var appDialogMessage = document.getElementById('app-dialog-message');
+        var appDialogExtra = document.getElementById('app-dialog-extra');
         var appDialogConfirm = document.getElementById('app-dialog-confirm');
         var appDialogCancel = document.getElementById('app-dialog-cancel');
         var occupantEditorModal = document.getElementById('panel-occupant-editor-modal');
@@ -4142,6 +4144,9 @@
           if (appDialogModal) {
             appDialogModal.style.display = 'none';
           }
+          if (appDialogExtra) {
+            ROOMS_UI.clearNode(appDialogExtra);
+          }
           panelState.dialog.onConfirm = null;
           panelState.dialog.onCancel = null;
         }
@@ -4156,6 +4161,12 @@
           }
           if (appDialogMessage) {
             appDialogMessage.textContent = settings.message || '';
+          }
+          if (appDialogExtra) {
+            ROOMS_UI.clearNode(appDialogExtra);
+            if (settings.extraNode) {
+              appDialogExtra.appendChild(settings.extraNode);
+            }
           }
           if (appDialogConfirm) {
             appDialogConfirm.textContent = settings.confirmLabel || 'Conferma';
@@ -4546,19 +4557,129 @@
           }
           var slotKey = normalizeSlotKey_(slot.startTime, slot.endTime);
           var currentDraft = panelState.draft.creates[slotKey] || {};
-          var identity = getUserIdentity_(panelState.model);
           panelState.selectedFreeSlotKeys[slotKey] = true;
-          panelState.draft.creates[slotKey] = {
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            title: currentDraft.title || ((panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || ''),
-            activityDescription: currentDraft.activityDescription || '',
-            displayMode: currentDraft.displayMode || 'TEACHER',
-            notes: currentDraft.notes || '',
-            bookerName: currentDraft.bookerName || identity.firstName || '',
-            bookerSurname: currentDraft.bookerSurname || identity.surname || '',
-            bookerEmail: currentDraft.bookerEmail || identity.email || ''
+          panelState.draft.creates[slotKey] = buildDraftCreateFromBlock_(slot, currentDraft);
+        }
+
+        function buildDraftCreateFromBlock_(block, currentDraft) {
+          var draft = currentDraft || {};
+          var identity = getUserIdentity_(panelState.model);
+          return {
+            startTime: block.startTime,
+            endTime: block.endTime,
+            title: draft.title || ((panelState.model && panelState.model.resource && panelState.model.resource.DisplayName) || ''),
+            activityDescription: draft.activityDescription || '',
+            displayMode: draft.displayMode || 'TEACHER',
+            notes: draft.notes || '',
+            bookerName: draft.bookerName || identity.firstName || '',
+            bookerSurname: draft.bookerSurname || identity.surname || '',
+            bookerEmail: draft.bookerEmail || identity.email || ''
           };
+        }
+
+        function getSelectedDraftCreateSlotsWithDraft_(extraSlot) {
+          var slots = Object.keys(panelState.draft.creates || {}).map(function (slotKey) {
+            var draft = panelState.draft.creates[slotKey] || {};
+            return {
+              startTime: draft.startTime,
+              endTime: draft.endTime,
+              draft: draft
+            };
+          }).filter(function (slot) {
+            return Boolean(slot.startTime && slot.endTime);
+          });
+          if (extraSlot && extraSlot.startTime && extraSlot.endTime) {
+            slots.push({
+              startTime: extraSlot.startTime,
+              endTime: extraSlot.endTime,
+              draft: {}
+            });
+          }
+          return slots;
+        }
+
+        function applyDraftCreateBlocks_(blocks, sourceSlots) {
+          var firstDraft = {};
+          safeArray(sourceSlots).some(function (slot) {
+            if (slot && slot.draft) {
+              firstDraft = slot.draft;
+              return true;
+            }
+            return false;
+          });
+          panelState.draft.creates = {};
+          panelState.selectedFreeSlotKeys = {};
+          safeArray(blocks).forEach(function (block, index) {
+            var key = normalizeSlotKey_(block.startTime, block.endTime);
+            panelState.selectedFreeSlotKeys[key] = true;
+            panelState.draft.creates[key] = buildDraftCreateFromBlock_(block, index === 0 ? firstDraft : {});
+          });
+        }
+
+        function addDraftCreateWithGrouping_(slot) {
+          var candidateSlots = getSelectedDraftCreateSlotsWithDraft_(slot);
+          var analysis = ROOMS_UI.analyzeSlotActivityGrouping(candidateSlots);
+          if (analysis.count <= 1) {
+            ensureDraftCreateForSlot_(slot);
+            updateDraftUiState_();
+            renderRoomPanel(panelState.model);
+            return;
+          }
+          if (!analysis.fullyConsecutive) {
+            applyDraftCreateBlocks_(ROOMS_UI.buildSlotActivityBlocks(candidateSlots, ''), candidateSlots);
+            updateDraftUiState_();
+            renderRoomPanel(panelState.model);
+            ROOMS_UI.setNotice(panelNotice, 'Gli slot selezionati non sono consecutivi: inseriti come attività separate.', 'success');
+            return;
+          }
+          openActivityGroupingDialog_(candidateSlots);
+        }
+
+        function openActivityGroupingDialog_(candidateSlots) {
+          var mode = 'UNIQUE';
+          var wrap = ROOMS_UI.el('div', 'booking-activity-mode');
+          var options = ROOMS_UI.el('div', 'booking-activity-mode-options');
+          var uniqueLabel = ROOMS_UI.el('label', 'booking-activity-mode-option');
+          var uniqueRadio = document.createElement('input');
+          var separateLabel = ROOMS_UI.el('label', 'booking-activity-mode-option');
+          var separateRadio = document.createElement('input');
+          wrap.appendChild(ROOMS_UI.el('div', 'booking-activity-mode-title', 'Modalità attività'));
+          uniqueRadio.type = 'radio';
+          uniqueRadio.name = 'panel-activity-mode';
+          uniqueRadio.value = 'UNIQUE';
+          uniqueRadio.checked = true;
+          uniqueRadio.addEventListener('change', function () {
+            mode = 'UNIQUE';
+          });
+          uniqueLabel.appendChild(uniqueRadio);
+          uniqueLabel.appendChild(ROOMS_UI.el('span', '', 'Attività unica'));
+          separateRadio.type = 'radio';
+          separateRadio.name = 'panel-activity-mode';
+          separateRadio.value = 'SEPARATE';
+          separateRadio.addEventListener('change', function () {
+            mode = 'SEPARATE';
+          });
+          separateLabel.appendChild(separateRadio);
+          separateLabel.appendChild(ROOMS_UI.el('span', '', 'Attività separate'));
+          options.appendChild(uniqueLabel);
+          options.appendChild(separateLabel);
+          wrap.appendChild(options);
+          openAppDialog_({
+            title: 'Modalità attività',
+            message: 'Gli slot selezionati sono consecutivi. Scegli come aggiungerli alla bozza.',
+            confirmLabel: 'Aggiungi alla bozza',
+            cancelLabel: 'Annulla',
+            extraNode: wrap,
+            onConfirm: function () {
+              applyDraftCreateBlocks_(ROOMS_UI.buildSlotActivityBlocks(candidateSlots, mode), candidateSlots);
+              updateDraftUiState_();
+              renderRoomPanel(panelState.model);
+              ROOMS_UI.setNotice(panelNotice, 'Attività aggiunta alla bozza. Clicca Salva.', 'success');
+            },
+            onCancel: function () {
+              renderRoomPanel(panelState.model);
+            }
+          });
         }
 
         function clearDraftCreateSelection_(slotKey) {
@@ -4572,12 +4693,12 @@
             return;
           }
           if (isSelected) {
-            ensureDraftCreateForSlot_(slot);
+            addDraftCreateWithGrouping_(slot);
           } else {
             clearDraftCreateSelection_(slotKey);
+            updateDraftUiState_();
+            renderRoomPanel(panelState.model);
           }
-          updateDraftUiState_();
-          renderRoomPanel(panelState.model);
         }
 
         function renderTable(mountId, headers, rows, emptyText, tableClassName) {

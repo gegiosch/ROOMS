@@ -91,6 +91,86 @@ window.ROOMS_UI = {
     return Array.isArray(value) ? value : [];
   },
 
+  analyzeSlotActivityGrouping: function (slots) {
+    var normalized = this.safeArray(slots).map(function (slot) {
+      return {
+        startTime: String(slot && slot.startTime || ''),
+        endTime: String(slot && slot.endTime || ''),
+        source: slot || {}
+      };
+    }).filter(function (slot) {
+      return Boolean(slot.startTime && slot.endTime);
+    }).sort(function (left, right) {
+      return [left.startTime, left.endTime].join('|').localeCompare([right.startTime, right.endTime].join('|'));
+    });
+    var fullyConsecutive = normalized.length > 1;
+    var runs = [];
+    normalized.forEach(function (slot) {
+      var lastRun = runs[runs.length - 1];
+      if (!lastRun || lastRun.endTime !== slot.startTime) {
+        runs.push({
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          slots: [slot]
+        });
+        return;
+      }
+      lastRun.endTime = slot.endTime;
+      lastRun.slots.push(slot);
+    });
+    if (normalized.length <= 1) {
+      fullyConsecutive = false;
+    } else {
+      fullyConsecutive = normalized.every(function (slot, index) {
+        return index === 0 || normalized[index - 1].endTime === slot.startTime;
+      });
+    }
+    return {
+      slots: normalized,
+      count: normalized.length,
+      fullyConsecutive: fullyConsecutive,
+      hasGap: normalized.length > 1 && !fullyConsecutive,
+      runs: runs
+    };
+  },
+
+  buildSlotActivityBlocks: function (slots, groupingMode) {
+    var analysis = this.analyzeSlotActivityGrouping(slots);
+    var mode = String(groupingMode || '').toUpperCase();
+    if (analysis.count <= 1) {
+      return analysis.slots.map(function (slot) {
+        return {
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          slots: [slot]
+        };
+      });
+    }
+    if (mode === 'UNIQUE' && analysis.fullyConsecutive) {
+      return [{
+        startTime: analysis.slots[0].startTime,
+        endTime: analysis.slots[analysis.slots.length - 1].endTime,
+        slots: analysis.slots.slice()
+      }];
+    }
+    if (mode === 'SEPARATE') {
+      return analysis.slots.map(function (slot) {
+        return {
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          slots: [slot]
+        };
+      });
+    }
+    return analysis.runs.map(function (run) {
+      return {
+        startTime: run.startTime,
+        endTime: run.endTime,
+        slots: run.slots.slice()
+      };
+    });
+  },
+
   parseFullName: function (value) {
     function normalizeNameToken_(token) {
       return String(token || '').trim().replace(/\s+/g, ' ');

@@ -262,6 +262,27 @@
         cursor: pointer;
       }
 
+      .mobile-booking-shell .booking-activity-mode {
+        margin-top: 0;
+        font-size: 22px;
+      }
+
+      .mobile-booking-shell .booking-activity-mode-title,
+      .mobile-booking-shell .booking-activity-mode-helper {
+        font-size: 21px;
+      }
+
+      .mobile-booking-shell .booking-activity-mode-options {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .mobile-booking-shell .booking-activity-mode-option {
+        min-height: 58px;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
       .mobile-selected-slot {
         border-color: rgba(16, 185, 129, 0.45);
         background: rgba(6, 78, 59, 0.22);
@@ -498,6 +519,8 @@
             backendSlots: [],
             backendBookings: [],
             selectedSlots: {},
+            activityGroupingMode: 'UNIQUE',
+            activityDescriptions: {},
             activityDescription: '',
             displayMode: 'TEACHER',
             repeatWeekly: false,
@@ -584,6 +607,29 @@
               return intervalsOverlap_(slot, draftSlot);
             });
           });
+        }
+
+        function selectedSlotGroupingAnalysis_() {
+          return ROOMS_UI.analyzeSlotActivityGrouping(selectedSlots_());
+        }
+
+        function getSelectedActivityGroupingMode_() {
+          var analysis = selectedSlotGroupingAnalysis_();
+          if (analysis.count <= 1) {
+            return 'UNIQUE';
+          }
+          if (!analysis.fullyConsecutive) {
+            return '';
+          }
+          return state.form.activityGroupingMode === 'SEPARATE' ? 'SEPARATE' : 'UNIQUE';
+        }
+
+        function selectedActivityBlocks_() {
+          return ROOMS_UI.buildSlotActivityBlocks(selectedSlots_(), getSelectedActivityGroupingMode_());
+        }
+
+        function activityBlockKey_(block) {
+          return slotKey_(block);
         }
 
         function setNotice_(message, kind) {
@@ -770,6 +816,8 @@
         function renderSummary_() {
           var mount = nodes['selected-summary'];
           var selected = selectedSlots_();
+          var analysis = selectedSlotGroupingAnalysis_();
+          var activityBlocks;
           if (!mount) {
             return;
           }
@@ -777,6 +825,9 @@
           if (!selected.length) {
             mount.appendChild(ROOMS_UI.el('div', 'mobile-empty', 'Nessuno slot selezionato.'));
             return;
+          }
+          if (analysis.count > 1) {
+            mount.appendChild(renderMobileActivityMode_(analysis));
           }
           selected.forEach(function (slot) {
             var row = ROOMS_UI.el('div', 'mobile-selected-slot');
@@ -789,6 +840,67 @@
             row.appendChild(remove);
             mount.appendChild(row);
           });
+          activityBlocks = selectedActivityBlocks_();
+          if (activityBlocks.length > 1) {
+            activityBlocks.forEach(function (block) {
+              var field = ROOMS_UI.el('div', 'mobile-field');
+              var input = document.createElement('textarea');
+              var key = activityBlockKey_(block);
+              field.appendChild(ROOMS_UI.el('label', '', 'Descrizione ' + block.startTime + ' - ' + block.endTime));
+              input.className = 'textarea';
+              input.placeholder = 'Descrizione attività';
+              input.value = state.form.activityDescriptions[key] || '';
+              input.addEventListener('input', function () {
+                state.form.activityDescriptions[key] = input.value.trim();
+              });
+              field.appendChild(input);
+              mount.appendChild(field);
+            });
+          }
+        }
+
+        function renderMobileActivityMode_(analysis) {
+          var wrap = ROOMS_UI.el('div', 'booking-activity-mode');
+          var options;
+          var uniqueLabel;
+          var uniqueRadio;
+          var separateLabel;
+          var separateRadio;
+          wrap.appendChild(ROOMS_UI.el('div', 'booking-activity-mode-title', 'Modalità attività'));
+          if (analysis.fullyConsecutive) {
+            options = ROOMS_UI.el('div', 'booking-activity-mode-options');
+            uniqueLabel = ROOMS_UI.el('label', 'booking-activity-mode-option');
+            uniqueRadio = document.createElement('input');
+            uniqueRadio.type = 'radio';
+            uniqueRadio.name = 'mobile-activity-mode';
+            uniqueRadio.value = 'UNIQUE';
+            uniqueRadio.checked = state.form.activityGroupingMode !== 'SEPARATE';
+            uniqueRadio.addEventListener('change', function () {
+              state.form.activityGroupingMode = 'UNIQUE';
+              renderSummary_();
+            });
+            uniqueLabel.appendChild(uniqueRadio);
+            uniqueLabel.appendChild(ROOMS_UI.el('span', '', 'Attività unica'));
+            separateLabel = ROOMS_UI.el('label', 'booking-activity-mode-option');
+            separateRadio = document.createElement('input');
+            separateRadio.type = 'radio';
+            separateRadio.name = 'mobile-activity-mode';
+            separateRadio.value = 'SEPARATE';
+            separateRadio.checked = state.form.activityGroupingMode === 'SEPARATE';
+            separateRadio.addEventListener('change', function () {
+              state.form.activityGroupingMode = 'SEPARATE';
+              renderSummary_();
+            });
+            separateLabel.appendChild(separateRadio);
+            separateLabel.appendChild(ROOMS_UI.el('span', '', 'Attività separate'));
+            options.appendChild(uniqueLabel);
+            options.appendChild(separateLabel);
+            wrap.appendChild(options);
+            return wrap;
+          }
+          state.form.activityGroupingMode = 'SEPARATE_BLOCKS';
+          wrap.appendChild(ROOMS_UI.el('div', 'booking-activity-mode-helper', 'Gli slot selezionati non sono consecutivi: verranno inseriti come attività separate.'));
+          return wrap;
         }
 
         function renderMyBookings_() {
@@ -838,6 +950,7 @@
           readForm_();
           if (state.form.editingBooking) {
             state.form.selectedSlots = {};
+            state.form.activityDescriptions = {};
           }
           state.form.selectedSlots[slotKey_(slot)] = {
             startTime: slot.startTime,
@@ -850,6 +963,7 @@
 
         function removeSelectedSlot_(slotKey) {
           delete state.form.selectedSlots[slotKey];
+          delete state.form.activityDescriptions[slotKey];
           clearNotice_();
           renderSlots_();
           renderSummary_();
@@ -866,8 +980,13 @@
           if (!selectedSlots_().length) {
             return 'Selezionare almeno uno slot libero.';
           }
-          if (!state.form.activityDescription) {
+          if (selectedActivityBlocks_().length <= 1 && !state.form.activityDescription) {
             return 'Inserire la descrizione attività.';
+          }
+          if (selectedActivityBlocks_().length > 1 && selectedActivityBlocks_().some(function (block) {
+            return !(state.form.activityDescriptions[activityBlockKey_(block)] || state.form.activityDescription);
+          })) {
+            return 'Inserire la descrizione per ogni attività separata.';
           }
           if (!state.form.displayMode) {
             return 'Selezionare cosa visualizzare sul monitor.';
@@ -884,6 +1003,10 @@
           return '';
         }
 
+        function getActivityDescriptionForBlock_(block) {
+          return state.form.activityDescriptions[activityBlockKey_(block)] || state.form.activityDescription;
+        }
+
         function buildPayloadForSlot_(slot) {
           var room = state.resources.filter(function (entry) {
             return entry.resourceId === state.form.resourceId;
@@ -896,7 +1019,7 @@
             startTime: slot.startTime,
             endTime: slot.endTime,
             title: room.displayName || state.form.activityDescription,
-            activityDescription: state.form.activityDescription,
+            activityDescription: getActivityDescriptionForBlock_(slot),
             displayMode: state.form.displayMode,
             repeatWeekly: Boolean(state.form.repeatWeekly),
             repeatUntil: state.form.repeatWeekly ? state.form.repeatUntil : ''
@@ -966,7 +1089,7 @@
 
         function saveBooking_() {
           var validationMessage = validateForm_();
-          var slots = selectedSlots_();
+          var slots = selectedActivityBlocks_();
           if (state.form.savingBooking) {
             return;
           }
@@ -1015,6 +1138,7 @@
               } else {
                 setNotice_(result.savedCount + ' prenotazioni salvate.', 'success');
                 state.form.activityDescription = '';
+                state.form.activityDescriptions = {};
                 state.form.displayMode = 'TEACHER';
               }
               Object.keys(state.form.selectedSlots).forEach(function (slotKey) {
@@ -1046,6 +1170,7 @@
           } else {
             setNotice_(result.savedCount + ' prenotazioni salvate.', 'success');
             state.form.activityDescription = '';
+            state.form.activityDescriptions = {};
             state.form.displayMode = 'TEACHER';
             state.form.repeatWeekly = false;
             state.form.repeatUntil = '';
@@ -1133,6 +1258,8 @@
           state.form.backendBookings = [];
           state.form.availabilityLoaded = false;
           state.form.selectedSlots = {};
+          state.form.activityGroupingMode = 'UNIQUE';
+          state.form.activityDescriptions = {};
           state.form.selectedSlots[slotKey_({
             startTime: booking.startTime,
             endTime: booking.endTime
@@ -1152,6 +1279,8 @@
         function resetFormAfterSave_() {
           state.form.editingBooking = null;
           state.form.selectedSlots = {};
+          state.form.activityGroupingMode = 'UNIQUE';
+          state.form.activityDescriptions = {};
           state.form.backendSlots = [];
           state.form.backendBookings = [];
           state.form.availabilityLoaded = false;

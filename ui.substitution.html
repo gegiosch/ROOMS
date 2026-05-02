@@ -806,6 +806,7 @@
                   <div style="margin-top:14px;">
                     <div class="substitution-absence-section-title">Slot del giorno ancora disponibili *</div>
                     <div id="admin-booking-slots" class="admin-booking-slots"></div>
+                    <div id="admin-booking-activity-mode"></div>
                   </div>
                   <div class="toolbar substitution-absence-toolbar">
                     <button id="admin-booking-add-draft" class="button secondary" type="button">Aggiungi alla bozza</button>
@@ -7072,6 +7073,7 @@
         var adminBookingLoadSlots = document.getElementById('admin-booking-load-slots');
         var adminBookingSplitHalfHour = document.getElementById('admin-booking-split-half-hour');
         var adminBookingSlots = document.getElementById('admin-booking-slots');
+        var adminBookingActivityMode = document.getElementById('admin-booking-activity-mode');
         var adminBookingAddDraft = document.getElementById('admin-booking-add-draft');
         var adminBookingResetDraft = document.getElementById('admin-booking-reset-draft');
         var adminBookingSave = document.getElementById('admin-booking-save');
@@ -7114,6 +7116,7 @@
           loadKey: '',
           loadRequestToken: '',
           selectedSlotKeys: {},
+          activityGroupingMode: 'UNIQUE',
           splitFreeSlotsHalfHour: false,
           status: 'idle',
           errorMessage: '',
@@ -7341,6 +7344,18 @@
           });
         }
 
+        function getAdminBookingSelectedSlots_() {
+          return getAdminBookingSelectedSlotKeys_().map(function (slotKey) {
+            var parts = String(slotKey || '').split('|');
+            return {
+              startTime: parts[0] || '',
+              endTime: parts[1] || ''
+            };
+          }).filter(function (slot) {
+            return Boolean(slot.startTime && slot.endTime);
+          });
+        }
+
         function clearAdminBookingSelectedSlots_() {
           adminBookingState.selectedSlotKeys = {};
         }
@@ -7358,6 +7373,7 @@
           } else {
             delete adminBookingState.selectedSlotKeys[key];
           }
+          renderAdminBookingActivityMode_();
         }
 
         function getAdminBookingSlotKey_(slot) {
@@ -7439,6 +7455,61 @@
           if (adminBookingDisplayActivity) {
             adminBookingDisplayActivity.checked = normalized === 'ACTIVITY';
           }
+        }
+
+        function renderAdminBookingActivityMode_() {
+          var selectedSlots = getAdminBookingSelectedSlots_();
+          var analysis = ROOMS_UI.analyzeSlotActivityGrouping(selectedSlots);
+          var wrap;
+          var options;
+          var helper;
+          var uniqueLabel;
+          var uniqueRadio;
+          var separateLabel;
+          var separateRadio;
+          if (!adminBookingActivityMode) {
+            return;
+          }
+          ROOMS_UI.clearNode(adminBookingActivityMode);
+          if (analysis.count <= 1) {
+            adminBookingState.activityGroupingMode = 'UNIQUE';
+            return;
+          }
+          wrap = ROOMS_UI.el('div', 'booking-activity-mode');
+          wrap.appendChild(ROOMS_UI.el('div', 'booking-activity-mode-title', 'Modalità attività'));
+          if (analysis.fullyConsecutive) {
+            options = ROOMS_UI.el('div', 'booking-activity-mode-options');
+            uniqueLabel = ROOMS_UI.el('label', 'booking-activity-mode-option');
+            uniqueRadio = document.createElement('input');
+            uniqueRadio.type = 'radio';
+            uniqueRadio.name = 'admin-booking-activity-mode';
+            uniqueRadio.value = 'UNIQUE';
+            uniqueRadio.checked = adminBookingState.activityGroupingMode !== 'SEPARATE';
+            uniqueRadio.addEventListener('change', function () {
+              adminBookingState.activityGroupingMode = 'UNIQUE';
+            });
+            uniqueLabel.appendChild(uniqueRadio);
+            uniqueLabel.appendChild(ROOMS_UI.el('span', '', 'Attività unica'));
+            separateLabel = ROOMS_UI.el('label', 'booking-activity-mode-option');
+            separateRadio = document.createElement('input');
+            separateRadio.type = 'radio';
+            separateRadio.name = 'admin-booking-activity-mode';
+            separateRadio.value = 'SEPARATE';
+            separateRadio.checked = adminBookingState.activityGroupingMode === 'SEPARATE';
+            separateRadio.addEventListener('change', function () {
+              adminBookingState.activityGroupingMode = 'SEPARATE';
+            });
+            separateLabel.appendChild(separateRadio);
+            separateLabel.appendChild(ROOMS_UI.el('span', '', 'Attività separate'));
+            options.appendChild(uniqueLabel);
+            options.appendChild(separateLabel);
+            wrap.appendChild(options);
+          } else {
+            adminBookingState.activityGroupingMode = 'SEPARATE_BLOCKS';
+            helper = ROOMS_UI.el('div', 'booking-activity-mode-helper', 'Gli slot selezionati non sono consecutivi: verranno inseriti come attività separate.');
+            wrap.appendChild(helper);
+          }
+          adminBookingActivityMode.appendChild(wrap);
         }
 
         function getAdminBookingDisplayModeLabel_(mode) {
@@ -7724,6 +7795,9 @@
             return;
           }
           adminBookingSlots.innerHTML = '';
+          if (adminBookingActivityMode) {
+            ROOMS_UI.clearNode(adminBookingActivityMode);
+          }
           if (adminBookingState.loading) {
             var loadingState = document.createElement('div');
             var loadingSpinner = document.createElement('div');
@@ -7784,6 +7858,7 @@
             label.appendChild(text);
             adminBookingSlots.appendChild(label);
           });
+          renderAdminBookingActivityMode_();
         }
 
         function clearAdminBookingForm_(preserveDateRoom) {
@@ -7810,6 +7885,7 @@
           syncAdminBookingRepeatUi_();
           clearAdminBookingSelectedSlots_();
           setAdminBookingDisplayMode_('TEACHER');
+          adminBookingState.activityGroupingMode = 'UNIQUE';
           adminBookingState.editingDraftId = '';
           renderAdminBookingSlots_();
         }
@@ -7860,7 +7936,12 @@
 
         function addAdminBookingDraft_() {
           var teacher = getAdminBookingTeacher_();
-          var selectedKeys = getAdminBookingSelectedSlotKeys_();
+          var selectedSlots = getAdminBookingSelectedSlots_();
+          var groupingAnalysis = ROOMS_UI.analyzeSlotActivityGrouping(selectedSlots);
+          var groupingMode = groupingAnalysis.fullyConsecutive
+            ? (adminBookingState.activityGroupingMode === 'SEPARATE' ? 'SEPARATE' : 'UNIQUE')
+            : '';
+          var activityBlocks = ROOMS_UI.buildSlotActivityBlocks(selectedSlots, groupingMode);
           var date = adminBookingDate ? adminBookingDate.value : '';
           var resourceId = adminBookingRoom ? adminBookingRoom.value : '';
           var activityDescription = adminBookingActivity ? String(adminBookingActivity.value || '').trim() : '';
@@ -7875,9 +7956,8 @@
             setAdminBookingNotice_(validationMessage, 'error');
             return;
           }
-          selectedKeys.forEach(function (slotKey) {
-            var parts = String(slotKey || '').split('|');
-            if (parts.length !== 2 || !parts[0] || !parts[1]) {
+          activityBlocks.forEach(function (block) {
+            if (!block || !block.startTime || !block.endTime) {
               return;
             }
             rowsToAdd.push({
@@ -7885,8 +7965,8 @@
               date: date,
               resourceId: resourceId,
               roomName: getAdminBookingRoomName_(resourceId),
-              startTime: parts[0],
-              endTime: parts[1],
+              startTime: block.startTime,
+              endTime: block.endTime,
               teacherEmail: teacher.teacherEmail,
               teacherName: teacher.teacherName,
               bookerName: parsedTeacher.firstName,
