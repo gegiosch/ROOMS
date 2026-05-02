@@ -514,6 +514,10 @@ body.board-monitor #board-root {
   font-size: calc(16px * var(--monitor-ui-scale));
 }
 
+.board-shell.monitor-mode .aula-magna-card .aula-magna-current-title {
+  font-size: calc(14px * var(--monitor-ui-scale));
+}
+
 .board-shell.monitor-mode .aula-magna-current-time,
 .board-shell.monitor-mode .aula-magna-event-line,
 .board-shell.monitor-mode .afternoon-summary-line,
@@ -566,6 +570,11 @@ body.board-monitor #board-root {
   overflow: hidden;
 }
 
+.aula-magna-card {
+  gap: 4px;
+  padding: 7px 8px;
+}
+
 .service-block-section {
   min-height: 0;
   display: grid;
@@ -575,7 +584,9 @@ body.board-monitor #board-root {
 }
 
 .aula-magna-main-section {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: max-content minmax(58px, 1fr);
+  gap: 4px;
+  padding-top: 0;
 }
 
 .afternoon-summary-section {
@@ -612,11 +623,44 @@ body.board-monitor #board-root {
   font-size: 12px;
 }
 
+.aula-magna-card .aula-magna-current {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 1px 6px;
+  align-items: baseline;
+  min-height: 0;
+}
+
+.aula-magna-card .aula-magna-current-title {
+  margin-top: 0;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aula-magna-card .aula-magna-current-time {
+  grid-column: 2;
+  margin-top: 0;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .aula-magna-upcoming {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 6px;
   min-height: 0;
+}
+
+.aula-magna-card .aula-magna-upcoming {
+  gap: 3px;
+}
+
+.aula-magna-card .aula-magna-event-viewport {
+  min-height: 40px;
 }
 
 .auto-scroll-viewport {
@@ -660,6 +704,11 @@ body.board-monitor #board-root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.aula-magna-card .aula-magna-event-line {
+  line-height: 1.1;
+  padding: 2px 5px;
 }
 
 .aula-magna-empty {
