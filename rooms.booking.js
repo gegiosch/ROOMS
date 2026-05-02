@@ -692,13 +692,10 @@ ROOMS_APP.Booking = {
           bookingId: bookingId,
           payload: replacementPayload
         }];
+        this.applyRoomChanges(targetResourceId, targetDate, changes);
       } else {
-        changes.deletes = [{
-          bookingId: bookingId,
-          notes: notes
-        }];
+        this.cancelAdminExistingManualBooking_(targetResourceId, targetDate, bookingId, notes, actor);
       }
-      this.applyRoomChanges(targetResourceId, targetDate, changes);
       return this.getAdminExistingRoomOccupancies(targetDate, targetResourceId);
     }
 
@@ -989,6 +986,52 @@ ROOMS_APP.Booking = {
         notes: notes
       });
       return true;
+    });
+  },
+
+  cancelAdminExistingManualBooking_: function (resourceId, dateString, bookingId, notes, actor) {
+    var self = this;
+    var targetResourceId = ROOMS_APP.normalizeString(resourceId);
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var targetBookingId = ROOMS_APP.normalizeString(bookingId);
+    if (!targetBookingId) {
+      throw new Error('Prenotazione non trovata.');
+    }
+    return this.withBookingLock_(function () {
+      var bookingRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS);
+      var bookingIndex = self.findBookingIndexById_(bookingRows, targetBookingId);
+      var booking;
+      var nowIso;
+      if (bookingIndex < 0) {
+        throw new Error('Prenotazione non trovata.');
+      }
+      booking = bookingRows[bookingIndex];
+      if (ROOMS_APP.normalizeString(booking.ResourceId) !== targetResourceId ||
+        ROOMS_APP.toIsoDate(booking.BookingDate) !== targetDate) {
+        throw new Error('Prenotazione non coerente con data e aula selezionate.');
+      }
+      if (!ROOMS_APP.Auth.canManageBooking(booking, actor)) {
+        throw new Error('Only the creator or an authorized manager can cancel this booking.');
+      }
+      if (booking.Status === 'CANCELLED') {
+        return booking;
+      }
+      nowIso = ROOMS_APP.toIsoDateTime(new Date());
+      booking.Status = 'CANCELLED';
+      booking.UpdatedAtISO = nowIso;
+      booking.CancelledAtISO = nowIso;
+      booking.Notes = ROOMS_APP.normalizeString(notes || booking.Notes);
+      bookingRows[bookingIndex] = booking;
+      ROOMS_APP.DB.replaceRows(
+        ROOMS_APP.SHEET_NAMES.BOOKINGS,
+        ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.BOOKINGS),
+        bookingRows
+      );
+      self.writeAudit_('ADMIN_EXISTING_BOOKING_CANCEL', targetBookingId, booking.SeriesId, targetResourceId, actor.email, 'OK', {
+        bookingDate: targetDate,
+        notes: notes
+      });
+      return booking;
     });
   },
 
