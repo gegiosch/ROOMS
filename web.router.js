@@ -275,6 +275,18 @@ function saveAdminRoomBookingRegistry(rows, requestContext) {
   });
 }
 
+function getAdminExistingRoomOccupancies(dateString, resourceId, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.getAdminExistingRoomOccupancies(dateString, resourceId);
+  });
+}
+
+function applyAdminExistingRoomOccupancyChange(payload, requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.Booking.applyAdminExistingRoomOccupancyChange(payload || {});
+  });
+}
+
 function getReplacementModalModel(dateString, draft, options, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.Replacements.getModalModel(dateString, draft, options);
@@ -614,6 +626,12 @@ function routeApiRequest_(payload) {
   }
   if (action === 'saveAdminRoomBookingRegistry') {
     return ROOMS_APP.Booking.saveAdminRoomBookingRegistry(payload.rows || payload.draftRows || []);
+  }
+  if (action === 'getAdminExistingRoomOccupancies') {
+    return ROOMS_APP.Booking.getAdminExistingRoomOccupancies(payload.date, normalizeRoomIdParam_(payload));
+  }
+  if (action === 'applyAdminExistingRoomOccupancyChange') {
+    return ROOMS_APP.Booking.applyAdminExistingRoomOccupancyChange(payload);
   }
   if (action === 'getReplacementModalModel') {
     return ROOMS_APP.Replacements.getModalModel(payload.date, payload.draft, payload.options || {});

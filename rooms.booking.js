@@ -639,6 +639,117 @@ ROOMS_APP.Booking = {
     return result;
   },
 
+  getAdminExistingRoomOccupancies: function (dateString, resourceId) {
+    var actor = this.requireAdminRoomBookingActor_();
+    var requestedDate = ROOMS_APP.normalizeString(dateString || '');
+    var targetDate = requestedDate ? ROOMS_APP.toIsoDate(requestedDate) : '';
+    var targetResourceId = ROOMS_APP.normalizeString(resourceId || '');
+    return {
+      date: targetDate,
+      dateState: {
+        requestedDate: requestedDate,
+        selectedDate: targetDate,
+        isValid: Boolean(targetDate),
+        autoShifted: false,
+        message: ''
+      },
+      resourceId: targetResourceId,
+      resources: this.listAdminBookableResources_(),
+      rows: targetResourceId && targetDate
+        ? this.buildAdminExistingOccupancyRows_(targetDate, targetResourceId, actor)
+        : [],
+      user: actor
+    };
+  },
+
+  applyAdminExistingRoomOccupancyChange: function (payload) {
+    payload = payload || {};
+    var actor = this.requireAdminRoomBookingActor_();
+    var action = ROOMS_APP.normalizeString(payload.action).toUpperCase();
+    var sourceType = ROOMS_APP.normalizeString(payload.sourceType).toUpperCase();
+    var targetResourceId = ROOMS_APP.normalizeString(payload.resourceId);
+    var targetDate = ROOMS_APP.toIsoDate(payload.bookingDate || payload.date);
+    var bookingId = ROOMS_APP.normalizeString(payload.bookingId);
+    var timetableBookingId = ROOMS_APP.normalizeString(payload.timetableBookingId);
+    var overrideId = ROOMS_APP.normalizeString(payload.overrideId);
+    var notes = ROOMS_APP.normalizeString(payload.notes);
+    var replacementPayload = this.normalizeAdminExistingOccupancyPayload_(payload);
+    var changes = {};
+
+    if (!targetResourceId || !targetDate) {
+      throw new Error('Data e aula sono obbligatorie.');
+    }
+    if (action !== 'UPDATE' && action !== 'CANCEL') {
+      throw new Error('Azione non valida.');
+    }
+
+    if (sourceType === 'PRENOTAZIONE') {
+      if (!bookingId) {
+        throw new Error('Prenotazione non trovata.');
+      }
+      if (action === 'UPDATE') {
+        changes.updates = [{
+          bookingId: bookingId,
+          payload: replacementPayload
+        }];
+      } else {
+        changes.deletes = [{
+          bookingId: bookingId,
+          notes: notes
+        }];
+      }
+      this.applyRoomChanges(targetResourceId, targetDate, changes);
+      return this.getAdminExistingRoomOccupancies(targetDate, targetResourceId);
+    }
+
+    if (sourceType === 'ORARIO') {
+      if (!actor.canManageReplacement) {
+        throw new Error('Le occupazioni da orario sono gestibili solo da utenti autorizzati.');
+      }
+      if (!timetableBookingId) {
+        throw new Error('Occupazione da orario non trovata.');
+      }
+      if (action === 'UPDATE') {
+        changes.timetableUpdates = [{
+          bookingId: timetableBookingId,
+          payload: replacementPayload
+        }];
+      } else {
+        changes.timetableDeletes = [{
+          bookingId: timetableBookingId,
+          notes: notes
+        }];
+      }
+      this.applyRoomChanges(targetResourceId, targetDate, changes);
+      return this.getAdminExistingRoomOccupancies(targetDate, targetResourceId);
+    }
+
+    if (sourceType === 'OVERRIDE') {
+      if (!actor.canManageReplacement) {
+        throw new Error('Le eccezioni da orario sono gestibili solo da utenti autorizzati.');
+      }
+      if (action === 'UPDATE') {
+        if (bookingId) {
+          this.applyRoomChanges(targetResourceId, targetDate, {
+            updates: [{
+              bookingId: bookingId,
+              payload: replacementPayload
+            }]
+          });
+        } else {
+          this.applyRoomChanges(targetResourceId, targetDate, {
+            creates: [replacementPayload]
+          });
+        }
+      } else {
+        this.cancelAdminExistingOverride_(targetResourceId, targetDate, overrideId, bookingId, notes, actor);
+      }
+      return this.getAdminExistingRoomOccupancies(targetDate, targetResourceId);
+    }
+
+    throw new Error('Tipo riga non valido.');
+  },
+
   requireAdminRoomBookingActor_: function () {
     var actor = ROOMS_APP.Auth.getUserContext();
     ROOMS_APP.Auth.assertAllowedDomain(actor.email);
@@ -646,6 +757,239 @@ ROOMS_APP.Booking = {
       throw new Error('Admin access required.');
     }
     return actor;
+  },
+
+  buildAdminExistingOccupancyRows_: function (dateString, resourceId, actor) {
+    var self = this;
+    var userBookings = this.listBookingsForDay(resourceId, dateString);
+    var timetableRows = ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, dateString);
+    var activeOverrides = this.listActiveTimetableOverrideRows_(resourceId, dateString);
+    var overrideByInterval = {};
+    var matchedOverrideIds = {};
+    var rows = [];
+
+    activeOverrides.forEach(function (overrideRow) {
+      var key = self.buildAdminExistingIntervalKey_(overrideRow.StartTime, overrideRow.EndTime);
+      if (!key) {
+        return;
+      }
+      overrideByInterval[key] = overrideByInterval[key] || [];
+      overrideByInterval[key].push(overrideRow);
+    });
+
+    userBookings.forEach(function (booking) {
+      var intervalKey = self.buildAdminExistingIntervalKey_(booking.StartTime, booking.EndTime);
+      var overrideRow = intervalKey && overrideByInterval[intervalKey] && overrideByInterval[intervalKey].length
+        ? overrideByInterval[intervalKey][0]
+        : null;
+      if (overrideRow) {
+        matchedOverrideIds[ROOMS_APP.normalizeString(overrideRow.OverrideId)] = true;
+      }
+      rows.push(self.buildAdminExistingBookingRow_(booking, overrideRow, actor));
+    });
+
+    timetableRows.forEach(function (occurrence) {
+      rows.push(self.buildAdminExistingTimetableRow_(occurrence, actor));
+    });
+
+    activeOverrides.forEach(function (overrideRow) {
+      if (matchedOverrideIds[ROOMS_APP.normalizeString(overrideRow.OverrideId)]) {
+        return;
+      }
+      rows.push(self.buildAdminExistingOverrideRow_(overrideRow, actor));
+    });
+
+    return ROOMS_APP.sortBy(rows, ['bookingDate', 'startTime', 'endTime', 'sourceType', 'rowId']);
+  },
+
+  buildAdminExistingBookingRow_: function (booking, overrideRow, actor) {
+    var sourceType = overrideRow ? 'OVERRIDE' : 'PRENOTAZIONE';
+    return {
+      rowId: (sourceType === 'OVERRIDE' ? 'OVR_BOOKING_' : 'BOOKING_') + ROOMS_APP.normalizeString(booking.BookingId),
+      sourceType: sourceType,
+      sourceLabel: sourceType,
+      bookingId: ROOMS_APP.normalizeString(booking.BookingId),
+      overrideId: overrideRow ? ROOMS_APP.normalizeString(overrideRow.OverrideId) : '',
+      timetableBookingId: '',
+      resourceId: ROOMS_APP.normalizeString(booking.ResourceId),
+      bookingDate: ROOMS_APP.toIsoDate(booking.BookingDate),
+      startTime: ROOMS_APP.toTimeString(booking.StartTime),
+      endTime: ROOMS_APP.toTimeString(booking.EndTime),
+      title: ROOMS_APP.normalizeString(booking.Title),
+      activityDescription: ROOMS_APP.normalizeString(booking.ActivityDescription || booking.Title),
+      displayMode: this.normalizeDisplayMode_(booking.DisplayMode),
+      bookerName: ROOMS_APP.normalizeString(booking.BookerName),
+      bookerSurname: ROOMS_APP.normalizeString(booking.BookerSurname),
+      occupantLabel: this.getBookingDisplayLabel_(booking),
+      notes: ROOMS_APP.normalizeString(booking.Notes),
+      isSuppression: false,
+      canModify: ROOMS_APP.Auth.canManageBooking(booking, actor),
+      canCancel: sourceType === 'OVERRIDE' ? Boolean(actor && actor.canManageReplacement) : ROOMS_APP.Auth.canManageBooking(booking, actor),
+      helpText: sourceType === 'OVERRIDE'
+        ? 'Eccezione applicata solo a questa data e fascia oraria.'
+        : 'Prenotazione manuale modificabile normalmente.'
+    };
+  },
+
+  buildAdminExistingTimetableRow_: function (occurrence, actor) {
+    return {
+      rowId: 'TIMETABLE_' + ROOMS_APP.normalizeString(occurrence.BookingId),
+      sourceType: 'ORARIO',
+      sourceLabel: 'ORARIO',
+      bookingId: '',
+      overrideId: '',
+      timetableBookingId: ROOMS_APP.normalizeString(occurrence.BookingId),
+      resourceId: ROOMS_APP.normalizeString(occurrence.ResourceId),
+      bookingDate: ROOMS_APP.toIsoDate(occurrence.BookingDate),
+      startTime: ROOMS_APP.toTimeString(occurrence.StartTime),
+      endTime: ROOMS_APP.toTimeString(occurrence.EndTime),
+      title: ROOMS_APP.normalizeString(occurrence.Title),
+      activityDescription: ROOMS_APP.normalizeString(occurrence.ActivityDescription || occurrence.DisplayLabel || occurrence.Title),
+      displayMode: this.normalizeDisplayMode_(occurrence.DisplayMode),
+      bookerName: ROOMS_APP.normalizeString(occurrence.BookerName || occurrence.TeacherName),
+      bookerSurname: ROOMS_APP.normalizeString(occurrence.BookerSurname || occurrence.ClassCode),
+      occupantLabel: ROOMS_APP.Timetable.getDisplayLabel(occurrence),
+      notes: ROOMS_APP.normalizeString(occurrence.Notes),
+      isSuppression: false,
+      canModify: Boolean(actor && actor.canManageReplacement),
+      canCancel: Boolean(actor && actor.canManageReplacement),
+      helpText: 'Occupazione da orario: le modifiche creano una eccezione solo per questa data.'
+    };
+  },
+
+  buildAdminExistingOverrideRow_: function (overrideRow, actor) {
+    var startTime = ROOMS_APP.toTimeString(overrideRow.StartTime);
+    var endTime = ROOMS_APP.toTimeString(overrideRow.EndTime);
+    return {
+      rowId: 'OVERRIDE_' + ROOMS_APP.normalizeString(overrideRow.OverrideId),
+      sourceType: 'OVERRIDE',
+      sourceLabel: 'OVERRIDE',
+      bookingId: '',
+      overrideId: ROOMS_APP.normalizeString(overrideRow.OverrideId),
+      timetableBookingId: '',
+      resourceId: ROOMS_APP.normalizeString(overrideRow.ResourceId),
+      bookingDate: ROOMS_APP.toIsoDate(overrideRow.BookingDate),
+      startTime: startTime,
+      endTime: endTime,
+      title: 'Eccezione orario',
+      activityDescription: 'Occorrenza orario rimossa per questa data',
+      displayMode: 'ACTIVITY',
+      bookerName: '',
+      bookerSurname: '',
+      occupantLabel: 'Orario sospeso',
+      notes: ROOMS_APP.normalizeString(overrideRow.Notes),
+      isSuppression: true,
+      canModify: Boolean(actor && actor.canManageReplacement),
+      canCancel: Boolean(actor && actor.canManageReplacement),
+      helpText: 'Eccezione attiva: cancellandola viene ripristinata l\'occupazione da orario sottostante.'
+    };
+  },
+
+  listActiveTimetableOverrideRows_: function (resourceId, dateString) {
+    var targetResourceId = ROOMS_APP.normalizeString(resourceId);
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    return ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES).filter(function (row) {
+      return ROOMS_APP.normalizeString(row.ResourceId) === targetResourceId &&
+        ROOMS_APP.toIsoDate(row.BookingDate) === targetDate &&
+        ROOMS_APP.normalizeString(row.RuleKey).toUpperCase() === 'TIMETABLE_DISABLED' &&
+        ROOMS_APP.asBoolean(row.IsEnabled);
+    });
+  },
+
+  buildAdminExistingIntervalKey_: function (startTime, endTime) {
+    var start = ROOMS_APP.toTimeString(startTime);
+    var end = ROOMS_APP.toTimeString(endTime);
+    return start && end ? (start + '|' + end) : '';
+  },
+
+  normalizeAdminExistingOccupancyPayload_: function (payload) {
+    var startTime = ROOMS_APP.toTimeString(payload.startTime || payload.StartTime);
+    var endTime = ROOMS_APP.toTimeString(payload.endTime || payload.EndTime);
+    var bookerName = ROOMS_APP.normalizeString(payload.bookerName || payload.BookerName);
+    var bookerSurname = ROOMS_APP.normalizeString(payload.bookerSurname || payload.BookerSurname);
+    return {
+      resourceId: ROOMS_APP.normalizeString(payload.resourceId || payload.ResourceId),
+      bookingDate: ROOMS_APP.toIsoDate(payload.bookingDate || payload.date || payload.BookingDate),
+      startTime: startTime,
+      endTime: endTime,
+      title: ROOMS_APP.normalizeString(payload.title || payload.Title),
+      activityDescription: ROOMS_APP.normalizeString(payload.activityDescription || payload.ActivityDescription),
+      displayMode: this.normalizeDisplayMode_(payload.displayMode || payload.DisplayMode),
+      notes: ROOMS_APP.normalizeString(payload.notes || payload.Notes),
+      bookerName: bookerName,
+      bookerSurname: bookerSurname
+    };
+  },
+
+  cancelAdminExistingOverride_: function (resourceId, dateString, overrideId, bookingId, notes, actor) {
+    var self = this;
+    var targetResourceId = ROOMS_APP.normalizeString(resourceId);
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var targetOverrideId = ROOMS_APP.normalizeString(overrideId);
+    var targetBookingId = ROOMS_APP.normalizeString(bookingId);
+    if (!targetOverrideId) {
+      throw new Error('Eccezione non trovata.');
+    }
+    return this.withBookingLock_(function () {
+      var overrideRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES);
+      var bookingRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS);
+      var overrideIndex = -1;
+      var bookingIndex = -1;
+      var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+      var index;
+
+      for (index = 0; index < overrideRows.length; index += 1) {
+        if (ROOMS_APP.normalizeString(overrideRows[index] && overrideRows[index].OverrideId) === targetOverrideId) {
+          overrideIndex = index;
+          break;
+        }
+      }
+      if (overrideIndex < 0) {
+        throw new Error('Eccezione non trovata.');
+      }
+      if (ROOMS_APP.normalizeString(overrideRows[overrideIndex].ResourceId) !== targetResourceId ||
+        ROOMS_APP.toIsoDate(overrideRows[overrideIndex].BookingDate) !== targetDate) {
+        throw new Error('Eccezione non coerente con data e aula selezionate.');
+      }
+
+      overrideRows[overrideIndex].IsEnabled = 'FALSE';
+      if (Object.prototype.hasOwnProperty.call(overrideRows[overrideIndex], 'Notes')) {
+        overrideRows[overrideIndex].Notes = notes || overrideRows[overrideIndex].Notes || '';
+      }
+
+      if (targetBookingId) {
+        bookingIndex = self.findBookingIndexById_(bookingRows, targetBookingId);
+        if (bookingIndex < 0) {
+          throw new Error('Prenotazione collegata all\'eccezione non trovata.');
+        }
+        if (!ROOMS_APP.Auth.canManageBooking(bookingRows[bookingIndex], actor)) {
+          throw new Error('Only the creator or an authorized manager can cancel this booking.');
+        }
+        bookingRows[bookingIndex].Status = 'CANCELLED';
+        bookingRows[bookingIndex].UpdatedAtISO = nowIso;
+        bookingRows[bookingIndex].CancelledAtISO = nowIso;
+        if (notes) {
+          bookingRows[bookingIndex].Notes = notes;
+        }
+        ROOMS_APP.DB.replaceRows(
+          ROOMS_APP.SHEET_NAMES.BOOKINGS,
+          ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.BOOKINGS),
+          bookingRows
+        );
+      }
+
+      ROOMS_APP.DB.replaceRows(
+        ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES,
+        ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES),
+        overrideRows
+      );
+      self.writeAudit_('ADMIN_ROOM_OVERRIDE_CANCEL', targetBookingId, '', targetResourceId, actor.email, 'OK', {
+        overrideId: targetOverrideId,
+        bookingDate: targetDate,
+        notes: notes
+      });
+      return true;
+    });
   },
 
   validateAdminBookingDraftRow_: function (row, actor, workingRows, timetableCache, validationContext) {
