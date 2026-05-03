@@ -7755,12 +7755,6 @@
           if (!row || adminExistingState.saving) {
             return;
           }
-          if (row.sourceType === 'PRENOTAZIONE') {
-            confirmAction_('Confermare eliminazione prenotazione?', function () {
-              applyAdminExistingCancel_(row);
-            }, 'Elimina prenotazione');
-            return;
-          }
           title = row.sourceType === 'ORARIO'
             ? 'Rimuovi solo per questa data'
             : (row.sourceType === 'OVERRIDE' ? 'Rimuovi eccezione' : 'Cancella prenotazione');
@@ -7768,7 +7762,7 @@
             ? 'Verrà creata una eccezione per rimuovere questa occupazione solo nella data e fascia selezionate. L\'orario generale non verrà modificato.'
             : (row.sourceType === 'OVERRIDE'
               ? 'L\'eccezione verrà rimossa. Se esiste una occupazione da orario sottostante, tornerà visibile per questa data.'
-              : 'La prenotazione manuale selezionata verrà cancellata.');
+              : 'Confermare eliminazione prenotazione?');
           openAppDialog_({
             title: title,
             message: message,
