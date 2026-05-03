@@ -765,8 +765,8 @@ ROOMS_APP.Booking = {
 
   buildAdminExistingOccupancyRows_: function (dateString, resourceId, actor) {
     var self = this;
-    var userBookings = this.listBookingsForDay(resourceId, dateString);
-    var timetableRows = ROOMS_APP.Timetable.listOccupanciesForDate(resourceId, dateString);
+    var roomModel = this.getRoomViewModel(resourceId, dateString);
+    var effectiveBookings = roomModel && Array.isArray(roomModel.bookings) ? roomModel.bookings : [];
     var activeOverrides = this.listActiveTimetableOverrideRows_(resourceId, dateString);
     var overrideByInterval = {};
     var matchedOverrideIds = {};
@@ -781,19 +781,21 @@ ROOMS_APP.Booking = {
       overrideByInterval[key].push(overrideRow);
     });
 
-    userBookings.forEach(function (booking) {
+    effectiveBookings.forEach(function (booking) {
+      var isTimetableRow = ROOMS_APP.normalizeString(booking && booking.SourceKind).toUpperCase() === 'TIMETABLE' ||
+        ROOMS_APP.normalizeString(booking && booking.BookingId).indexOf('TT_') === 0;
       var intervalKey = self.buildAdminExistingIntervalKey_(booking.StartTime, booking.EndTime);
       var overrideRow = intervalKey && overrideByInterval[intervalKey] && overrideByInterval[intervalKey].length
         ? overrideByInterval[intervalKey][0]
         : null;
+      if (isTimetableRow) {
+        rows.push(self.buildAdminExistingTimetableRow_(booking, actor));
+        return;
+      }
       if (overrideRow) {
         matchedOverrideIds[ROOMS_APP.normalizeString(overrideRow.OverrideId)] = true;
       }
       rows.push(self.buildAdminExistingBookingRow_(booking, overrideRow, actor));
-    });
-
-    timetableRows.forEach(function (occurrence) {
-      rows.push(self.buildAdminExistingTimetableRow_(occurrence, actor));
     });
 
     activeOverrides.forEach(function (overrideRow) {

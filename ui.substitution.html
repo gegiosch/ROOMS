@@ -7766,15 +7766,7 @@
           adminExistingState.saving = true;
           setAdminExistingLoading_(true);
           setAdminExistingNotice_('Applicazione modifica in corso...', '');
-          (row.sourceType === 'PRENOTAZIONE'
-            ? ROOMS_UI.call('applyRoomPanelChanges', row.resourceId, row.bookingDate, {
-              creates: [],
-              updates: [],
-              deletes: [{ bookingId: row.bookingId }],
-              timetableDeletes: [],
-              timetableUpdates: []
-            })
-            : ROOMS_UI.call('applyAdminExistingRoomOccupancyChange', payload))
+          (row.sourceType === 'PRENOTAZIONE' ? applyAdminExistingRoomPanelDelete_(row) : ROOMS_UI.call('applyAdminExistingRoomOccupancyChange', payload))
             .then(function () {
               closeAdminExistingEdit_();
               return loadAdminExistingOccupancies_().then(function () {
@@ -7794,6 +7786,24 @@
               setAdminExistingLoading_(false);
               renderAdminExistingOccupancies_();
             });
+        }
+
+        function applyAdminExistingRoomPanelDelete_(row) {
+          var deleteDraft = {};
+          var changes = {
+            creates: [],
+            updates: [],
+            deletes: [],
+            timetableDeletes: [],
+            timetableUpdates: []
+          };
+          if (row && row.bookingId) {
+            deleteDraft[row.bookingId] = true;
+          }
+          changes.deletes = Object.keys(deleteDraft).map(function (bookingId) {
+            return { bookingId: bookingId };
+          });
+          return ROOMS_UI.call('applyRoomPanelChanges', row.resourceId, row.bookingDate, changes);
         }
 
         function buildAdminBookingDraftId_() {
