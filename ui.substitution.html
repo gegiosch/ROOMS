@@ -7872,9 +7872,7 @@
           changes.deletes = Object.keys(deleteDraft).map(function (bookingId) {
             return { bookingId: bookingId };
           });
-          return applyRoomPanelChangesLifecycle_(row.resourceId, row.bookingDate, changes, {
-            refreshBoard: true
-          });
+          return ROOMS_UI.call('applyRoomPanelChanges', row.resourceId, row.bookingDate, changes);
         }
 
         function buildAdminBookingDraftId_() {
