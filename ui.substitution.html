@@ -6429,21 +6429,48 @@
           panelSaveAllButtons.forEach(function (button) {
             button.disabled = true;
           });
-          return ROOMS_UI.call('applyRoomPanelChanges', panelState.resourceId, targetDate, payload)
+          return applyRoomPanelChangesLifecycle_(panelState.resourceId, targetDate, payload, {
+            updatePanel: true,
+            refreshBoard: true,
+            noticeTarget: panelNotice,
+            successMessage: 'Modifiche salvate.',
+            errorMessage: 'Errore salvataggio modifiche'
+          });
+        }
+
+        function applyRoomPanelChangesLifecycle_(resourceId, targetDate, payload, options) {
+          var settings = options || {};
+          return ROOMS_UI.call('applyRoomPanelChanges', resourceId, targetDate, payload)
             .then(function (model) {
-              panelState.model = model && typeof model === 'object' ? model : {};
-              clearDraftState_();
-              renderRoomPanel(panelState.model);
-              ROOMS_UI.setNotice(panelNotice, 'Modifiche salvate.', 'success');
+              if (settings.updatePanel) {
+                panelState.model = model && typeof model === 'object' ? model : {};
+                clearDraftState_();
+                renderRoomPanel(panelState.model);
+              }
+              if (settings.noticeTarget) {
+                ROOMS_UI.setNotice(settings.noticeTarget, settings.successMessage || 'Modifiche salvate.', 'success');
+              }
+              if (settings.refreshBoard) {
+                refresh({
+                  skipPanelRefresh: true,
+                  preservePanelDate: targetDate
+                });
+              }
+              return model;
+            }, function (error) {
+              if (settings.updatePanel) {
+                updateDraftUiState_();
+              }
+              if (settings.noticeTarget) {
+                ROOMS_UI.setNotice(settings.noticeTarget, error && error.message ? error.message : (settings.errorMessage || 'Errore salvataggio modifiche'), 'error');
+              }
+              throw error;
+            })
+            .then(function (model) {
               hideRoomPanelLoading();
-              refresh({
-                skipPanelRefresh: true,
-                preservePanelDate: targetDate
-              });
+              return model;
             }, function (error) {
               hideRoomPanelLoading();
-              updateDraftUiState_();
-              ROOMS_UI.setNotice(panelNotice, error && error.message ? error.message : 'Errore salvataggio modifiche', 'error');
               throw error;
             });
         }
@@ -7728,6 +7755,12 @@
           if (!row || adminExistingState.saving) {
             return;
           }
+          if (row.sourceType === 'PRENOTAZIONE') {
+            confirmAction_('Confermare eliminazione prenotazione?', function () {
+              applyAdminExistingCancel_(row);
+            }, 'Elimina prenotazione');
+            return;
+          }
           title = row.sourceType === 'ORARIO'
             ? 'Rimuovi solo per questa data'
             : (row.sourceType === 'OVERRIDE' ? 'Rimuovi eccezione' : 'Cancella prenotazione');
@@ -7803,7 +7836,9 @@
           changes.deletes = Object.keys(deleteDraft).map(function (bookingId) {
             return { bookingId: bookingId };
           });
-          return ROOMS_UI.call('applyRoomPanelChanges', row.resourceId, row.bookingDate, changes);
+          return applyRoomPanelChangesLifecycle_(row.resourceId, row.bookingDate, changes, {
+            refreshBoard: true
+          });
         }
 
         function buildAdminBookingDraftId_() {
