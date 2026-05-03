@@ -7236,6 +7236,11 @@
         var adminExistingEditWarning = document.getElementById('admin-existing-edit-warning');
         var adminExistingSave = document.getElementById('admin-existing-save');
         var adminExistingCancelEdit = document.getElementById('admin-existing-cancel-edit');
+        var adminAppDialogModal = document.getElementById('app-dialog-modal');
+        var adminAppDialogTitle = document.getElementById('app-dialog-title');
+        var adminAppDialogMessage = document.getElementById('app-dialog-message');
+        var adminAppDialogConfirm = document.getElementById('app-dialog-confirm');
+        var adminAppDialogCancel = document.getElementById('app-dialog-cancel');
         var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
         var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var activeTabId = 'landing';
@@ -7284,6 +7289,10 @@
           editingRowId: '',
           noticeMessage: '',
           noticeKind: ''
+        };
+        var adminAppDialogState = {
+          onConfirm: null,
+          onCancel: null
         };
 
         function getPanelId_(tabId) {
@@ -7494,6 +7503,39 @@
           if (adminBookingFormBody) {
             adminBookingFormBody.classList.toggle('is-hidden', adminBookingState.status !== 'loaded');
           }
+        }
+
+        function closeAdminAppDialog_() {
+          if (adminAppDialogModal) {
+            adminAppDialogModal.style.display = 'none';
+          }
+          adminAppDialogState.onConfirm = null;
+          adminAppDialogState.onCancel = null;
+        }
+
+        function openAdminAppDialog_(options) {
+          var settings = options || {};
+          if (!adminAppDialogModal) {
+            return;
+          }
+          if (adminAppDialogTitle) {
+            adminAppDialogTitle.textContent = settings.title || 'Conferma';
+          }
+          if (adminAppDialogMessage) {
+            adminAppDialogMessage.textContent = settings.message || '';
+          }
+          if (adminAppDialogConfirm) {
+            adminAppDialogConfirm.textContent = settings.confirmLabel || 'Conferma';
+            adminAppDialogConfirm.className = settings.confirmClass || 'button';
+            adminAppDialogConfirm.style.display = settings.hideConfirm ? 'none' : 'inline-flex';
+          }
+          if (adminAppDialogCancel) {
+            adminAppDialogCancel.textContent = settings.cancelLabel || 'Chiudi';
+            adminAppDialogCancel.style.display = settings.hideCancel ? 'none' : 'inline-flex';
+          }
+          adminAppDialogState.onConfirm = typeof settings.onConfirm === 'function' ? settings.onConfirm : null;
+          adminAppDialogState.onCancel = typeof settings.onCancel === 'function' ? settings.onCancel : null;
+          adminAppDialogModal.style.display = 'flex';
         }
 
         function setAdminExistingNotice_(message, kind) {
@@ -7763,7 +7805,7 @@
             : (row.sourceType === 'OVERRIDE'
               ? 'L\'eccezione verrà rimossa. Se esiste una occupazione da orario sottostante, tornerà visibile per questa data.'
               : 'Confermare eliminazione prenotazione?');
-          openAppDialog_({
+          openAdminAppDialog_({
             title: title,
             message: message,
             confirmLabel: row.sourceType === 'PRENOTAZIONE' ? 'Cancella' : 'Conferma',
@@ -8707,7 +8749,7 @@
                 if (adminBookingSave) {
                   adminBookingSave.disabled = false;
                 }
-                openAppDialog_({
+                openAdminAppDialog_({
                   title: 'Conflitti nelle prenotazioni ricorrenti',
                   message: 'Alcune occorrenze della prenotazione non possono essere inserite perché sono in conflitto con prenotazioni già esistenti. Vuoi continuare salvando solo le occorrenze disponibili, oppure annullare il salvataggio?',
                   confirmLabel: 'Salva quelle disponibili',
@@ -8734,7 +8776,7 @@
 
         function confirmDiscardAdminBookingDraft_(onConfirm, options) {
           var settings = options || {};
-          openAppDialog_({
+          openAdminAppDialog_({
             title: settings.title || 'Prenotazioni non salvate',
             message: settings.message || 'Ci sono prenotazioni non salvate. Si vuole uscire senza salvare?',
             confirmLabel: settings.confirmLabel || 'Sì',
@@ -9487,6 +9529,31 @@
         }
         if (adminExistingCancelEdit) {
           adminExistingCancelEdit.addEventListener('click', closeAdminExistingEdit_);
+        }
+        if (adminAppDialogConfirm) {
+          adminAppDialogConfirm.addEventListener('click', function () {
+            var action = adminAppDialogState.onConfirm;
+            closeAdminAppDialog_();
+            if (typeof action === 'function') {
+              action();
+            }
+          });
+        }
+        if (adminAppDialogCancel) {
+          adminAppDialogCancel.addEventListener('click', function () {
+            var action = adminAppDialogState.onCancel;
+            closeAdminAppDialog_();
+            if (typeof action === 'function') {
+              action();
+            }
+          });
+        }
+        if (adminAppDialogModal) {
+          adminAppDialogModal.addEventListener('click', function (event) {
+            if (event.target === adminAppDialogModal) {
+              closeAdminAppDialog_();
+            }
+          });
         }
 
         window.addEventListener('beforeunload', function (event) {
