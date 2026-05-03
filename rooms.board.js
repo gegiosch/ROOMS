@@ -386,16 +386,17 @@ ROOMS_APP.Board = {
 
   buildAfternoonBookingSummary_: function (bookings, resourceNames, visibleOccupancyKeys, currentTime) {
     return ROOMS_APP.sortBy((bookings || []).filter(function (booking) {
+      var startTime = ROOMS_APP.toTimeString(booking && booking.StartTime);
       if (!booking || booking.Status === 'CANCELLED') {
         return false;
       }
-      if (ROOMS_APP.toTimeString(booking.StartTime) < '14:00') {
+      if (startTime < '14:00') {
         return false;
       }
-      if (currentTime && ROOMS_APP.toTimeString(booking.EndTime) <= currentTime) {
+      if (currentTime && startTime <= currentTime) {
         return false;
       }
-      return !visibleOccupancyKeys[ROOMS_APP.Board.getOccupancySummaryKey_(booking)];
+      return true;
     }).map(function (booking) {
       return {
         bookingId: ROOMS_APP.normalizeString(booking.BookingId),

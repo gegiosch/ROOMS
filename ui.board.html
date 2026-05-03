@@ -599,7 +599,7 @@
         function createTile(tile) {
           var tileNode = document.createElement('button');
           var isOccupiedNextLine = tile.state === 'OCCUPIED' && tile.nextLabel !== 'LIBERA';
-          var nextLineText = tile.nextLabel === 'LIBERA' ? 'NEXT: LIBERA' : (isOccupiedNextLine ? tile.nextLabel : ('NEXT ' + tile.nextLabel));
+          var nextLineText = tile.nextLabel === 'LIBERA' ? 'NEXT: LIBERA' : tile.nextLabel;
           var titleLine;
           var nextLine;
           tileNode.type = 'button';

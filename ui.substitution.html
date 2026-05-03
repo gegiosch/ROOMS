@@ -1359,7 +1359,7 @@
 
           var lines = ROOMS_UI.el('div', 'room-lines');
           lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
-          lines.appendChild(ROOMS_UI.el('div', '', tile.nextLabel === 'LIBERA' ? 'NEXT: LIBERA' : ('NEXT ' + tile.nextLabel)));
+          lines.appendChild(ROOMS_UI.el('div', '', tile.nextLabel === 'LIBERA' ? 'NEXT: LIBERA' : tile.nextLabel));
           tileNode.appendChild(lines);
           return tileNode;
         }
