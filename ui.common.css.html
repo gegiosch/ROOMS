@@ -723,7 +723,7 @@ body.board-monitor #board-root {
 
 .afternoon-summary-line {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) minmax(84px, 0.45fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -741,6 +741,12 @@ body.board-monitor #board-root {
   color: #7dd3fc;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.afternoon-summary-text {
+  min-width: 0;
+  color: #e5e7eb;
+  font-weight: 700;
 }
 
 .afternoon-summary-main {
@@ -1766,6 +1772,38 @@ body.substitution-standalone #replacement-close-button-long-bottom {
   color: #94a3b8;
 }
 
+.monitor-marquee-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-marquee-text {
+  display: inline-block;
+  max-width: none;
+  will-change: transform;
+}
+
+.monitor-marquee-line.is-overflow-scrolling {
+  text-overflow: clip;
+}
+
+.monitor-marquee-line.is-overflow-scrolling .monitor-marquee-text {
+  animation: monitor-marquee-scroll var(--monitor-marquee-scroll-duration, 16s) linear infinite;
+}
+
+@keyframes monitor-marquee-scroll {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  86%,
+  100% {
+    transform: translateX(calc(-1 * var(--monitor-marquee-scroll-distance, 0px)));
+  }
+}
+
 .room-next-line-text {
   display: inline-block;
   max-width: none;
@@ -1777,7 +1815,7 @@ body.substitution-standalone #replacement-close-button-long-bottom {
 }
 
 .room-next-line-compact.is-overflow-scrolling .room-next-line-text {
-  animation: room-next-line-scroll var(--room-next-scroll-duration, 14s) linear infinite;
+  animation: monitor-marquee-scroll var(--monitor-marquee-scroll-duration, 16s) linear infinite;
 }
 
 @keyframes room-next-line-scroll {

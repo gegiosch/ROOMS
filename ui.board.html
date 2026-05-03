@@ -619,9 +619,11 @@
           tileNode.appendChild(titleLine);
 
           var lines = ROOMS_UI.el('div', 'room-lines');
-          lines.appendChild(ROOMS_UI.el('div', '', 'ORA: ' + tile.currentLabel));
-          nextLine = ROOMS_UI.el('div', isOccupiedNextLine ? 'room-next-line room-next-line-compact' : 'room-next-line');
-          nextLine.appendChild(ROOMS_UI.el('span', 'room-next-line-text', nextLineText));
+          var currentLine = ROOMS_UI.el('div', 'room-dynamic-line monitor-marquee-line');
+          currentLine.appendChild(ROOMS_UI.el('span', 'monitor-marquee-text', 'ORA: ' + tile.currentLabel));
+          lines.appendChild(currentLine);
+          nextLine = ROOMS_UI.el('div', 'room-next-line room-dynamic-line monitor-marquee-line' + (isOccupiedNextLine ? ' room-next-line-compact' : ''));
+          nextLine.appendChild(ROOMS_UI.el('span', 'room-next-line-text monitor-marquee-text', nextLineText));
           lines.appendChild(nextLine);
           tileNode.appendChild(lines);
           return tileNode;
@@ -654,9 +656,11 @@
           } else {
             rows.forEach(function (booking) {
               var line = ROOMS_UI.el('div', 'afternoon-summary-line');
+              var summaryText = (booking.roomName || '-') + ' · ' + (booking.activityDescription || 'Attivita non specificata') + ' · ' + (booking.actorLabel || 'N/D');
+              var summaryLine = ROOMS_UI.el('div', 'afternoon-summary-text monitor-marquee-line');
               line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-time', formatBookingTimeRange_(booking)));
-              line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-main', (booking.roomName || '-') + ' · ' + (booking.activityDescription || 'Attivita non specificata')));
-              line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-actor', booking.actorLabel || 'N/D'));
+              summaryLine.appendChild(ROOMS_UI.el('span', 'monitor-marquee-text', summaryText));
+              line.appendChild(summaryLine);
               list.appendChild(line);
             });
           }
@@ -910,12 +914,12 @@
           applyFitScale();
           configureAutoScrollAreas_();
           configureRoomTitleOverflow_();
-          configureRoomNextLineOverflow_();
+          configureMonitorMarqueeOverflow_();
           window.requestAnimationFrame(function () {
             applyFitScale();
             configureAutoScrollAreas_();
             configureRoomTitleOverflow_();
-            configureRoomNextLineOverflow_();
+            configureMonitorMarqueeOverflow_();
           });
         }
 
@@ -980,22 +984,25 @@
           });
         }
 
-        function configureRoomNextLineOverflow_() {
-          Array.prototype.slice.call(document.querySelectorAll('.room-next-line-compact')).forEach(function (line) {
-            var text = line.querySelector('.room-next-line-text');
+        function configureMonitorMarqueeOverflow_() {
+          if (!isMonitorModeEffective_(state)) {
+            return;
+          }
+          Array.prototype.slice.call(document.querySelectorAll('.monitor-marquee-line')).forEach(function (line) {
+            var text = line.querySelector('.monitor-marquee-text');
             var overflowDistance;
             if (!text) {
               return;
             }
             line.classList.remove('is-overflow-scrolling');
-            text.style.removeProperty('--room-next-scroll-distance');
-            text.style.removeProperty('--room-next-scroll-duration');
+            text.style.removeProperty('--monitor-marquee-scroll-distance');
+            text.style.removeProperty('--monitor-marquee-scroll-duration');
             overflowDistance = Math.ceil(text.scrollWidth - line.clientWidth);
             if (overflowDistance <= 2) {
               return;
             }
-            text.style.setProperty('--room-next-scroll-distance', String(overflowDistance) + 'px');
-            text.style.setProperty('--room-next-scroll-duration', String(Math.max(12, Math.ceil((text.scrollWidth + overflowDistance) / 18))) + 's');
+            text.style.setProperty('--monitor-marquee-scroll-distance', String(overflowDistance) + 'px');
+            text.style.setProperty('--monitor-marquee-scroll-duration', String(Math.max(14, Math.ceil((text.scrollWidth + overflowDistance) / 18))) + 's');
             line.classList.add('is-overflow-scrolling');
           });
         }
