@@ -959,11 +959,15 @@ ROOMS_APP.Replacements = {
     var legacyTripState = this.buildLegacyOutingState_(targetDate, savedClassOutRows, savedTeacherRows);
     var combinedTripState = this.mergeTripDayStates_(tripDayState, legacyTripState);
     var teacherMap = {};
+    var teacherEmailByName = {};
     var classSet = {};
     var savedTeacherFallbackMap = {};
 
     baseTeachers.forEach(function (teacher) {
       teacherMap[teacher.teacherEmail] = teacher;
+      if (teacher.teacherName) {
+        teacherEmailByName[ROOMS_APP.slugify(teacher.teacherName)] = teacher.teacherEmail;
+      }
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
         if (slot && slot.type === 'CLASS' && slot.classCode) {
@@ -983,6 +987,9 @@ ROOMS_APP.Replacements = {
       }
       if (activeLongAssignmentMap[teacherEmail]) {
         teacherEmail = activeLongAssignmentMap[teacherEmail].replacementTeacherEmail;
+      }
+      if (!teacherMap[teacherEmail] && teacherName && teacherEmailByName[ROOMS_APP.slugify(teacherName)]) {
+        teacherEmail = teacherEmailByName[ROOMS_APP.slugify(teacherName)];
       }
       if (!teacherMap[teacherEmail]) {
         teacherMap[teacherEmail] = {
