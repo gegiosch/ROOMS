@@ -982,6 +982,7 @@ ROOMS_APP.Replacements = {
 
     savedTeacherRows.forEach(function (row) {
       var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail);
+      var teacherName = ROOMS_APP.normalizeString(row.TeacherName);
       if (!teacherEmail) {
         teacherEmail = ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName);
       }
