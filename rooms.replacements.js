@@ -1343,13 +1343,17 @@ ROOMS_APP.Replacements = {
     });
 
     teachers.forEach(function (teacher) {
-      if (!teacher.absent) {
+      if (!teacher.absent && !teacher.accompanist) {
         return;
       }
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
         var key;
         if (!slot || slot.type !== 'CLASS' || !slot.classCode) {
+          return;
+        }
+        if (teacher.accompanist && !teacher.absent &&
+          !ROOMS_APP.Replacements.isTeacherAccompanyingAtPeriodInState_(effectiveTripState, teacher.teacherEmail, period)) {
           return;
         }
         key = ROOMS_APP.Replacements.buildAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
@@ -1534,7 +1538,12 @@ ROOMS_APP.Replacements = {
       var hourlyAbsence = normalized.hourlyAbsenceMap[self.buildHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
       var assignmentKey = ROOMS_APP.Replacements.buildAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
       var assignment = assignmentsByKey[assignmentKey] || null;
-      var requiresReplacement = Boolean(slot.type === 'CLASS' && (teacher.absent || hourlyAbsence));
+      var isAccompanying = ROOMS_APP.Replacements.isTeacherAccompanyingAtPeriod_(
+        normalized,
+        teacher.teacherEmail,
+        period
+      );
+      var requiresReplacement = Boolean(slot.type === 'CLASS' && (teacher.absent || hourlyAbsence || isAccompanying));
       var row = {
         period: period,
         startTime: slot.startTime,
@@ -1542,7 +1551,7 @@ ROOMS_APP.Replacements = {
         slotType: slot.type,
         classCode: slot.classCode,
         label: slot.label,
-        canMarkHourlyAbsence: Boolean(slot.type === 'CLASS' && !teacher.absent),
+        canMarkHourlyAbsence: Boolean(slot.type === 'CLASS' && !teacher.absent && !isAccompanying),
         hourlyAbsence: hourlyAbsence,
         requiresReplacement: requiresReplacement,
         classHandlingType: assignment ? self.normalizeClassHandlingType_(assignment.classHandlingType) : self.CLASS_HANDLING_TYPES_.NONE,
