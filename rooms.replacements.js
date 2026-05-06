@@ -982,15 +982,15 @@ ROOMS_APP.Replacements = {
 
     savedTeacherRows.forEach(function (row) {
       var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail);
-      var teacherName = ROOMS_APP.normalizeString(row.TeacherName);
+      var rowTeacherName = ROOMS_APP.normalizeString(row.TeacherName);
       if (!teacherEmail) {
         teacherEmail = ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName);
       }
       if (activeLongAssignmentMap[teacherEmail]) {
         teacherEmail = activeLongAssignmentMap[teacherEmail].replacementTeacherEmail;
       }
-      if (!teacherMap[teacherEmail] && teacherName && teacherEmailByName[ROOMS_APP.slugify(teacherName)]) {
-        teacherEmail = teacherEmailByName[ROOMS_APP.slugify(teacherName)];
+      if (!teacherMap[teacherEmail] && rowTeacherName && teacherEmailByName[ROOMS_APP.slugify(rowTeacherName)]) {
+        teacherEmail = teacherEmailByName[ROOMS_APP.slugify(rowTeacherName)];
       }
       if (!teacherMap[teacherEmail]) {
         teacherMap[teacherEmail] = {
