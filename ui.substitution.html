@@ -1716,6 +1716,16 @@
           return '';
         }
 
+        function isReplacementCoverableSlot_(teacher, slot) {
+          if (!slot) {
+            return false;
+          }
+          if (slot.coverageRequired) {
+            return true;
+          }
+          return slot.type === 'CLASS';
+        }
+
         function getReplacementHandlingTypeLabel_(handlingType) {
           var normalized = normalizeReplacementHandlingType_(handlingType);
           if (normalized === 'RECOVERY') {
@@ -1756,6 +1766,7 @@
                 hourlyPermission: false,
                 accompanist: Boolean(entry.accompanist),
                 accompaniedClasses: safeArray(entry.accompaniedClasses),
+                supportTeacher: Boolean(entry.supportTeacher),
                 notes: entry.notes || ''
               };
             }),
@@ -1904,7 +1915,7 @@
               return;
             }
             absent = Boolean(draftTeacher.absent);
-            if (absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+            if (absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !slot.classCode) {
               return;
             }
             nextEntry = Object.assign({}, entry, {
@@ -1949,6 +1960,7 @@
               ),
               accompanist: accompanist,
               accompaniedClasses: accompaniedClasses,
+              supportTeacher: Boolean(baseTeacher.supportTeacher || draftTeacher.supportTeacher),
               notes: draftTeacher.notes || ''
             };
           }).sort(function (left, right) {
@@ -2010,7 +2022,7 @@
             Object.keys(teacher.periods || {}).forEach(function (period) {
               var slot = teacher.periods[period];
               var key;
-              if (!slot || slot.type !== 'CLASS' || !slot.classCode) {
+              if (!slot || !isReplacementCoverableSlot_(teacher, slot) || !slot.classCode) {
                 return;
               }
               if (teacher.accompanist && !teacher.absent && !isReplacementTeacherAccompanyingAtPeriod_(teacher.teacherEmail, period)) {
@@ -2031,7 +2043,7 @@
             var teacher = teacherMap[normalizeReplacementTeacherEmail_(entry.teacherEmail)] || null;
             var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
             var assignmentKey;
-            if (!teacher || teacher.absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+            if (!teacher || teacher.absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !slot.classCode) {
               return;
             }
             assignmentKey = buildReplacementAssignmentKey_(entry.period, slot.classCode, teacher.teacherEmail);
@@ -2447,7 +2459,8 @@
             var assignment = assignmentIndex[buildReplacementAssignmentKey_(period, classCode, teacher.teacherEmail)] || null;
             var hourlyAbsence = hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
             var isAccompanying = isReplacementTeacherAccompanyingAtPeriod_(teacher.teacherEmail, period);
-            var requiresReplacement = Boolean(slot.type === 'CLASS' && (teacher.absent || hourlyAbsence || isAccompanying));
+            var isCoverableSlot = isReplacementCoverableSlot_(teacher, slot);
+            var requiresReplacement = Boolean(isCoverableSlot && (teacher.absent || hourlyAbsence || isAccompanying));
             var row = {
               period: String(period || ''),
               startTime: slot.startTime || timeMeta.startTime || '',
@@ -2455,7 +2468,7 @@
               slotType: slot.type || 'FREE',
               classCode: classCode,
               label: slot.label || '',
-              canMarkHourlyAbsence: Boolean(slot.type === 'CLASS' && !teacher.absent && !isAccompanying),
+              canMarkHourlyAbsence: Boolean(isCoverableSlot && !teacher.absent && !isAccompanying),
               hourlyAbsence: hourlyAbsence,
               requiresReplacement: requiresReplacement,
               classHandlingType: assignment ? normalizeReplacementClassHandlingType_(assignment.classHandlingType) : '',
@@ -2467,7 +2480,7 @@
             };
 
             if (!requiresReplacement) {
-              row.status = slot.type === 'CLASS' ? 'NO_ACTION' : 'NONE';
+              row.status = isCoverableSlot ? 'NO_ACTION' : 'NONE';
               return row;
             }
             if (assignment && assignment.replacementStatus !== 'TO_ASSIGN') {
@@ -2499,7 +2512,7 @@
           safeArray(replacementState.localTeachers).forEach(function (teacher) {
             Object.keys((teacher && teacher.periods) || {}).forEach(function (period) {
               var slot = teacher.periods[period];
-              if (!slot || slot.type !== 'CLASS' || normalizeReplacementClassCode_(slot.classCode) !== targetClassCode) {
+              if (!slot || !isReplacementCoverableSlot_(teacher, slot) || normalizeReplacementClassCode_(slot.classCode) !== targetClassCode) {
                 return;
               }
               scheduledByPeriod[String(period || '')] = true;
@@ -2561,13 +2574,31 @@
           return matches.length ? matches[matches.length - 1].period : '';
         }
 
+        function countReplacementClassPresencePeriods_(flow, startPeriod, endPeriod) {
+          var start = Number(startPeriod || 0);
+          var end = Number(endPeriod || 0);
+          return safeArray(flow && flow.periods).filter(function (entry) {
+            var period = Number(entry.period || 0);
+            if (!entry.scheduled) {
+              return false;
+            }
+            if (start && period < start) {
+              return false;
+            }
+            if (end && period > end) {
+              return false;
+            }
+            return entry.state === 'VALID' || entry.state === 'UNCOVERED';
+          }).length;
+        }
+
         function getReplacementClassScheduledPeriods_(classCode) {
           var targetClassCode = normalizeReplacementClassCode_(classCode);
           var seen = {};
           safeArray(replacementState.localTeachers).forEach(function (teacher) {
             Object.keys((teacher && teacher.periods) || {}).forEach(function (period) {
               var slot = teacher.periods[period];
-              if (!slot || slot.type !== 'CLASS' || normalizeReplacementClassCode_(slot.classCode) !== targetClassCode) {
+              if (!slot || !isReplacementCoverableSlot_(teacher, slot) || normalizeReplacementClassCode_(slot.classCode) !== targetClassCode) {
                 return;
               }
               seen[String(period || '')] = true;
@@ -2608,6 +2639,9 @@
             if (invalidState) {
               return 'Entrata posticipata non valida per ' + classCode + ': la classe ha gia una lezione valida o incoerente prima della ' + transitionPeriod + 'ª ora.';
             }
+            if (countReplacementClassPresencePeriods_(flow, transitionPeriod, '') < 4) {
+              return 'Entrata posticipata non valida per ' + classCode + ': la classe deve mantenere almeno 4 ore di presenza.';
+            }
             return '';
           }
           transitionPeriod = findPreviousReplacementClassFlowPeriod_(flow, sourcePeriod, function (entry) {
@@ -2625,6 +2659,9 @@
           if (invalidState) {
             return 'Uscita anticipata non valida per ' + classCode + ': restano lezioni successive non coerentemente chiuse dopo la ' + transitionPeriod + 'ª ora.';
           }
+          if (countReplacementClassPresencePeriods_(flow, '', transitionPeriod) < 4) {
+            return 'Uscita anticipata non valida per ' + classCode + ': la classe deve mantenere almeno 4 ore di presenza.';
+          }
           return '';
         }
 
@@ -2640,12 +2677,20 @@
           }
           scheduledPeriods = getReplacementClassScheduledPeriods_(classCode);
           if (classHandlingType === 'LATE_ENTRY') {
-            return scheduledPeriods.some(function (period) {
+            var lateFlow = buildReplacementClassFlowForValidation_(classCode);
+            var lateTransition = findNextReplacementClassFlowPeriod_(lateFlow, String(sourcePeriod || ''), function (entry) {
+              return entry.state === 'VALID';
+            });
+            return Boolean(lateTransition) && countReplacementClassPresencePeriods_(lateFlow, lateTransition, '') >= 4 && scheduledPeriods.some(function (period) {
               return Number(period || 0) > sourcePeriod;
             });
           }
           if (classHandlingType === 'EARLY_EXIT') {
-            return scheduledPeriods.some(function (period) {
+            var earlyFlow = buildReplacementClassFlowForValidation_(classCode);
+            var earlyTransition = findPreviousReplacementClassFlowPeriod_(earlyFlow, String(sourcePeriod || ''), function (entry) {
+              return entry.state === 'VALID';
+            });
+            return Boolean(earlyTransition) && countReplacementClassPresencePeriods_(earlyFlow, '', earlyTransition) >= 4 && scheduledPeriods.some(function (period) {
               return Number(period || 0) < sourcePeriod;
             });
           }
@@ -3231,7 +3276,15 @@
 
         function getReplacementManagedTeachers_() {
           return safeArray(replacementState.localTeachers).filter(function (teacher) {
-            return Boolean(getReplacementManagedTeacherType_(teacher));
+            var managedType = getReplacementManagedTeacherType_(teacher);
+            if (!managedType) {
+              return false;
+            }
+            if (managedType === 'DAILY_ABSENCE' && teacher && teacher.supportTeacher &&
+                !getReplacementManagementRelevantAssignments_(teacher, managedType).length) {
+              return false;
+            }
+            return true;
           }).sort(function (left, right) {
             return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
           });
@@ -3320,7 +3373,7 @@
             return 'Permesso orario';
           }
           if (managedType === 'ACCOMPANIST') {
-            return 'Uscita didattica';
+            return 'Servizio fuori aula - Accompagnamento';
           }
           return 'Assenza giornaliera';
         }
@@ -3427,7 +3480,7 @@
               var removeButton = ROOMS_UI.el('button', 'button secondary', 'Rimuovi');
               var hasClassSlots = Object.keys(teacher.periods || {}).some(function (period) {
                 var slot = teacher.periods[period];
-                return slot && slot.type === 'CLASS' && slot.classCode;
+                return slot && isReplacementCoverableSlot_(teacher, slot) && slot.classCode;
               });
               var isSelectedTeacher = normalizeReplacementTeacherEmail_(teacher.teacherEmail) === normalizeReplacementTeacherEmail_(replacementState.selectedTeacherEmail);
               manageButton.type = 'button';
@@ -3514,7 +3567,7 @@
               };
               var assignmentKey = buildReplacementAssignmentKey_(assignment.period, assignment.classCode, assignment.originalTeacherEmail);
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
-              var isClassSlot = row.slotType === 'CLASS' && row.classCode;
+              var isClassSlot = Boolean((row.slotType === 'CLASS' || row.requiresReplacement || row.canMarkHourlyAbsence) && row.classCode);
               var canConfigureHourlyPermission = Boolean(selectedTeacher.hourlyPermission && row.canMarkHourlyAbsence);
 
               if (!isClassSlot) {
@@ -3812,7 +3865,7 @@
 
               return [
                 (row.period || '') + 'a ora (' + (row.startTime || '--:--') + ' - ' + (row.endTime || '--:--') + ')',
-                row.classCode || row.label || '-',
+                row.slotType === 'SERVICE' ? (row.label || row.classCode || '-') : (row.classCode || row.label || '-'),
                 createReplacementStatusNode_(row.status),
                 actions
               ];

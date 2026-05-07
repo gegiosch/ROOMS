@@ -27,6 +27,13 @@ ROOMS_APP.Replacements = {
     DAILY: 'DAILY',
     HOURLY_PERMISSION: 'HOURLY_PERMISSION'
   },
+  SERVICE_OUT_OF_CLASS_: {
+    GENERAL: 'SERVIZIO_FUORI_AULA',
+    ASSEMBLY: 'ASSEMBLEA',
+    ALTERNATIVA: 'ALTERNATIVA',
+    ACCOMPANIMENT: 'ACCOMPAGNAMENTO'
+  },
+  MIN_CLASS_PRESENCE_PERIODS_: 4,
   TRIP_TYPES_: {
     DAILY: 'DAILY',
     MULTI_DAY: 'MULTI_DAY',
@@ -970,7 +977,7 @@ ROOMS_APP.Replacements = {
       }
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
-        if (slot && slot.type === 'CLASS' && slot.classCode) {
+        if (slot && ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) && slot.classCode) {
           classSet[slot.classCode] = true;
         }
       });
@@ -998,7 +1005,8 @@ ROOMS_APP.Replacements = {
           teacherName: activeLongAssignmentMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)]
             ? activeLongAssignmentMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail) || ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(row.TeacherName)].replacementTeacherDisplayName
             : ROOMS_APP.normalizeString(row.TeacherName),
-          periods: {}
+          periods: {},
+          supportTeacher: false
         };
       }
     });
@@ -1018,7 +1026,8 @@ ROOMS_APP.Replacements = {
         teacherMap[teacherEmail] = {
           teacherEmail: teacherEmail,
           teacherName: teacherName || teacherEmail,
-          periods: {}
+          periods: {},
+          supportTeacher: false
         };
       }
       if (period && classCode && !teacherMap[teacherEmail].periods[period]) {
@@ -1030,7 +1039,8 @@ ROOMS_APP.Replacements = {
           rawValue: classCode,
           type: 'CLASS',
           classCode: classCode,
-          label: classCode
+          label: classCode,
+          coverageRequired: true
         };
       }
       if (classCode) {
@@ -1069,7 +1079,8 @@ ROOMS_APP.Replacements = {
         teacherMap[teacherEmail] = {
           teacherEmail: teacherEmail,
           teacherName: teacherName || teacherEmail,
-          periods: {}
+          periods: {},
+          supportTeacher: false
         };
       }
       slot = periodMap[period] || {};
@@ -1081,7 +1092,8 @@ ROOMS_APP.Replacements = {
           rawValue: '',
           type: 'FREE',
           classCode: '',
-          label: ''
+          label: '',
+          coverageRequired: false
         };
       }
     });
@@ -1104,6 +1116,7 @@ ROOMS_APP.Replacements = {
         absent: ROOMS_APP.asBoolean(saved.Absent) && !ROOMS_APP.asBoolean(saved.Accompanist),
         accompanist: Boolean(accompaniedClasses.length),
         accompaniedClasses: accompaniedClasses,
+        supportTeacher: Boolean(teacher.supportTeacher),
         notes: ROOMS_APP.normalizeString(saved.Notes)
       };
     }).sort(function (left, right) {
@@ -1133,6 +1146,7 @@ ROOMS_APP.Replacements = {
           absent: Boolean(entry.absent),
           accompanist: Boolean(entry.accompanist),
           accompaniedClasses: entry.accompaniedClasses.slice(),
+          supportTeacher: Boolean(entry.supportTeacher),
           notes: entry.notes || ''
         };
       }),
@@ -1230,6 +1244,7 @@ ROOMS_APP.Replacements = {
         absent: Boolean(base.absent),
         accompanist: Boolean(base.accompanist),
         accompaniedClasses: (base.accompaniedClasses || []).slice(),
+        supportTeacher: Boolean(base.supportTeacher),
         notes: ROOMS_APP.normalizeString(base.notes)
       };
     });
@@ -1252,11 +1267,14 @@ ROOMS_APP.Replacements = {
           absent: false,
           accompanist: false,
           accompaniedClasses: [],
+          supportTeacher: false,
           notes: ''
         };
       }
       isRegistryControlled = Boolean(absenceRegistryState.controlledTeacherMap && absenceRegistryState.controlledTeacherMap[teacherEmail]);
       normalizedTeachers[teacherEmail].teacherName = teacherName || normalizedTeachers[teacherEmail].teacherName;
+      normalizedTeachers[teacherEmail].supportTeacher = Boolean(normalizedTeachers[teacherEmail].supportTeacher ||
+        ROOMS_APP.asBoolean(entry && (entry.supportTeacher || entry.SupportTeacher)));
       if (!isRegistryControlled) {
         normalizedTeachers[teacherEmail].absent = ROOMS_APP.asBoolean(entry && Object.prototype.hasOwnProperty.call(entry, 'absent') ? entry.absent : entry && entry.Absent);
         normalizedTeachers[teacherEmail].notes = ROOMS_APP.normalizeString(entry && (entry.notes || entry.Notes));
@@ -1357,7 +1375,7 @@ ROOMS_APP.Replacements = {
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
         var key;
-        if (!slot || slot.type !== 'CLASS' || !slot.classCode) {
+        if (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
           return;
         }
         if (teacher.accompanist && !teacher.absent &&
@@ -1379,7 +1397,7 @@ ROOMS_APP.Replacements = {
       var teacher = teacherMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(entry.teacherEmail)] || null;
       var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
       var key;
-      if (!teacher || teacher.absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
         return;
       }
       key = ROOMS_APP.Replacements.buildAssignmentKey_(entry.period, slot.classCode, teacher.teacherEmail);
@@ -1551,7 +1569,8 @@ ROOMS_APP.Replacements = {
         teacher.teacherEmail,
         period
       );
-      var requiresReplacement = Boolean(slot.type === 'CLASS' && (teacher.absent || hourlyAbsence || isAccompanying));
+      var isCoverableSlot = ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot);
+      var requiresReplacement = Boolean(isCoverableSlot && (teacher.absent || hourlyAbsence || isAccompanying));
       var row = {
         period: period,
         startTime: slot.startTime,
@@ -1559,7 +1578,7 @@ ROOMS_APP.Replacements = {
         slotType: slot.type,
         classCode: slot.classCode,
         label: slot.label,
-        canMarkHourlyAbsence: Boolean(slot.type === 'CLASS' && !teacher.absent && !isAccompanying),
+        canMarkHourlyAbsence: Boolean(isCoverableSlot && !teacher.absent && !isAccompanying),
         hourlyAbsence: hourlyAbsence,
         requiresReplacement: requiresReplacement,
         classHandlingType: assignment ? self.normalizeClassHandlingType_(assignment.classHandlingType) : self.CLASS_HANDLING_TYPES_.NONE,
@@ -1571,7 +1590,7 @@ ROOMS_APP.Replacements = {
       };
 
       if (!requiresReplacement) {
-        if (slot.type === 'CLASS') {
+        if (isCoverableSlot) {
           row.status = 'NO_ACTION';
         } else {
           row.status = 'NONE';
@@ -2205,7 +2224,7 @@ ROOMS_APP.Replacements = {
     (normalized && normalized.hourlyAbsences || []).forEach(function (entry) {
       var teacher = normalized.teacherMap[self.normalizeTeacherEmail_(entry.teacherEmail)] || null;
       var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
-      if (!teacher || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+      if (!teacher || !slot || !self.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
         errors.push('Assenza oraria non valida per ' + (entry.teacherName || entry.teacherEmail) + ' alla ' + entry.period + 'ª ora.');
       }
     });
@@ -2310,6 +2329,9 @@ ROOMS_APP.Replacements = {
       if (invalidState) {
         return 'Entrata posticipata non valida per ' + classCode + ': la classe ha gia una lezione valida o incoerente prima della ' + transitionPeriod + 'ª ora.';
       }
+      if (this.countClassPresencePeriods_(flow, transitionPeriod, '') < this.MIN_CLASS_PRESENCE_PERIODS_) {
+        return 'Entrata posticipata non valida per ' + classCode + ': la classe deve mantenere almeno 4 ore di presenza.';
+      }
       return '';
     }
     transitionPeriod = this.findPreviousClassFlowPeriod_(flow, sourcePeriod, function (entryFlow) {
@@ -2326,6 +2348,9 @@ ROOMS_APP.Replacements = {
     })[0] || null;
     if (invalidState) {
       return 'Uscita anticipata non valida per ' + classCode + ': restano lezioni successive non coerentemente chiuse dopo la ' + transitionPeriod + 'ª ora.';
+    }
+    if (this.countClassPresencePeriods_(flow, '', transitionPeriod) < this.MIN_CLASS_PRESENCE_PERIODS_) {
+      return 'Uscita anticipata non valida per ' + classCode + ': la classe deve mantenere almeno 4 ore di presenza.';
     }
     return '';
   },
@@ -2349,7 +2374,7 @@ ROOMS_APP.Replacements = {
     (normalized.teachers || []).forEach(function (teacher) {
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
-        if (!slot || slot.type !== 'CLASS' || ROOMS_APP.normalizeString(slot.classCode).toUpperCase() !== targetClassCode) {
+        if (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || ROOMS_APP.normalizeString(slot.classCode).toUpperCase() !== targetClassCode) {
           return;
         }
         scheduledByPeriod[ROOMS_APP.normalizeString(period)] = true;
@@ -2410,6 +2435,24 @@ ROOMS_APP.Replacements = {
       return Number(entry.period || 0) < source && predicate(entry);
     });
     return matches.length ? matches[matches.length - 1].period : '';
+  },
+
+  countClassPresencePeriods_: function (flow, startPeriod, endPeriod) {
+    var start = Number(startPeriod || 0);
+    var end = Number(endPeriod || 0);
+    return (flow && flow.periods || []).filter(function (entry) {
+      var period = Number(entry.period || 0);
+      if (!entry.scheduled) {
+        return false;
+      }
+      if (start && period < start) {
+        return false;
+      }
+      if (end && period > end) {
+        return false;
+      }
+      return entry.state === 'VALID' || entry.state === 'UNCOVERED';
+    }).length;
   },
 
   getActualClassTransitionPeriod_: function (entry, classHandlingType) {
@@ -2956,7 +2999,7 @@ ROOMS_APP.Replacements = {
       if (!normalizedEntry.teacherEmail || !normalizedEntry.period) {
         return;
       }
-      if (!teacher || teacher.absent || !slot || slot.type !== 'CLASS' || !slot.classCode) {
+      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
         return;
       }
       if (!normalizedEntry.teacherName) {
@@ -3257,43 +3300,66 @@ ROOMS_APP.Replacements = {
     var weekday = ROOMS_APP.getWeekdayName(targetDate);
     var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate, true);
     var snapshot = this.getDocentiTimetableSnapshot_();
-    if (!snapshot.sheet) {
-      return [];
-    }
+    var opening = ROOMS_APP.Policy.getDailyOpening(targetDate);
     var teacherMap = {};
     var rowIndex;
 
-    for (rowIndex = snapshot.columnMeta.dataStartRow; rowIndex < snapshot.values.length; rowIndex += 1) {
-      var rowLabel = ROOMS_APP.normalizeString(snapshot.values[rowIndex] && snapshot.values[rowIndex][0]);
-      if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
-        continue;
-      }
-
-      var originalTeacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
-      var longAssignment = activeLongAssignments[originalTeacherEmail] || null;
-      var teacherEmail = longAssignment ? longAssignment.replacementTeacherEmail : originalTeacherEmail;
-      var teacherName = longAssignment ? longAssignment.replacementTeacherDisplayName : rowLabel;
-      var teacher = teacherMap[teacherEmail] || {
-        teacherEmail: teacherEmail,
-        teacherName: teacherName,
-        periods: {},
-        originalTeacherEmails: {}
-      };
-      if (originalTeacherEmail) {
-        teacher.originalTeacherEmails[originalTeacherEmail] = rowLabel;
-      }
-
-      snapshot.columnMeta.usableColumns.forEach(function (column) {
-        var meta = snapshot.columnMeta.columns[column] || {};
-        if (meta.weekday !== weekday) {
-          return;
+    if (snapshot.sheet) {
+      for (rowIndex = snapshot.columnMeta.dataStartRow; rowIndex < snapshot.values.length; rowIndex += 1) {
+        var rowLabel = ROOMS_APP.normalizeString(snapshot.values[rowIndex] && snapshot.values[rowIndex][0]);
+        if (!ROOMS_APP.Timetable.isRowLabelData_(rowLabel, 'classroom')) {
+          continue;
         }
-        var rawValue = ROOMS_APP.normalizeString(snapshot.values[rowIndex][column]);
-        teacher.periods[String(meta.period)] = ROOMS_APP.Replacements.classifyTeacherSlotValue_(rawValue, meta.period, meta.startTime, meta.endTime);
-      });
 
-      teacherMap[teacherEmail] = teacher;
+        var originalTeacherEmail = this.buildTeacherSyntheticEmail_(rowLabel);
+        var longAssignment = activeLongAssignments[originalTeacherEmail] || null;
+        var teacherEmail = longAssignment ? longAssignment.replacementTeacherEmail : originalTeacherEmail;
+        var teacherName = longAssignment ? longAssignment.replacementTeacherDisplayName : rowLabel;
+        var teacher = teacherMap[teacherEmail] || {
+          teacherEmail: teacherEmail,
+          teacherName: teacherName,
+          periods: {},
+          originalTeacherEmails: {},
+          supportTeacher: false
+        };
+        if (originalTeacherEmail) {
+          teacher.originalTeacherEmails[originalTeacherEmail] = rowLabel;
+        }
+
+        snapshot.columnMeta.usableColumns.forEach(function (column) {
+          var meta = snapshot.columnMeta.columns[column] || {};
+          if (meta.weekday !== weekday) {
+            return;
+          }
+          if (!ROOMS_APP.Replacements.isPeriodActiveForOpening_(opening, meta.startTime, meta.endTime)) {
+            return;
+          }
+          var rawValue = ROOMS_APP.normalizeString(snapshot.values[rowIndex][column]);
+          teacher.periods[String(meta.period)] = ROOMS_APP.Replacements.classifyTeacherSlotValue_(rawValue, meta.period, meta.startTime, meta.endTime);
+        });
+
+        teacherMap[teacherEmail] = teacher;
+      }
     }
+
+    this.buildSupportTeacherDayTeachers_(targetDate).forEach(function (supportTeacher) {
+      var teacher = teacherMap[supportTeacher.teacherEmail] || {
+        teacherEmail: supportTeacher.teacherEmail,
+        teacherName: supportTeacher.teacherName,
+        periods: {},
+        originalTeacherEmails: {},
+        supportTeacher: true
+      };
+      teacher.teacherName = teacher.teacherName || supportTeacher.teacherName;
+      teacher.supportTeacher = true;
+      Object.keys(supportTeacher.periods || {}).forEach(function (period) {
+        var existingSlot = teacher.periods[period] || null;
+        if (!existingSlot || existingSlot.type === 'FREE') {
+          teacher.periods[period] = supportTeacher.periods[period];
+        }
+      });
+      teacherMap[supportTeacher.teacherEmail] = teacher;
+    });
 
     return Object.keys(teacherMap).map(function (teacherEmail) {
       return teacherMap[teacherEmail];
@@ -3302,21 +3368,116 @@ ROOMS_APP.Replacements = {
     });
   },
 
-  classifyTeacherSlotValue_: function (rawValue, period, startTime, endTime) {
+  buildSupportTeacherDayTeachers_: function (dateString) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
+    var weekday = ROOMS_APP.getWeekdayName(targetDate);
+    var periodMap = ROOMS_APP.Timetable.getPeriodTimeMap();
+    var opening = ROOMS_APP.Policy.getDailyOpening(targetDate);
+    var teacherMap = {};
+    var self = this;
+    ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.TIMETABLE_DOCENTI_SOSTEGNO).forEach(function (row) {
+      var supportEntry = self.normalizeSupportTeacherRow_(row);
+      var teacher;
+      if (!supportEntry || !supportEntry.teacherEmail) {
+        return;
+      }
+      teacher = teacherMap[supportEntry.teacherEmail] || {
+        teacherEmail: supportEntry.teacherEmail,
+        teacherName: supportEntry.teacherName,
+        periods: {},
+        supportTeacher: true
+      };
+      Object.keys(periodMap).forEach(function (period) {
+        var meta = periodMap[period] || {};
+        var header = self.getSupportTeacherPeriodHeader_(weekday, meta.startTime);
+        var rawValue = header ? ROOMS_APP.normalizeString(row && row[header]) : '';
+        if (!self.isPeriodActiveForOpening_(opening, meta.startTime, meta.endTime)) {
+          return;
+        }
+        if (!rawValue) {
+          return;
+        }
+        teacher.periods[String(period)] = self.classifyTeacherSlotValue_(rawValue, period, meta.startTime, meta.endTime, {
+          supportTeacher: true
+        });
+      });
+      teacherMap[supportEntry.teacherEmail] = teacher;
+    });
+    return Object.keys(teacherMap).map(function (teacherEmail) {
+      return teacherMap[teacherEmail];
+    }).sort(function (left, right) {
+      return left.teacherName.localeCompare(right.teacherName);
+    });
+  },
+
+  getSupportTeacherPeriodHeader_: function (weekday, startTime) {
+    var prefixMap = {
+      Monday: 'LUN',
+      Tuesday: 'MAR',
+      Wednesday: 'MER',
+      Thursday: 'GIO',
+      Friday: 'VEN'
+    };
+    var prefix = prefixMap[weekday] || '';
+    var hour = Number(String(startTime || '').slice(0, 2));
+    if (!prefix || !hour) {
+      return '';
+    }
+    return prefix + '_' + String(hour);
+  },
+
+  isPeriodActiveForOpening_: function (opening, startTime, endTime) {
+    var dailyOpening = opening || {};
+    if (dailyOpening.isOpen === false) {
+      return false;
+    }
+    var openTime = ROOMS_APP.normalizeString(dailyOpening.openTime);
+    var closeTime = ROOMS_APP.normalizeString(dailyOpening.closeTime);
+    var start = ROOMS_APP.normalizeString(startTime);
+    var end = ROOMS_APP.normalizeString(endTime);
+    if (openTime && end && end <= openTime) {
+      return false;
+    }
+    if (closeTime && start && start >= closeTime) {
+      return false;
+    }
+    return true;
+  },
+
+  classifyTeacherSlotValue_: function (rawValue, period, startTime, endTime, options) {
     var normalized = ROOMS_APP.normalizeString(rawValue).toUpperCase();
+    var settings = options && typeof options === 'object' ? options : {};
+    var serviceSubtype = this.normalizeServiceOutOfClassSubtype_(normalized);
     var classCode = ROOMS_APP.Timetable.extractClassCode_(normalized);
     var type = 'FREE';
     var label = '';
+    var coverageRequired = false;
 
-    if (classCode) {
-      type = 'CLASS';
-      label = classCode;
+    if (serviceSubtype) {
+      type = 'SERVICE';
+      label = this.getServiceOutOfClassLabel_(serviceSubtype, classCode);
+      if (!classCode && serviceSubtype === this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA) {
+        classCode = this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA;
+      }
+      coverageRequired = serviceSubtype === this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA || Boolean(classCode);
+    } else if (classCode) {
+      if (settings.supportTeacher) {
+        type = 'SUPPORT';
+        label = classCode;
+      } else {
+        type = 'CLASS';
+        label = classCode;
+        coverageRequired = true;
+      }
     } else if (normalized === 'P') {
       type = 'P';
       label = 'P';
     } else if (normalized === 'D') {
       type = 'D';
       label = 'D';
+    } else if (settings.supportTeacher && normalized) {
+      type = 'SUPPORT';
+      label = normalized;
     } else if (normalized) {
       type = 'OTHER';
       label = normalized;
@@ -3329,8 +3490,54 @@ ROOMS_APP.Replacements = {
       rawValue: normalized,
       type: type,
       classCode: classCode,
-      label: label
+      label: label,
+      supportSlot: Boolean(settings.supportTeacher),
+      serviceType: serviceSubtype ? this.SERVICE_OUT_OF_CLASS_.GENERAL : '',
+      serviceSubtype: serviceSubtype,
+      coverageRequired: coverageRequired
     };
+  },
+
+  normalizeServiceOutOfClassSubtype_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value).toUpperCase();
+    if (!normalized) {
+      return '';
+    }
+    if (/ALTERNATIV/.test(normalized)) {
+      return this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA;
+    }
+    if (/ASSEMBLEA|ASSEMBL/.test(normalized)) {
+      return this.SERVICE_OUT_OF_CLASS_.ASSEMBLY;
+    }
+    if (/ACCOMPAGN|USCITA|USCITE/.test(normalized)) {
+      return this.SERVICE_OUT_OF_CLASS_.ACCOMPANIMENT;
+    }
+    if (/SERVIZIO\s+FUORI\s+AULA|FUORI\s+AULA/.test(normalized)) {
+      return this.SERVICE_OUT_OF_CLASS_.GENERAL;
+    }
+    return '';
+  },
+
+  getServiceOutOfClassLabel_: function (serviceSubtype, classCode) {
+    var subtype = ROOMS_APP.normalizeString(serviceSubtype);
+    var label = subtype === this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA
+      ? 'Servizio fuori aula - Alternativa'
+      : (subtype === this.SERVICE_OUT_OF_CLASS_.ASSEMBLY
+        ? 'Servizio fuori aula - Assemblea'
+        : (subtype === this.SERVICE_OUT_OF_CLASS_.ACCOMPANIMENT
+          ? 'Servizio fuori aula - Accompagnamento'
+          : 'Servizio fuori aula'));
+    return classCode ? label + ' ' + classCode : label;
+  },
+
+  isCoverableTeacherSlot_: function (teacher, slot) {
+    if (!slot) {
+      return false;
+    }
+    if (slot.coverageRequired) {
+      return true;
+    }
+    return slot.type === 'CLASS';
   },
 
   resolvePeriodFromOccurrence_: function (occurrence) {
@@ -3796,7 +4003,7 @@ ROOMS_APP.Replacements = {
       return Number(left) - Number(right);
     }).map(function (period) {
       var slot = teacher.periods[period] || {};
-      if (slot.type !== 'CLASS') {
+      if (!ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot)) {
         return null;
       }
       return {
