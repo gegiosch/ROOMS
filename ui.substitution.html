@@ -455,21 +455,8 @@
 
               <section class="panel table-card replacement-section">
                 <h3>Docenti</h3>
-                <div class="grid grid-3" style="align-items:end;">
-                  <div>
-                    <label for="replacement-teacher-select">Seleziona docente</label>
-                    <select id="replacement-teacher-select" class="select"></select>
-                  </div>
-                  <div>
-                    <label for="replacement-teacher-event-type">Tipo evento</label>
-                    <select id="replacement-teacher-event-type" class="select">
-                      <option value="DAILY_ABSENCE">Assenza giornaliera</option>
-                      <option value="HOURLY_PERMISSION">Permesso orario</option>
-                    </select>
-                  </div>
-                  <div>
-                    <button id="replacement-teacher-add-button" class="button" type="button">Aggiungi</button>
-                  </div>
+                <div class="notice">
+                  Le assenze e gli eventi di servizio fuori aula si inseriscono nella tab "Inserimento assenze".
                 </div>
                 <div style="margin-top:12px;">
                   <h3 style="margin:0 0 8px 0;">Docenti da gestire</h3>
@@ -706,8 +693,19 @@
                       <select id="substitution-absence-type" class="select">
                         <option value="DAILY">Assenza giornaliera</option>
                         <option value="HOURLY_PERMISSION">Permesso orario</option>
+                        <option value="SERVICE_OUT_OF_CLASS">Servizio fuori aula</option>
                       </select>
                     </div>
+                  </div>
+                  <div id="substitution-absence-service-scope-row" class="substitution-absence-inline" style="display:none;">
+                    <label class="substitution-absence-check">
+                      <input name="substitution-absence-service-scope" type="radio" value="DAILY" checked>
+                      <span>Giornaliera</span>
+                    </label>
+                    <label class="substitution-absence-check">
+                      <input name="substitution-absence-service-scope" type="radio" value="HOURLY">
+                      <span>Oraria</span>
+                    </label>
                   </div>
                   <div id="substitution-absence-multi-day-row" class="substitution-absence-inline">
                     <label class="substitution-absence-check" for="substitution-absence-multi-day">
@@ -727,7 +725,7 @@
                   </div>
                   <div id="substitution-absence-hours-section" class="substitution-absence-hours" style="display:none;">
                     <div class="substitution-absence-section-title">Ore di servizio del docente</div>
-                    <div class="substitution-absence-meta">Selezionare le ore di permesso richieste</div>
+                    <div id="substitution-absence-hours-meta" class="substitution-absence-meta">Selezionare le ore di permesso richieste</div>
                     <div id="substitution-absence-hours-loading" class="substitution-absence-hours-loading" style="display:none;">
                       <div class="room-panel-spinner"></div>
                       <div>Caricamento ore disponibili...</div>
@@ -1155,6 +1153,7 @@
           tripDirty: false,
           tripDraftErrors: [],
           tripTeacherDirectory: null,
+          modelCache: {},
           loadStatus: 'idle',
           loadScope: '',
           loadErrorMessage: '',
@@ -1767,6 +1766,7 @@
                 accompanist: Boolean(entry.accompanist),
                 accompaniedClasses: safeArray(entry.accompaniedClasses),
                 supportTeacher: Boolean(entry.supportTeacher),
+                serviceOutOfClass: Boolean(entry.serviceOutOfClass),
                 notes: entry.notes || ''
               };
             }),
@@ -1961,6 +1961,7 @@
               accompanist: accompanist,
               accompaniedClasses: accompaniedClasses,
               supportTeacher: Boolean(baseTeacher.supportTeacher || draftTeacher.supportTeacher),
+              serviceOutOfClass: Boolean(baseTeacher.serviceOutOfClass || draftTeacher.serviceOutOfClass),
               notes: draftTeacher.notes || ''
             };
           }).sort(function (left, right) {
@@ -2016,7 +2017,7 @@
           });
 
           safeArray(teachers).forEach(function (teacher) {
-            if (!teacher || (!teacher.absent && !teacher.accompanist)) {
+            if (!teacher || (!teacher.absent && !teacher.accompanist && !teacher.serviceOutOfClass)) {
               return;
             }
             Object.keys(teacher.periods || {}).forEach(function (period) {
@@ -2033,7 +2034,7 @@
                 teacher: teacher,
                 period: String(period || ''),
                 slot: slot,
-                originalStatus: teacher.absent ? 'ABSENT' : 'ACCOMPANIST'
+                originalStatus: teacher.serviceOutOfClass && !teacher.absent ? 'SERVICE_OUT_OF_CLASS' : (teacher.absent ? 'ABSENT' : 'ACCOMPANIST')
               };
             });
           });
@@ -2052,7 +2053,7 @@
                 teacher: teacher,
                 period: String(entry.period || ''),
                 slot: slot,
-                originalStatus: 'HOURLY_ABSENCE'
+                originalStatus: String(entry.reason || '').toUpperCase() === 'SERVIZIO_FUORI_AULA' ? 'SERVICE_OUT_OF_CLASS' : 'HOURLY_ABSENCE'
               };
             }
           });
@@ -3173,9 +3174,9 @@
           }
           if (replacementAbsenceSource) {
             if (absenceRegistry && absenceRegistry.hasEntries) {
-              replacementAbsenceSource.textContent = (absenceRegistry.sourceLabel || 'Assenze caricate da REPL_ABSENCES') +
-                ': ' + String(absenceRegistry.dailyTeacherCount || 0) + ' giornaliere, ' +
-                String(absenceRegistry.hourlyEntryCount || 0) + ' ore di permesso.';
+              replacementAbsenceSource.textContent = (absenceRegistry.sourceLabel || 'Assenze ed eventi caricati da REPL_ABSENCES') +
+                ': ' + String(absenceRegistry.dailyTeacherCount || 0) + ' giornalieri, ' +
+                String(absenceRegistry.hourlyEntryCount || 0) + ' ore.';
             } else {
               replacementAbsenceSource.textContent = 'Assenze giornaliere senza registro salvato.';
             }
@@ -3253,6 +3254,13 @@
             return normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === teacherEmail &&
               String(entry && entry.originalStatus || '') === 'ACCOMPANIST';
           });
+          var hasServiceOutAssignments = safeArray(replacementState.localAssignments).some(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === teacherEmail &&
+              String(entry && entry.originalStatus || '') === 'SERVICE_OUT_OF_CLASS';
+          });
+          if (teacher && teacher.serviceOutOfClass) {
+            return 'SERVICE_OUT_OF_CLASS';
+          }
           if (teacher && teacher.absent) {
             return 'DAILY_ABSENCE';
           }
@@ -3271,6 +3279,9 @@
           if (hasAccompanistAssignments) {
             return 'ACCOMPANIST';
           }
+          if (hasServiceOutAssignments) {
+            return 'SERVICE_OUT_OF_CLASS';
+          }
           return '';
         }
 
@@ -3280,7 +3291,7 @@
             if (!managedType) {
               return false;
             }
-            if (managedType === 'DAILY_ABSENCE' && teacher && teacher.supportTeacher &&
+            if ((managedType === 'DAILY_ABSENCE' || managedType === 'SERVICE_OUT_OF_CLASS') && teacher && teacher.supportTeacher &&
                 !getReplacementManagementRelevantAssignments_(teacher, managedType).length) {
               return false;
             }
@@ -3301,6 +3312,9 @@
             }
             if (managedType === 'ACCOMPANIST') {
               return String(entry && entry.originalStatus || '') === 'ACCOMPANIST';
+            }
+            if (managedType === 'SERVICE_OUT_OF_CLASS') {
+              return String(entry && entry.originalStatus || '') === 'SERVICE_OUT_OF_CLASS';
             }
             return String(entry && entry.originalStatus || '') === 'ABSENT';
           });
@@ -3323,7 +3337,7 @@
               label: 'Da gestire'
             };
           }
-          if ((managedType === 'DAILY_ABSENCE' || managedType === 'ACCOMPANIST') && !relevantAssignments.length) {
+          if ((managedType === 'DAILY_ABSENCE' || managedType === 'ACCOMPANIST' || managedType === 'SERVICE_OUT_OF_CLASS') && !relevantAssignments.length) {
             return {
               code: 'TO_MANAGE',
               label: 'Da gestire'
@@ -3374,6 +3388,9 @@
           }
           if (managedType === 'ACCOMPANIST') {
             return 'Servizio fuori aula - Accompagnamento';
+          }
+          if (managedType === 'SERVICE_OUT_OF_CLASS') {
+            return 'Servizio fuori aula';
           }
           return 'Assenza giornaliera';
         }
@@ -3550,7 +3567,9 @@
                 classCode: row.classCode,
                 originalTeacherEmail: detail.teacherEmail,
                 originalTeacherName: detail.teacherName,
-                originalStatus: row.hourlyAbsence ? 'HOURLY_ABSENCE' : (detail.accompanist ? 'ACCOMPANIST' : 'ABSENT'),
+                originalStatus: row.hourlyAbsence && String(row.hourlyAbsence.reason || '').toUpperCase() === 'SERVIZIO_FUORI_AULA'
+                  ? 'SERVICE_OUT_OF_CLASS'
+                  : (detail.serviceOutOfClass ? 'SERVICE_OUT_OF_CLASS' : (row.hourlyAbsence ? 'HOURLY_ABSENCE' : (detail.accompanist ? 'ACCOMPANIST' : 'ABSENT'))),
                 classHandlingType: row.classHandlingType || '',
                 handlingType: row.handlingType || 'SUBSTITUTION',
                 replacementTeacherEmail: '',
@@ -4830,6 +4849,7 @@
                 allowAutoShift: false,
                 keepNotice: true,
                 includeEditorData: hasReplacementEditorData_(),
+                forceRefresh: true,
                 noticeScope: 'daily',
                 loadingMessage: 'Aggiornamento assenze e sostituzioni...'
               }
@@ -5040,7 +5060,20 @@
           var shouldBlockOnError = !hasReplacementLoadedModel_() || Boolean(replacementState.model && replacementState.model.date && replacementState.model.date !== targetDate);
           var settled = false;
           var watchdogId = 0;
+          var cacheKey = targetDate + '|editor:' + String(settings.includeEditorData !== false);
+          var cachedModel = !draft && !replacementState.dirty && !settings.forceRefresh && replacementState.modelCache
+            ? replacementState.modelCache[cacheKey]
+            : null;
           replacementState.date = targetDate;
+          if (cachedModel && cachedModel.expiresAt > Date.now()) {
+            applyReplacementModel_(cloneReplacementData_(cachedModel.model), {
+              keepDirty: false
+            });
+            setReplacementLoadState_('loaded', '', '');
+            setReplacementLoading_(false);
+            renderReplacementModal_();
+            return Promise.resolve(replacementState.model);
+          }
           setReplacementLoadState_('loading', '', noticeScope);
           if (window.console && typeof window.console.info === 'function') {
             window.console.info('[substitution] bootstrap load:start', {
@@ -5093,6 +5126,12 @@
             applyReplacementModel_(model, {
               keepDirty: Boolean(settings.keepDirty)
             });
+            if (!draft && !replacementState.dirty && replacementState.modelCache) {
+              replacementState.modelCache[cacheKey] = {
+                expiresAt: Date.now() + 60000,
+                model: cloneReplacementData_(model)
+              };
+            }
             if (settings.reloadTeacherDetail && replacementState.selectedTeacherEmail) {
               return loadReplacementTeacherDetail_(replacementState.selectedTeacherEmail, settings);
             }
@@ -5333,6 +5372,7 @@
               applyReplacementModel_(model, {
                 keepDirty: false
               });
+              replacementState.modelCache = {};
               setReplacementNotice_('Sostituzioni salvate con successo.', 'success');
               if (replacementState.selectedTeacherEmail) {
                 loadReplacementTeacherDetail_(replacementState.selectedTeacherEmail, {});
@@ -6844,6 +6884,7 @@
           confirmDiscardTripDraft: ensureCanDiscardReplacementTripDraft_,
           markDailyStale: function () {
             replacementState.dailyStale = true;
+            replacementState.modelCache = {};
           },
           hasUnsavedTripDraft: function () {
             return Boolean(replacementState.tripDirty);
@@ -7270,6 +7311,8 @@
         var reportsRoot = document.getElementById('substitution-reports-root');
         var absenceTeacherSelect = document.getElementById('substitution-absence-teacher');
         var absenceTypeSelect = document.getElementById('substitution-absence-type');
+        var absenceServiceScopeRow = document.getElementById('substitution-absence-service-scope-row');
+        var absenceServiceScopeInputs = Array.prototype.slice.call(document.querySelectorAll('[name="substitution-absence-service-scope"]'));
         var absenceModeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-absence-mode]'));
         var absenceMultiDayRow = document.getElementById('substitution-absence-multi-day-row');
         var absenceMultiDayInput = document.getElementById('substitution-absence-multi-day');
@@ -7279,6 +7322,7 @@
         var absenceEndLabel = document.getElementById('substitution-absence-end-label');
         var absenceEndDateInput = document.getElementById('substitution-absence-end-date');
         var absenceHoursSection = document.getElementById('substitution-absence-hours-section');
+        var absenceHoursMeta = document.getElementById('substitution-absence-hours-meta');
         var absenceHoursLoading = document.getElementById('substitution-absence-hours-loading');
         var absenceHoursEmpty = document.getElementById('substitution-absence-hours-empty');
         var absenceHoursGrid = document.getElementById('substitution-absence-hours-grid');
@@ -7359,6 +7403,7 @@
           periodsRequestToken: 0,
           loadPromise: null,
           loadKey: '',
+          modelCache: {},
           initialized: false,
           saving: false,
           status: 'idle',
@@ -8917,10 +8962,39 @@
         }
 
         function formatAbsenceTypeLabel_(value) {
-          if (String(value || '').toUpperCase() === 'HOURLY_PERMISSION') {
+          var normalized = String(value || '').toUpperCase();
+          if (normalized === 'HOURLY_PERMISSION') {
             return 'Permesso orario';
           }
+          if (normalized === 'SERVICE_OUT_OF_CLASS') {
+            return 'Servizio fuori aula';
+          }
           return 'Assenza giornaliera';
+        }
+
+        function getAbsenceServiceScope_() {
+          var selected = absenceServiceScopeInputs.filter(function (entry) {
+            return entry && entry.checked;
+          })[0] || null;
+          return selected && selected.value === 'HOURLY' ? 'HOURLY' : 'DAILY';
+        }
+
+        function setAbsenceServiceScope_(scope) {
+          var normalized = String(scope || 'DAILY').toUpperCase() === 'HOURLY' ? 'HOURLY' : 'DAILY';
+          absenceServiceScopeInputs.forEach(function (entry) {
+            if (entry) {
+              entry.checked = entry.value === normalized;
+            }
+          });
+        }
+
+        function isAbsenceTypeHourly_() {
+          var type = absenceTypeSelect ? String(absenceTypeSelect.value || '').toUpperCase() : 'DAILY';
+          return type === 'HOURLY_PERMISSION' || (type === 'SERVICE_OUT_OF_CLASS' && getAbsenceServiceScope_() === 'HOURLY');
+        }
+
+        function isAbsenceTypeServiceOut_() {
+          return Boolean(absenceTypeSelect && String(absenceTypeSelect.value || '').toUpperCase() === 'SERVICE_OUT_OF_CLASS');
         }
 
         function formatAbsencePeriods_(periods) {
@@ -8936,6 +9010,7 @@
             teacherName: row && row.teacherName ? row.teacherName : '',
             absenceMode: row && row.absenceMode ? row.absenceMode : 'DAY',
             absenceType: row && row.absenceType ? row.absenceType : 'DAILY',
+            serviceOutOfClassScope: row && row.serviceOutOfClassScope ? row.serviceOutOfClassScope : (row && row.absenceType === 'SERVICE_OUT_OF_CLASS' && row.hourlyPeriods && row.hourlyPeriods.length ? 'HOURLY' : 'DAILY'),
             startDate: row && row.startDate ? row.startDate : '',
             endDate: row && row.endDate ? row.endDate : '',
             hourlyPeriods: Array.isArray(row && row.hourlyPeriods) ? row.hourlyPeriods.slice() : [],
@@ -8994,6 +9069,8 @@
           [
             absenceTeacherSelect,
             absenceTypeSelect,
+            absenceServiceScopeInputs[0],
+            absenceServiceScopeInputs[1],
             absenceMultiDayInput,
             absenceStartDateInput,
             absenceEndDateInput,
@@ -9118,6 +9195,7 @@
           if (absenceTypeSelect) {
             absenceTypeSelect.value = 'DAILY';
           }
+          setAbsenceServiceScope_('DAILY');
           if (absenceMultiDayInput) {
             absenceMultiDayInput.checked = false;
           }
@@ -9174,7 +9252,8 @@
         }
 
         function renderAbsenceHours_() {
-          var isHourly = absenceTypeSelect && absenceTypeSelect.value === 'HOURLY_PERMISSION';
+          var isHourly = isAbsenceTypeHourly_();
+          var isServiceOut = isAbsenceTypeServiceOut_();
           var selectedMap = absenceState.selectedHourlyPeriods || {};
           if (!absenceHoursSection || !absenceHoursGrid || !absenceHoursEmpty || !absenceHoursLoading || !absenceRecoveryWrap) {
             return;
@@ -9189,6 +9268,11 @@
           }
           absenceHoursSection.style.display = 'block';
           absenceHoursGrid.innerHTML = '';
+          if (absenceHoursMeta) {
+            absenceHoursMeta.textContent = isServiceOut
+              ? 'Selezionare le ore di servizio fuori aula.'
+              : 'Selezionare le ore di permesso richieste.';
+          }
           absenceHoursLoading.style.display = absenceState.periodsLoading ? 'block' : 'none';
           if (absenceState.periodsLoading) {
             absenceHoursEmpty.style.display = 'none';
@@ -9215,15 +9299,15 @@
             input.checked = Boolean(selectedMap[entry.period]);
             content.textContent = entry.periodLabel;
             meta.className = 'substitution-absence-hour-chip-meta';
-            meta.textContent = entry.classCode || '';
+            meta.textContent = entry.label || entry.classCode || '';
             label.appendChild(input);
             label.appendChild(content);
-            if (entry.classCode) {
+            if (entry.label || entry.classCode) {
               label.appendChild(meta);
             }
             absenceHoursGrid.appendChild(label);
           });
-          absenceRecoveryWrap.style.display = 'block';
+          absenceRecoveryWrap.style.display = isServiceOut ? 'none' : 'block';
         }
 
         function refreshAbsenceTeacherPeriods_(preserveSelection) {
@@ -9232,7 +9316,7 @@
           var cacheKey;
           var cachedPeriods;
           var requestToken;
-          if (!absenceTypeSelect || absenceTypeSelect.value !== 'HOURLY_PERMISSION') {
+          if (!absenceTypeSelect || !isAbsenceTypeHourly_()) {
             clearAbsenceHourSelections_();
             return;
           }
@@ -9289,10 +9373,17 @@
         }
 
         function updateAbsenceFormLayout_() {
-          var isHourly = absenceTypeSelect && absenceTypeSelect.value === 'HOURLY_PERMISSION';
+          var isServiceOut = isAbsenceTypeServiceOut_();
+          var isHourly = isAbsenceTypeHourly_();
           var isDayMode = absenceState.mode === 'DAY';
           var showMultiDay = !isDayMode && !isHourly;
           var isMultiDay = showMultiDay && absenceMultiDayInput && absenceMultiDayInput.checked;
+          if (absenceServiceScopeRow) {
+            absenceServiceScopeRow.style.display = isServiceOut ? 'flex' : 'none';
+          }
+          if (!isServiceOut) {
+            setAbsenceServiceScope_('DAILY');
+          }
           if (absenceMultiDayRow) {
             absenceMultiDayRow.style.display = showMultiDay ? 'block' : 'none';
           }
@@ -9335,11 +9426,12 @@
             teacherEmail: absenceTeacherSelect ? absenceTeacherSelect.value : '',
             teacherName: getAbsenceTeacherName_(absenceTeacherSelect ? absenceTeacherSelect.value : ''),
             absenceType: absenceTypeSelect ? absenceTypeSelect.value : 'DAILY',
+            serviceOutOfClassScope: isAbsenceTypeServiceOut_() ? getAbsenceServiceScope_() : '',
             isMultiDay: absenceState.mode === 'PLANNED' && absenceMultiDayInput ? absenceMultiDayInput.checked : false,
             startDate: absenceState.mode === 'DAY' ? getAbsenceDefaultDate_() : (absenceStartDateInput ? absenceStartDateInput.value : ''),
             endDate: absenceEndDateInput ? absenceEndDateInput.value : '',
-            hourlyPeriods: getSelectedHourlyPeriods_(),
-            recoveryRequired: absenceRecoveryRequiredInput ? absenceRecoveryRequiredInput.checked : false,
+            hourlyPeriods: isAbsenceTypeHourly_() ? getSelectedHourlyPeriods_() : [],
+            recoveryRequired: absenceTypeSelect && absenceTypeSelect.value === 'HOURLY_PERMISSION' && absenceRecoveryRequiredInput ? absenceRecoveryRequiredInput.checked : false,
             notes: absenceNotesInput ? absenceNotesInput.value : ''
           };
         }
@@ -9350,8 +9442,12 @@
             setAbsenceNotice_('Seleziona docente e data prima di aggiungere l\'assenza.', 'error');
             return;
           }
-          if (payload.absenceType === 'HOURLY_PERMISSION' && !payload.hourlyPeriods.length) {
-            setAbsenceNotice_('Seleziona almeno un\'ora di permesso orario.', 'error');
+          if ((payload.absenceType === 'HOURLY_PERMISSION' ||
+              (payload.absenceType === 'SERVICE_OUT_OF_CLASS' && payload.serviceOutOfClassScope === 'HOURLY')) &&
+              !payload.hourlyPeriods.length) {
+            setAbsenceNotice_(payload.absenceType === 'SERVICE_OUT_OF_CLASS'
+              ? 'Seleziona almeno un\'ora di servizio fuori aula.'
+              : 'Seleziona almeno un\'ora di permesso orario.', 'error');
             return;
           }
           absenceState.draftRows = absenceState.draftRows.filter(function (row) {
@@ -9389,6 +9485,7 @@
           ROOMS_UI.call('saveReplacementAbsenceRegistry', absenceState.draftRows, getAbsenceDefaultDate_())
             .then(function (result) {
               applyAbsenceModel_(result);
+              absenceState.modelCache = {};
               clearAbsenceForm_(true);
               if (window.ROOMS_SUBSTITUTION_WORKBENCH && typeof window.ROOMS_SUBSTITUTION_WORKBENCH.markDailyStale === 'function') {
                 window.ROOMS_SUBSTITUTION_WORKBENCH.markDailyStale();
@@ -9423,8 +9520,11 @@
           if (absenceTypeSelect) {
             absenceTypeSelect.value = row.absenceType || 'DAILY';
           }
+          setAbsenceServiceScope_(row.serviceOutOfClassScope || (row.absenceType === 'SERVICE_OUT_OF_CLASS' && row.hourlyPeriods && row.hourlyPeriods.length ? 'HOURLY' : 'DAILY'));
           if (absenceMultiDayInput) {
-            absenceMultiDayInput.checked = Boolean(row.endDate && row.endDate !== row.startDate && row.absenceType === 'DAILY' && row.absenceMode === 'PLANNED');
+            absenceMultiDayInput.checked = Boolean(row.endDate && row.endDate !== row.startDate &&
+              (row.absenceType === 'DAILY' || (row.absenceType === 'SERVICE_OUT_OF_CLASS' && (row.serviceOutOfClassScope || 'DAILY') === 'DAILY')) &&
+              row.absenceMode === 'PLANNED');
           }
           if (absenceStartDateInput) {
             absenceStartDateInput.value = row.startDate || getAbsenceDefaultDate_() || '';
@@ -9500,7 +9600,7 @@
               '<td>' + escapeAbsenceHtml_(row.teacherName) + '</td>' +
               '<td>' + escapeAbsenceHtml_(formatAbsenceTypeLabel_(row.absenceType)) + '</td>' +
               '<td>' + escapeAbsenceHtml_(formatAbsenceRange_(row)) + '</td>' +
-              '<td>' + escapeAbsenceHtml_(row.absenceType === 'HOURLY_PERMISSION' ? (formatAbsencePeriods_(row.hourlyPeriods) || '-') : '-') + '</td>' +
+              '<td>' + escapeAbsenceHtml_((row.absenceType === 'HOURLY_PERMISSION' || (row.absenceType === 'SERVICE_OUT_OF_CLASS' && row.serviceOutOfClassScope === 'HOURLY')) ? (formatAbsencePeriods_(row.hourlyPeriods) || '-') : '-') + '</td>' +
               '<td>' + escapeAbsenceHtml_(row.absenceType === 'HOURLY_PERMISSION' ? (row.recoveryRequired ? 'Da recuperare' : 'No') : '-') + '</td>' +
               '<td>' + escapeAbsenceHtml_(row.notes || '-') + '</td>';
             actions.appendChild(editButton);
@@ -9526,8 +9626,13 @@
 
         function loadAbsenceRegistry_(referenceDate) {
           var targetDate = referenceDate || '';
+          var cachedModel = absenceState.modelCache ? absenceState.modelCache[targetDate] : null;
           if (absenceState.loadPromise && absenceState.loadKey === targetDate) {
             return absenceState.loadPromise;
+          }
+          if (cachedModel && cachedModel.expiresAt > Date.now()) {
+            applyAbsenceModel_(cloneReplacementData_(cachedModel.model));
+            return Promise.resolve(absenceState.model);
           }
           setAbsenceViewState_('loading', 'Caricamento archivio assenze...');
           setAbsenceNotice_('Caricamento archivio assenze...', '');
@@ -9535,6 +9640,12 @@
           absenceState.loadPromise = ROOMS_UI.call('getReplacementAbsenceRegistryModel', targetDate)
             .then(function (result) {
               applyAbsenceModel_(result);
+              if (absenceState.modelCache) {
+                absenceState.modelCache[targetDate] = {
+                  expiresAt: Date.now() + 60000,
+                  model: cloneReplacementData_(result)
+                };
+              }
               if (result && result.dateState && result.dateState.message) {
                 setAbsenceNotice_(result.dateState.message, result.dateState.autoShifted ? 'warn' : '');
               } else {
@@ -9709,12 +9820,17 @@
         if (absenceTypeSelect) {
           absenceTypeSelect.addEventListener('change', updateAbsenceFormLayout_);
         }
+        absenceServiceScopeInputs.forEach(function (input) {
+          if (input) {
+            input.addEventListener('change', updateAbsenceFormLayout_);
+          }
+        });
         if (absenceMultiDayInput) {
           absenceMultiDayInput.addEventListener('change', updateAbsenceFormLayout_);
         }
         if (absenceTeacherSelect) {
           absenceTeacherSelect.addEventListener('change', function () {
-            if (absenceTypeSelect && absenceTypeSelect.value === 'HOURLY_PERMISSION') {
+            if (absenceTypeSelect && isAbsenceTypeHourly_()) {
               absenceState.selectedHourlyPeriods = {};
               refreshAbsenceTeacherPeriods_(false);
             }
@@ -9722,7 +9838,7 @@
         }
         if (absenceStartDateInput) {
           absenceStartDateInput.addEventListener('change', function () {
-            if (absenceTypeSelect && absenceTypeSelect.value === 'HOURLY_PERMISSION') {
+            if (absenceTypeSelect && isAbsenceTypeHourly_()) {
               absenceState.selectedHourlyPeriods = {};
               refreshAbsenceTeacherPeriods_(false);
             }
