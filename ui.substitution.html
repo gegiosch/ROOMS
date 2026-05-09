@@ -3314,7 +3314,9 @@
         }
 
         function getReplacementManagedTeachers_() {
-          return safeArray(replacementState.localTeachers).filter(function (teacher) {
+          var teacherMap = {};
+          var visibleMap = {};
+          var managed = safeArray(replacementState.localTeachers).filter(function (teacher) {
             var managedType = getReplacementManagedTeacherType_(teacher);
             if (!managedType) {
               return false;
@@ -3327,7 +3329,50 @@
               return false;
             }
             return true;
-          }).sort(function (left, right) {
+          });
+          safeArray(replacementState.localTeachers).forEach(function (teacher) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+            if (teacherEmail) {
+              teacherMap[teacherEmail] = teacher;
+            }
+          });
+          managed.forEach(function (teacher) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
+            if (teacherEmail) {
+              visibleMap[teacherEmail] = true;
+            }
+          });
+          safeArray(replacementState.localAssignments).forEach(function (assignment) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(assignment && assignment.originalTeacherEmail);
+            var originalStatus = String(assignment && assignment.originalStatus || '');
+            var teacher;
+            if (!teacherEmail || visibleMap[teacherEmail]) {
+              return;
+            }
+            if (originalStatus !== 'SERVICE_OUT_OF_CLASS' && originalStatus !== 'HOURLY_ABSENCE') {
+              return;
+            }
+            teacher = teacherMap[teacherEmail] || {
+              teacherEmail: teacherEmail,
+              teacherName: assignment.originalTeacherName || teacherEmail,
+              periods: {},
+              absent: false,
+              hourlyPermission: false,
+              accompanist: false,
+              accompaniedClasses: [],
+              supportTeacher: false,
+              serviceOutOfClass: false,
+              notes: ''
+            };
+            teacher = Object.assign({}, teacher, {
+              hourlyPermission: originalStatus === 'HOURLY_ABSENCE' || Boolean(teacher.hourlyPermission),
+              serviceOutOfClass: originalStatus === 'SERVICE_OUT_OF_CLASS' || Boolean(teacher.serviceOutOfClass)
+            });
+            managed.push(teacher);
+            teacherMap[teacherEmail] = teacher;
+            visibleMap[teacherEmail] = true;
+          });
+          return managed.sort(function (left, right) {
             return String(left.teacherName || '').localeCompare(String(right.teacherName || ''));
           });
         }
