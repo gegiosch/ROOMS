@@ -9003,6 +9003,17 @@
           }).join(', ');
         }
 
+        function cloneAbsenceData_(value) {
+          if (value == null) {
+            return null;
+          }
+          try {
+            return JSON.parse(JSON.stringify(value));
+          } catch (error) {
+            return null;
+          }
+        }
+
         function cloneAbsenceRow_(row) {
           return {
             absenceId: row && row.absenceId ? row.absenceId : '',
@@ -9631,7 +9642,7 @@
             return absenceState.loadPromise;
           }
           if (cachedModel && cachedModel.expiresAt > Date.now()) {
-            applyAbsenceModel_(cloneReplacementData_(cachedModel.model));
+            applyAbsenceModel_(cloneAbsenceData_(cachedModel.model));
             return Promise.resolve(absenceState.model);
           }
           setAbsenceViewState_('loading', 'Caricamento archivio assenze...');
@@ -9643,7 +9654,7 @@
               if (absenceState.modelCache) {
                 absenceState.modelCache[targetDate] = {
                   expiresAt: Date.now() + 60000,
-                  model: cloneReplacementData_(result)
+                  model: cloneAbsenceData_(result)
                 };
               }
               if (result && result.dateState && result.dateState.message) {
