@@ -9484,6 +9484,22 @@
             });
         }
 
+        function scrollAbsenceEditFormIntoView_() {
+          var target = absenceFormBody && absenceFormBody.closest
+            ? absenceFormBody.closest('.panel.form-card')
+            : absenceFormBody;
+          if (!target || typeof target.scrollIntoView !== 'function') {
+            return;
+          }
+          target.style.scrollMarginTop = '96px';
+          window.requestAnimationFrame(function () {
+            target.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          });
+        }
+
         function editAbsenceRow_(absenceId) {
           var row = absenceState.draftRows.find(function (entry) {
             return entry.absenceId === absenceId;
@@ -9523,6 +9539,7 @@
           });
           absenceState.selectedHourlyPeriods = selectedMap;
           updateAbsenceFormLayout_();
+          scrollAbsenceEditFormIntoView_();
         }
 
         function removeAbsenceRow_(absenceId) {
