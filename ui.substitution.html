@@ -9177,6 +9177,19 @@
           updateAbsenceFormLayout_();
         }
 
+        function getAbsenceSchoolPeriods_() {
+          return [
+            { period: '1', periodLabel: '1a ora', label: '08:00-09:00' },
+            { period: '2', periodLabel: '2a ora', label: '09:00-10:00' },
+            { period: '3', periodLabel: '3a ora', label: '10:00-11:00' },
+            { period: '4', periodLabel: '4a ora', label: '11:00-12:00' },
+            { period: '5', periodLabel: '5a ora', label: '12:00-13:00' },
+            { period: '6', periodLabel: '6a ora', label: '13:00-14:00' },
+            { period: '7', periodLabel: '7a ora', label: '14:00-15:00' },
+            { period: '8', periodLabel: '8a ora', label: '15:00-16:00' }
+          ];
+        }
+
         function getSelectedHourlyPeriods_() {
           return Array.prototype.slice.call(document.querySelectorAll('[data-absence-hour-period]')).filter(function (input) {
             return input.checked;
@@ -9322,11 +9335,6 @@
         }
 
         function refreshAbsenceTeacherPeriods_(preserveSelection) {
-          var teacherEmail = absenceTeacherSelect ? absenceTeacherSelect.value : '';
-          var targetDate = absenceStartDateInput ? absenceStartDateInput.value : '';
-          var cacheKey;
-          var cachedPeriods;
-          var requestToken;
           if (!absenceTypeSelect || !isAbsenceTypeHourly_()) {
             clearAbsenceHourSelections_();
             return;
@@ -9337,50 +9345,11 @@
               map[period] = true;
               return map;
             }, {});
-          if (!teacherEmail || !targetDate) {
-            clearAbsenceHourSelections_();
-            return;
-          }
-          cacheKey = teacherEmail + '|' + targetDate;
-          cachedPeriods = absenceState.periodCache[cacheKey];
-          if (cachedPeriods) {
-            absenceState.teacherPeriods = cachedPeriods.map(function (entry) {
-              return Object.assign({}, entry);
-            });
-            absenceState.periodsLoading = false;
-            renderAbsenceHours_();
-            return;
-          }
-          requestToken = Date.now();
-          absenceState.periodsRequestToken = requestToken;
-          absenceState.periodsLoading = true;
+          absenceState.teacherPeriods = getAbsenceSchoolPeriods_();
+          absenceState.periodsLoading = false;
+          absenceState.periodsRequestToken += 1;
+          setAbsenceNotice_('', '');
           renderAbsenceHours_();
-          ROOMS_UI.call('getReplacementAbsenceTeacherPeriods', teacherEmail, targetDate)
-            .then(function (result) {
-              if (absenceState.periodsRequestToken !== requestToken) {
-                return;
-              }
-              absenceState.teacherPeriods = (result && result.periods) || [];
-              absenceState.periodCache[cacheKey] = absenceState.teacherPeriods.map(function (entry) {
-                return Object.assign({}, entry);
-              });
-              absenceState.periodsLoading = false;
-              if (result && result.dateState && result.dateState.isValid === false) {
-                setAbsenceNotice_(result.dateState.message || 'Data non valida per il permesso orario.', 'error');
-              } else {
-                setAbsenceNotice_('', '');
-              }
-              renderAbsenceHours_();
-            })
-            .catch(function (error) {
-              if (absenceState.periodsRequestToken !== requestToken) {
-                return;
-              }
-              absenceState.teacherPeriods = [];
-              absenceState.periodsLoading = false;
-              renderAbsenceHours_();
-              setAbsenceNotice_('Errore caricamento ore docente: ' + (error && error.message ? error.message : 'errore imprevisto'), 'error');
-            });
         }
 
         function updateAbsenceFormLayout_() {

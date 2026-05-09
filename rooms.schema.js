@@ -65,6 +65,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.REPL_DAILY_CACHE] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_RECIPIENTS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_LOG] = true;
     sheets[ROOMS_APP.SHEET_NAMES.REPORT_ARCHIVE] = true;
@@ -91,6 +92,7 @@ ROOMS_APP.Schema = {
     this.ensureReplacementHourlyAbsences();
     this.ensureReplacementAssignments();
     this.ensureReplacementLongAssignments();
+    this.ensureReplacementDailyCache();
     this.ensureReportRecipients();
     this.ensureReportLog();
     this.ensureReportArchive();
@@ -434,6 +436,21 @@ ROOMS_APP.Schema = {
       'Notes',
       'UpdatedAtISO',
       'UpdatedBy'
+    ]);
+  },
+
+  ensureReplacementDailyCache: function () {
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_DAILY_CACHE, [
+      'Date',
+      'CacheKey',
+      'ChunkIndex',
+      'ChunkCount',
+      'PayloadJson',
+      'Status',
+      'SourceHash',
+      'UpdatedAtISO',
+      'UpdatedBy',
+      'Notes'
     ]);
   },
 

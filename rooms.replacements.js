@@ -53,6 +53,7 @@ ROOMS_APP.Replacements = {
     ROOMS_APP.Schema.ensureReplacementHourlyAbsences();
     ROOMS_APP.Schema.ensureReplacementAssignments();
     ROOMS_APP.Schema.ensureReplacementLongAssignments();
+    ROOMS_APP.Schema.ensureReplacementDailyCache();
     ROOMS_APP.Schema.ensureReportRecipients();
     ROOMS_APP.Schema.ensureReportLog();
     ROOMS_APP.Schema.ensureReportArchive();
@@ -111,7 +112,9 @@ ROOMS_APP.Replacements = {
       throw new Error(dateState.message || 'Data non valida.');
     }
 
-    var context = this.buildDayContext_(dateState.selectedDate);
+    var context = this.buildDayContext_(dateState.selectedDate, {
+      includeEditorData: false
+    });
     var normalized = this.normalizeDraft_(dateState.selectedDate, draft, context);
     var teacherKey = this.normalizeTeacherEmail_(teacherEmail);
     var teacher = normalized.teacherMap[teacherKey];
@@ -243,6 +246,11 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       normalizedRows
     );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      dateState.selectedDate,
+      this.collectAbsenceCacheDates_(persistedRows.concat(candidateRows), dateState.selectedDate),
+      'ABSENCE_REGISTRY_SAVE'
+    );
     return this.getAbsenceRegistryModel(dateState.selectedDate);
   },
 
@@ -252,6 +260,7 @@ ROOMS_APP.Replacements = {
     var candidate;
     var rows;
     var replaced = false;
+    var previousRow = null;
     var nextRows;
     this.ensureSchema_();
     candidate = this.normalizeAbsencePayload_(payload || {});
@@ -262,6 +271,7 @@ ROOMS_APP.Replacements = {
         return row;
       }
       replaced = true;
+      previousRow = ROOMS_APP.Replacements.readAbsenceRow_(row);
       return {
         AbsenceId: candidate.absenceId,
         TeacherEmail: candidate.teacherEmail,
@@ -306,6 +316,11 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       nextRows
     );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      candidate.startDate,
+      this.collectAbsenceCacheDates_(previousRow ? [previousRow, candidate] : [candidate], candidate.startDate),
+      'ABSENCE_SAVE'
+    );
     return this.getAbsenceRegistryModel(candidate.startDate);
   },
 
@@ -314,10 +329,12 @@ ROOMS_APP.Replacements = {
     this.ensureSchema_();
     var normalizedAbsenceId = ROOMS_APP.normalizeString(absenceId);
     var removed = false;
+    var removedRows = [];
     var nextRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES).filter(function (row) {
       var keep = ROOMS_APP.normalizeString(row.AbsenceId) !== normalizedAbsenceId;
       if (!keep) {
         removed = true;
+        removedRows.push(ROOMS_APP.Replacements.readAbsenceRow_(row));
       }
       return keep;
     });
@@ -328,6 +345,11 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.SHEET_NAMES.REPL_ABSENCES,
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       nextRows
+    );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      removedRows[0] && removedRows[0].startDate,
+      this.collectAbsenceCacheDates_(removedRows, removedRows[0] && removedRows[0].startDate),
+      'ABSENCE_DELETE'
     );
     return this.getAbsenceRegistryModel('');
   },
@@ -340,7 +362,9 @@ ROOMS_APP.Replacements = {
       throw new Error(dateState.message || 'Data non valida.');
     }
 
-    var context = this.buildDayContext_(dateState.selectedDate);
+    var context = this.buildDayContext_(dateState.selectedDate, {
+      includeEditorData: false
+    });
     var normalized = this.normalizeDraft_(dateState.selectedDate, draft, context);
     return this.buildReportPayload_(normalized, context.recipients, this.validateDraft_(normalized));
   },
@@ -354,7 +378,9 @@ ROOMS_APP.Replacements = {
     }
 
     var targetDate = dateState.selectedDate;
-    var context = this.buildDayContext_(targetDate);
+    var context = this.buildDayContext_(targetDate, {
+      includeEditorData: false
+    });
     var normalized = this.normalizeDraft_(targetDate, draft, context);
     var validationErrors = this.validateDraft_(normalized);
     var savedPreviewPayload;
@@ -428,6 +454,7 @@ ROOMS_APP.Replacements = {
     this.replaceDateRows_(ROOMS_APP.SHEET_NAMES.REPL_DAY_TEACHERS, targetDate, teacherRows);
     this.saveHourlyAbsenceRows_(targetDate, normalized, nowIso, updatedBy);
     this.replaceDateRows_(ROOMS_APP.SHEET_NAMES.REPL_ASSIGNMENTS, targetDate, assignmentRows);
+    this.prepareDailyContextCacheAfterSourceChange_(targetDate, [targetDate], 'REPLACEMENT_DAY_SAVE');
 
     return {
       ok: true,
@@ -441,7 +468,9 @@ ROOMS_APP.Replacements = {
     var actor = ROOMS_APP.Auth.requireCanManageReplacement();
     this.ensureSchema_();
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
-    var context = this.buildDayContext_(targetDate);
+    var context = this.buildDayContext_(targetDate, {
+      includeEditorData: false
+    });
     var recipients = context.recipients;
     if (!recipients.to.length) {
       throw new Error('Nessun destinatario TO configurato per il report sostituzioni.');
@@ -526,12 +555,14 @@ ROOMS_APP.Replacements = {
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var updatedBy = actor.email;
     var replaced = false;
+    var previousRow = null;
 
     this.validateLongAssignment_(normalized, rows, normalized.matchKey);
 
     var nextRows = rows.map(function (row) {
       if (normalized.matchKey && ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row) === normalized.matchKey) {
         replaced = true;
+        previousRow = row;
         return {
           Enabled: normalized.enabled ? 'TRUE' : 'FALSE',
           OriginalTeacherEmail: normalized.originalTeacherEmail,
@@ -571,6 +602,15 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS,
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS),
       nextRows
+    );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      referenceDate || normalized.startDate,
+      this.collectDateRangeCacheDates_(normalized.startDate, normalized.endDate, referenceDate || normalized.startDate).concat(
+        previousRow
+          ? this.collectDateRangeCacheDates_(previousRow.StartDate, previousRow.EndDate, referenceDate || normalized.startDate)
+          : []
+      ),
+      'LONG_ASSIGNMENT_SAVE'
     );
 
     return {
@@ -625,6 +665,11 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS),
       nextRows
     );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      referenceDate || ROOMS_APP.toIsoDate(new Date()),
+      this.collectDateRangeCacheDates_(targetRow.StartDate, targetRow.EndDate, referenceDate || ROOMS_APP.toIsoDate(new Date())),
+      'LONG_ASSIGNMENT_TOGGLE'
+    );
 
     return {
       ok: true,
@@ -638,10 +683,12 @@ ROOMS_APP.Replacements = {
     ROOMS_APP.Auth.requireCanManageReplacement();
     this.ensureSchema_();
     var removed = false;
+    var removedRow = null;
     var nextRows = this.listLongAssignmentRows_().filter(function (row) {
       var keep = ROOMS_APP.Replacements.buildLongAssignmentMatchKey_(row) !== ROOMS_APP.normalizeString(matchKey);
       if (!keep) {
         removed = true;
+        removedRow = row;
       }
       return keep;
     });
@@ -654,6 +701,15 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS,
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_LONG_ASSIGNMENTS),
       nextRows
+    );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      referenceDate || ROOMS_APP.toIsoDate(new Date()),
+      this.collectDateRangeCacheDates_(
+        removedRow && removedRow.StartDate,
+        removedRow && removedRow.EndDate,
+        referenceDate || ROOMS_APP.toIsoDate(new Date())
+      ),
+      'LONG_ASSIGNMENT_DELETE'
     );
 
     return {
@@ -722,7 +778,9 @@ ROOMS_APP.Replacements = {
     var normalizedTrips = [];
     var seenTripIds = {};
     var persistenceRows;
+    var previousTrips;
     this.ensureSchema_();
+    previousTrips = this.listEducationalTrips_();
 
     normalizedTrips = (entries || []).map(function (entry) {
       var normalized = self.normalizeEducationalTripPayload_(entry || {});
@@ -747,6 +805,11 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIP_TEACHERS,
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIP_TEACHERS),
       persistenceRows.tripTeacherRows
+    );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      referenceDate || (normalizedTrips[0] && normalizedTrips[0].startDate) || ROOMS_APP.toIsoDate(new Date()),
+      this.collectTripCacheDates_(previousTrips.concat(normalizedTrips), referenceDate),
+      'FIELD_TRIP_REGISTRY_SAVE'
     );
     return {
       ok: true,
@@ -942,6 +1005,12 @@ ROOMS_APP.Replacements = {
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var settings = options && typeof options === 'object' ? options : {};
     var includeEditorData = settings.includeEditorData !== false;
+    var cachedContext = !includeEditorData && settings.useDailyCache !== false
+      ? this.readDailyContextCache_(targetDate)
+      : null;
+    if (cachedContext) {
+      return cachedContext;
+    }
     var activeLongAssignments = this.getActiveLongAssignmentsForDate_(targetDate);
     var activeLongAssignmentMap = this.getActiveLongAssignmentsForDate_(targetDate, true);
     var baseTeachers = this.buildTeacherDayTeachers_(targetDate);
@@ -1163,7 +1232,7 @@ ROOMS_APP.Replacements = {
       })
     };
 
-    return {
+    var context = {
       date: targetDate,
       classes: classes,
       teachers: teachers,
@@ -1192,6 +1261,10 @@ ROOMS_APP.Replacements = {
       pendingRecoveryRows: pendingRecoveryRows,
       editorDataLoaded: includeEditorData
     };
+    if (!includeEditorData && settings.writeDailyCache !== false && settings.useDailyCache !== false) {
+      this.writeDailyContextCache_(targetDate, context, 'REBUILT_ON_DEMAND');
+    }
+    return context;
   },
 
   normalizeDraft_: function (dateString, draft, context) {
@@ -3600,12 +3673,230 @@ ROOMS_APP.Replacements = {
     return latest;
   },
 
+  prepareDailyContextCacheAfterSourceChange_: function (primaryDate, affectedDates, notes) {
+    var targetDate = ROOMS_APP.toIsoDate(primaryDate);
+    var dateMap = {};
+    var dateList;
+    (affectedDates || []).forEach(function (dateValue) {
+      var dateKey = ROOMS_APP.toIsoDate(dateValue);
+      if (dateKey) {
+        dateMap[dateKey] = true;
+      }
+    });
+    if (targetDate) {
+      dateMap[targetDate] = true;
+    }
+    dateList = Object.keys(dateMap).sort();
+    if (!dateList.length) {
+      return null;
+    }
+    try {
+      dateList.forEach(function (dateKey) {
+        ROOMS_APP.Replacements.invalidateDailyContextCache_(dateKey, notes || 'SOURCE_CHANGED');
+      });
+      if (targetDate) {
+        return this.refreshDailyContextCache_(targetDate, notes || 'SOURCE_CHANGED');
+      }
+    } catch (error) {
+      if (targetDate) {
+        this.invalidateDailyContextCache_(targetDate, (notes || 'SOURCE_CHANGED') + ': ' + (error && error.message ? error.message : error));
+      }
+    }
+    return null;
+  },
+
+  collectDateRangeCacheDates_: function (startDate, endDate, fallbackDate) {
+    var start = ROOMS_APP.toIsoDate(startDate || fallbackDate);
+    var end = ROOMS_APP.toIsoDate(endDate || start);
+    var dates = {};
+    var cursor;
+    var guard = 0;
+    if (!start) {
+      return [];
+    }
+    if (!end || end < start) {
+      end = start;
+    }
+    cursor = new Date(start + 'T00:00:00Z');
+    while (ROOMS_APP.toIsoDate(cursor) <= end && guard < 370) {
+      dates[ROOMS_APP.toIsoDate(cursor)] = true;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      guard += 1;
+    }
+    return Object.keys(dates).sort();
+  },
+
+  collectAbsenceCacheDates_: function (rows, fallbackDate) {
+    var dateMap = {};
+    var self = this;
+    (rows || []).forEach(function (row) {
+      self.collectDateRangeCacheDates_(
+        row && (row.startDate || row.StartDate),
+        row && (row.endDate || row.EndDate),
+        fallbackDate
+      ).forEach(function (dateKey) {
+        dateMap[dateKey] = true;
+      });
+    });
+    if (fallbackDate) {
+      dateMap[ROOMS_APP.toIsoDate(fallbackDate)] = true;
+    }
+    return Object.keys(dateMap).filter(Boolean).sort();
+  },
+
+  collectTripCacheDates_: function (trips, fallbackDate) {
+    var dateMap = {};
+    var self = this;
+    (trips || []).forEach(function (trip) {
+      self.collectDateRangeCacheDates_(trip.startDate, trip.endDate, fallbackDate).forEach(function (dateKey) {
+        dateMap[dateKey] = true;
+      });
+    });
+    if (fallbackDate) {
+      dateMap[ROOMS_APP.toIsoDate(fallbackDate)] = true;
+    }
+    return Object.keys(dateMap).filter(Boolean).sort();
+  },
+
   getReplacementRequestCacheBucket_: function () {
     if (!ROOMS_APP.DB_REQUEST_CACHE_) {
       return null;
     }
     ROOMS_APP.DB_REQUEST_CACHE_.replacements = ROOMS_APP.DB_REQUEST_CACHE_.replacements || {};
     return ROOMS_APP.DB_REQUEST_CACHE_.replacements;
+  },
+
+  DAILY_CONTEXT_CACHE_KEY_: 'DAY_CONTEXT',
+  DAILY_CONTEXT_CACHE_CHUNK_SIZE_: 40000,
+
+  readDailyContextCache_: function (dateString) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var cacheKey = this.DAILY_CONTEXT_CACHE_KEY_;
+    var rows;
+    var chunks;
+    var payload;
+    if (!targetDate) {
+      return null;
+    }
+    rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPL_DAILY_CACHE).filter(function (row) {
+      return ROOMS_APP.toIsoDate(row.Date) === targetDate &&
+        ROOMS_APP.normalizeString(row.CacheKey) === cacheKey &&
+        ROOMS_APP.normalizeString(row.Status).toUpperCase() === 'READY';
+    });
+    if (!rows.length) {
+      return null;
+    }
+    chunks = rows.sort(function (left, right) {
+      return Number(left.ChunkIndex || 0) - Number(right.ChunkIndex || 0);
+    });
+    if (Number(chunks[0].ChunkCount || 0) !== chunks.length) {
+      return null;
+    }
+    payload = chunks.map(function (row) {
+      return String(row.PayloadJson || '');
+    }).join('');
+    try {
+      return JSON.parse(payload);
+    } catch (error) {
+      return null;
+    }
+  },
+
+  writeDailyContextCache_: function (dateString, context, notes) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var payload = JSON.stringify(context || {});
+    var chunkSize = this.DAILY_CONTEXT_CACHE_CHUNK_SIZE_;
+    var chunkCount = Math.max(1, Math.ceil(payload.length / chunkSize));
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    var actorEmail = '';
+    var sourceHash;
+    var rows = [];
+    var index;
+    try {
+      actorEmail = ROOMS_APP.Auth.getEffectiveUser().email || '';
+    } catch (error) {
+      actorEmail = '';
+    }
+    if (!targetDate) {
+      return;
+    }
+    sourceHash = this.computeDailyContextSourceHash_(context);
+    for (index = 0; index < chunkCount; index += 1) {
+      rows.push({
+        Date: targetDate,
+        CacheKey: this.DAILY_CONTEXT_CACHE_KEY_,
+        ChunkIndex: String(index),
+        ChunkCount: String(chunkCount),
+        PayloadJson: payload.slice(index * chunkSize, (index + 1) * chunkSize),
+        Status: 'READY',
+        SourceHash: sourceHash,
+        UpdatedAtISO: nowIso,
+        UpdatedBy: actorEmail,
+        Notes: ROOMS_APP.normalizeString(notes)
+      });
+    }
+    this.replaceDailyContextCacheRows_(targetDate, rows);
+  },
+
+  invalidateDailyContextCache_: function (dateString, notes) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var nowIso = ROOMS_APP.toIsoDateTime(new Date());
+    if (!targetDate) {
+      return;
+    }
+    this.replaceDailyContextCacheRows_(targetDate, [{
+      Date: targetDate,
+      CacheKey: this.DAILY_CONTEXT_CACHE_KEY_,
+      ChunkIndex: '0',
+      ChunkCount: '1',
+      PayloadJson: '',
+      Status: 'DIRTY',
+      SourceHash: '',
+      UpdatedAtISO: nowIso,
+      UpdatedBy: '',
+      Notes: ROOMS_APP.normalizeString(notes)
+    }]);
+  },
+
+  refreshDailyContextCache_: function (dateString, notes) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var context;
+    if (!targetDate) {
+      return null;
+    }
+    context = this.buildDayContext_(targetDate, {
+      includeEditorData: false,
+      useDailyCache: false,
+      writeDailyCache: false
+    });
+    this.writeDailyContextCache_(targetDate, context, notes || 'REFRESHED');
+    return context;
+  },
+
+  replaceDailyContextCacheRows_: function (targetDate, replacementRows) {
+    var sheetName = ROOMS_APP.SHEET_NAMES.REPL_DAILY_CACHE;
+    var headers = ROOMS_APP.DB.getHeaders(sheetName);
+    var cacheKey = this.DAILY_CONTEXT_CACHE_KEY_;
+    var keepRows = ROOMS_APP.DB.readRows(sheetName).filter(function (row) {
+      return !(ROOMS_APP.toIsoDate(row.Date) === targetDate &&
+        ROOMS_APP.normalizeString(row.CacheKey) === cacheKey);
+    });
+    ROOMS_APP.DB.replaceRows(sheetName, headers, keepRows.concat(replacementRows || []));
+  },
+
+  computeDailyContextSourceHash_: function (context) {
+    var source = {
+      savedAtISO: context && context.savedAtISO || '',
+      reportStatus: context && context.reportStatus || {},
+      absenceRegistry: context && context.absenceRegistryState && context.absenceRegistryState.sourceRows || [],
+      trips: (context && context.tripDayState && context.tripDayState.sourceRows || []).concat(
+        context && context.tripDayState && context.tripDayState.sourceTeacherRows || []
+      )
+    };
+    return Utilities.base64EncodeWebSafe(Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      JSON.stringify(source)
+    ));
   },
 
   getDocentiTimetableSnapshot_: function () {
@@ -3817,8 +4108,7 @@ ROOMS_APP.Replacements = {
   },
 
   validateAbsenceCandidate_: function (candidate) {
-    var availablePeriods;
-    var availablePeriodMap = {};
+    var periodMap;
     if (!candidate.teacherEmail || !candidate.teacherName) {
       throw new Error('Selezionare un docente valido.');
     }
@@ -3836,18 +4126,15 @@ ROOMS_APP.Replacements = {
       }
       return;
     }
-    availablePeriods = this.getTeacherServicePeriodsForDate_(candidate.teacherEmail, candidate.startDate);
-    availablePeriods.forEach(function (entry) {
-      availablePeriodMap[ROOMS_APP.normalizeString(entry.period)] = true;
-    });
     if (!candidate.hourlyPeriods.length) {
       throw new Error(candidate.absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS
         ? 'Selezionare almeno un\'ora di servizio fuori aula.'
         : 'Selezionare almeno un\'ora di permesso.');
     }
+    periodMap = ROOMS_APP.Timetable.getPeriodTimeMap();
     candidate.hourlyPeriods.forEach(function (period) {
-      if (!availablePeriodMap[ROOMS_APP.normalizeString(period)]) {
-        throw new Error('Le ore selezionate non sono valide per il docente e la data indicati.');
+      if (!periodMap[ROOMS_APP.normalizeString(period)]) {
+        throw new Error('Le ore selezionate non sono valide.');
       }
     });
   },
