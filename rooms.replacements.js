@@ -227,6 +227,7 @@ ROOMS_APP.Replacements = {
         TeacherName: candidate.teacherName,
         AbsenceMode: candidate.absenceMode,
         AbsenceType: candidate.absenceType,
+        ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
         StartDate: candidate.startDate,
         EndDate: candidate.endDate,
         HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
@@ -278,6 +279,7 @@ ROOMS_APP.Replacements = {
         TeacherName: candidate.teacherName,
         AbsenceMode: candidate.absenceMode,
         AbsenceType: candidate.absenceType,
+        ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
         StartDate: candidate.startDate,
         EndDate: candidate.endDate,
         HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
@@ -298,6 +300,7 @@ ROOMS_APP.Replacements = {
         TeacherName: candidate.teacherName,
         AbsenceMode: candidate.absenceMode,
         AbsenceType: candidate.absenceType,
+        ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
         StartDate: candidate.startDate,
         EndDate: candidate.endDate,
         HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
@@ -3782,7 +3785,7 @@ ROOMS_APP.Replacements = {
     return ROOMS_APP.DB_REQUEST_CACHE_.replacements;
   },
 
-  DAILY_CONTEXT_CACHE_KEY_: 'DAY_CONTEXT',
+  DAILY_CONTEXT_CACHE_KEY_: 'DAY_CONTEXT_V2',
   DAILY_CONTEXT_CACHE_CHUNK_SIZE_: 40000,
 
   readDailyContextCache_: function (dateString) {
@@ -4084,12 +4087,17 @@ ROOMS_APP.Replacements = {
     var teacherEmail = this.normalizeTeacherEmail_(payload && (payload.teacherEmail || payload.TeacherEmail));
     var teacherName = ROOMS_APP.normalizeString(payload && (payload.teacherName || payload.TeacherName));
     var absenceType = this.normalizeAbsenceType_(payload && (payload.absenceType || payload.AbsenceType));
-    var serviceOutOfClassScope = absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS
-      ? this.normalizeServiceOutOfClassScope_(payload && (payload.serviceOutOfClassScope || payload.ServiceOutOfClassScope || payload.serviceScope || payload.ServiceScope))
-      : '';
-    var isDailyServiceOutOfClass = absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS && serviceOutOfClassScope === 'DAILY';
-    var isMultiDay = (absenceType === this.ABSENCE_TYPES_.DAILY || isDailyServiceOutOfClass) &&
-      ROOMS_APP.asBoolean(payload && (payload.isMultiDay || payload.IsMultiDay));
+    var rawServiceOutOfClassScope = ROOMS_APP.normalizeString(payload && (
+      payload.serviceOutOfClassScope ||
+      payload.ServiceOutOfClassScope ||
+      payload.serviceScope ||
+      payload.ServiceScope
+    ));
+    var serviceOutOfClassScope = absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS && rawServiceOutOfClassScope
+      ? this.normalizeServiceOutOfClassScope_(rawServiceOutOfClassScope)
+      : (absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS ? 'DAILY' : '');
+    var isDailyServiceOutOfClass;
+    var isMultiDay;
     var hourlyPeriods = {};
     (Array.isArray(payload && (payload.hourlyPeriods || payload.HourlyPeriods)) ? (payload.hourlyPeriods || payload.HourlyPeriods) : []).forEach(function (entry) {
       var normalizedPeriod = ROOMS_APP.normalizeString(entry);
@@ -4097,6 +4105,12 @@ ROOMS_APP.Replacements = {
         hourlyPeriods[normalizedPeriod] = true;
       }
     });
+    if (absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS && !rawServiceOutOfClassScope && Object.keys(hourlyPeriods).length) {
+      serviceOutOfClassScope = 'HOURLY';
+    }
+    isDailyServiceOutOfClass = absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS && serviceOutOfClassScope === 'DAILY';
+    isMultiDay = (absenceType === this.ABSENCE_TYPES_.DAILY || isDailyServiceOutOfClass) &&
+      ROOMS_APP.asBoolean(payload && (payload.isMultiDay || payload.IsMultiDay));
     if (!teacherEmail && teacherName) {
       teacherEmail = this.buildTeacherSyntheticEmail_(teacherName);
     }
@@ -4157,6 +4171,9 @@ ROOMS_APP.Replacements = {
 
   readAbsenceRow_: function (row) {
     var teacherName = ROOMS_APP.normalizeString(row && row.TeacherName);
+    var absenceType = this.normalizeAbsenceType_(row && row.AbsenceType);
+    var rawServiceOutOfClassScope = ROOMS_APP.normalizeString(row && row.ServiceOutOfClassScope);
+    var serviceOutOfClassScope;
     var hourlyPeriods = ROOMS_APP.parseJson(row && row.HourlyPeriodsJson, []);
     if (!Array.isArray(hourlyPeriods)) {
       hourlyPeriods = [];
@@ -4168,13 +4185,16 @@ ROOMS_APP.Replacements = {
     }).sort(function (left, right) {
       return Number(left) - Number(right);
     });
+    serviceOutOfClassScope = absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS
+      ? (rawServiceOutOfClassScope ? this.normalizeServiceOutOfClassScope_(rawServiceOutOfClassScope) : (hourlyPeriods.length ? 'HOURLY' : 'DAILY'))
+      : '';
     return {
       absenceId: ROOMS_APP.normalizeString(row && row.AbsenceId),
       teacherEmail: this.normalizeTeacherEmail_(row && row.TeacherEmail) || this.buildTeacherSyntheticEmail_(teacherName),
       teacherName: teacherName,
       absenceMode: this.normalizeAbsenceMode_(row && row.AbsenceMode),
-      absenceType: this.normalizeAbsenceType_(row && row.AbsenceType),
-      serviceOutOfClassScope: this.normalizeAbsenceType_(row && row.AbsenceType) === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS && hourlyPeriods.length ? 'HOURLY' : 'DAILY',
+      absenceType: absenceType,
+      serviceOutOfClassScope: serviceOutOfClassScope,
       startDate: ROOMS_APP.toIsoDate(row && row.StartDate),
       endDate: ROOMS_APP.toIsoDate(row && row.EndDate),
       hourlyPeriods: hourlyPeriods,

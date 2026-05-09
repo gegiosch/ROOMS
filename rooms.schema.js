@@ -365,6 +365,7 @@ ROOMS_APP.Schema = {
       'TeacherName',
       'AbsenceMode',
       'AbsenceType',
+      'ServiceOutOfClassScope',
       'StartDate',
       'EndDate',
       'HourlyPeriodsJson',
