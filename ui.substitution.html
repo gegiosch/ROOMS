@@ -2703,13 +2703,18 @@
             classOutCount: 0,
             absentCount: 0,
             accompanistCount: 0,
+            serviceOutOfClassCount: 0,
             hourlyAbsenceCount: 0,
+            managedTeacherCount: 0,
+            managedPeriodCount: 0,
+            coverageNeedCount: 0,
             assignedCount: 0,
             recoveryCount: 0,
             shiftCount: 0,
             toAssignCount: 0,
             inUscitaCount: 0
           };
+          var managedTeacherMap = {};
           safeArray(classes).forEach(function (entry) {
             if (entry && entry.isOut) {
               summary.classOutCount += 1;
@@ -2724,11 +2729,23 @@
             }
           });
           safeArray(assignments).forEach(function (assignment) {
+            var originalStatus;
             if (!assignment) {
               return;
             }
-            if (assignment.originalStatus === 'HOURLY_ABSENCE') {
+            originalStatus = String(assignment.originalStatus || '');
+            if (assignment.originalTeacherEmail) {
+              managedTeacherMap[normalizeReplacementTeacherEmail_(assignment.originalTeacherEmail)] = true;
+            }
+            summary.managedPeriodCount += 1;
+            if (assignment.replacementStatus !== 'IN_USCITA') {
+              summary.coverageNeedCount += 1;
+            }
+            if (originalStatus === 'HOURLY_ABSENCE') {
               summary.hourlyAbsenceCount += 1;
+            }
+            if (originalStatus === 'SERVICE_OUT_OF_CLASS') {
+              summary.serviceOutOfClassCount += 1;
             }
             if (assignment.replacementStatus === 'ASSIGNED') {
               summary.assignedCount += 1;
@@ -2744,6 +2761,7 @@
               summary.inUscitaCount += 1;
             }
           });
+          summary.managedTeacherCount = Object.keys(managedTeacherMap).length;
           return summary;
         }
 
@@ -3173,10 +3191,13 @@
             }
           }
           if (replacementAbsenceSource) {
+            var summary = replacementState.localSummary || (replacementState.model && replacementState.model.summary ? replacementState.model.summary : {});
             if (absenceRegistry && absenceRegistry.hasEntries) {
-              replacementAbsenceSource.textContent = (absenceRegistry.sourceLabel || 'Assenze ed eventi caricati da REPL_ABSENCES') +
-                ': ' + String(absenceRegistry.dailyTeacherCount || 0) + ' giornalieri, ' +
-                String(absenceRegistry.hourlyEntryCount || 0) + ' ore.';
+              replacementAbsenceSource.textContent = 'Registro assenze: ' +
+                String(summary.managedTeacherCount || 0) + ' docenti da gestire, ' +
+                String(summary.coverageNeedCount || 0) + ' ore da coprire. Eventi registrati: ' +
+                String(absenceRegistry.dailyTeacherCount || 0) + ' giornalieri, ' +
+                String(absenceRegistry.hourlyEntryCount || 0) + ' orari.';
             } else {
               replacementAbsenceSource.textContent = 'Assenze giornaliere senza registro salvato.';
             }
@@ -3191,7 +3212,8 @@
           ROOMS_UI.clearNode(replacementQuickSummary);
           [
             'Classi in uscita: ' + Number(summary.classOutCount || 0),
-            'Docenti assenti: ' + Number(summary.absentCount || 0),
+            'Docenti da gestire: ' + Number(summary.managedTeacherCount || 0),
+            'Ore da coprire: ' + Number(summary.coverageNeedCount || 0),
             'Sostituzioni assegnate: ' + Number(summary.assignedCount || 0),
             'Da assegnare: ' + Number(summary.toAssignCount || 0)
           ].forEach(function (label) {
@@ -3240,7 +3262,12 @@
         function getReplacementManagedTeacherType_(teacher) {
           var teacherEmail = normalizeReplacementTeacherEmail_(teacher && teacher.teacherEmail);
           var hasHourlyEntries = safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).some(function (entry) {
-            return normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) === teacherEmail;
+            return normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) === teacherEmail &&
+              String(entry && entry.reason || '').toUpperCase() !== 'SERVIZIO_FUORI_AULA';
+          });
+          var hasServiceOutEntries = safeArray(replacementState.draft && replacementState.draft.hourlyAbsences).some(function (entry) {
+            return normalizeReplacementTeacherEmail_(entry && entry.teacherEmail) === teacherEmail &&
+              String(entry && entry.reason || '').toUpperCase() === 'SERVIZIO_FUORI_AULA';
           });
           var hasHourlyAssignments = safeArray(replacementState.localAssignments).some(function (entry) {
             return normalizeReplacementTeacherEmail_(entry && entry.originalTeacherEmail) === teacherEmail &&
@@ -3261,6 +3288,9 @@
           if (teacher && teacher.serviceOutOfClass) {
             return 'SERVICE_OUT_OF_CLASS';
           }
+          if (hasServiceOutEntries || hasServiceOutAssignments) {
+            return 'SERVICE_OUT_OF_CLASS';
+          }
           if (teacher && teacher.absent) {
             return 'DAILY_ABSENCE';
           }
@@ -3279,9 +3309,6 @@
           if (hasAccompanistAssignments) {
             return 'ACCOMPANIST';
           }
-          if (hasServiceOutAssignments) {
-            return 'SERVICE_OUT_OF_CLASS';
-          }
           return '';
         }
 
@@ -3289,6 +3316,9 @@
           return safeArray(replacementState.localTeachers).filter(function (teacher) {
             var managedType = getReplacementManagedTeacherType_(teacher);
             if (!managedType) {
+              return false;
+            }
+            if (managedType === 'SERVICE_OUT_OF_CLASS' && !getReplacementManagementRelevantAssignments_(teacher, managedType).length) {
               return false;
             }
             if ((managedType === 'DAILY_ABSENCE' || managedType === 'SERVICE_OUT_OF_CLASS') && teacher && teacher.supportTeacher &&
@@ -4848,7 +4878,7 @@
               {
                 allowAutoShift: false,
                 keepNotice: true,
-                includeEditorData: hasReplacementEditorData_(),
+                includeEditorData: false,
                 forceRefresh: true,
                 noticeScope: 'daily',
                 loadingMessage: 'Aggiornamento assenze e sostituzioni...'

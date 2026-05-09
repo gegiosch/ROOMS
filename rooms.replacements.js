@@ -2553,13 +2553,18 @@ ROOMS_APP.Replacements = {
       classOutCount: 0,
       absentCount: 0,
       accompanistCount: 0,
+      serviceOutOfClassCount: 0,
       hourlyAbsenceCount: 0,
+      managedTeacherCount: 0,
+      managedPeriodCount: 0,
+      coverageNeedCount: 0,
       assignedCount: 0,
       recoveryCount: 0,
       shiftCount: 0,
       toAssignCount: 0,
       inUscitaCount: 0
     };
+    var managedTeacherMap = {};
 
     (classes || []).forEach(function (entry) {
       if (entry.isOut) {
@@ -2575,8 +2580,18 @@ ROOMS_APP.Replacements = {
       }
     });
     (assignments || []).forEach(function (entry) {
+      if (entry.originalTeacherEmail) {
+        managedTeacherMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(entry.originalTeacherEmail)] = true;
+      }
+      summary.managedPeriodCount += 1;
+      if (entry.replacementStatus !== 'IN_USCITA') {
+        summary.coverageNeedCount += 1;
+      }
       if (entry.originalStatus === 'HOURLY_ABSENCE') {
         summary.hourlyAbsenceCount += 1;
+      }
+      if (entry.originalStatus === 'SERVICE_OUT_OF_CLASS') {
+        summary.serviceOutOfClassCount += 1;
       }
       if (entry.replacementStatus === 'ASSIGNED') {
         summary.assignedCount += 1;
@@ -2592,6 +2607,7 @@ ROOMS_APP.Replacements = {
         summary.inUscitaCount += 1;
       }
     });
+    summary.managedTeacherCount = Object.keys(managedTeacherMap).length;
     return summary;
   },
 
