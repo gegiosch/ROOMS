@@ -1729,7 +1729,8 @@ ROOMS_APP.Replacements = {
         teacher.teacherEmail,
         period
       );
-      if (assignment && assignmentClassCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA && slot.type === 'FREE') {
+      if (assignmentClassCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA &&
+          (slot.type === 'FREE' || slot.type === 'OTHER')) {
         slot = Object.assign({}, slot, {
           type: 'SERVICE',
           classCode: assignmentClassCode,
@@ -3724,6 +3725,9 @@ ROOMS_APP.Replacements = {
       return false;
     }
     if (slot.coverageRequired) {
+      return true;
+    }
+    if (this.getTeacherSlotAssignmentClassCode_(slot) === this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA) {
       return true;
     }
     return slot.type === 'CLASS';
