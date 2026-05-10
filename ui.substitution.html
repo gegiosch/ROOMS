@@ -1725,6 +1725,19 @@
           return slot.type === 'CLASS';
         }
 
+        function getReplacementSlotAssignmentClassCode_(slot) {
+          var classCode = normalizeReplacementClassCode_(slot && slot.classCode);
+          var rawValue = String(slot && slot.rawValue || '').trim().toUpperCase();
+          var serviceSubtype = String(slot && slot.serviceSubtype || '').trim().toUpperCase();
+          if (classCode) {
+            return classCode;
+          }
+          if (serviceSubtype === 'ALTERNATIVA' || rawValue === 'AL') {
+            return 'ALTERNATIVA';
+          }
+          return '';
+        }
+
         function getReplacementHandlingTypeLabel_(handlingType) {
           var normalized = normalizeReplacementHandlingType_(handlingType);
           if (normalized === 'RECOVERY') {
@@ -1910,13 +1923,14 @@
             var teacher = baseMap[teacherEmail] || null;
             var draftTeacher = draftMap[teacherEmail] || {};
             var slot = teacher && teacher.periods ? teacher.periods[period] : null;
+            var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot);
             var nextEntry;
             var absent;
             if (!teacherEmail || !period || !teacher) {
               return;
             }
             absent = Boolean(draftTeacher.absent);
-            if (absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !slot.classCode) {
+            if (absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !assignmentClassCode) {
               return;
             }
             nextEntry = Object.assign({}, entry, {
@@ -2023,18 +2037,19 @@
             }
             Object.keys(teacher.periods || {}).forEach(function (period) {
               var slot = teacher.periods[period];
+              var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot);
               var key;
-              if (!slot || !isReplacementCoverableSlot_(teacher, slot) || !slot.classCode) {
+              if (!slot || !isReplacementCoverableSlot_(teacher, slot) || !assignmentClassCode) {
                 return;
               }
               if (teacher.accompanist && !teacher.absent && !isReplacementTeacherAccompanyingAtPeriod_(teacher.teacherEmail, period)) {
                 return;
               }
-              key = buildReplacementAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
+              key = buildReplacementAssignmentKey_(period, assignmentClassCode, teacher.teacherEmail);
               affectedMap[key] = {
                 teacher: teacher,
                 period: String(period || ''),
-                slot: slot,
+                slot: Object.assign({}, slot, { classCode: assignmentClassCode }),
                 originalStatus: teacher.serviceOutOfClass && !teacher.absent ? 'SERVICE_OUT_OF_CLASS' : (teacher.absent ? 'ABSENT' : 'ACCOMPANIST')
               };
             });
@@ -2044,16 +2059,17 @@
             var entry = hourlyAbsenceMap[key];
             var teacher = teacherMap[normalizeReplacementTeacherEmail_(entry.teacherEmail)] || null;
             var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
+            var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot);
             var assignmentKey;
-            if (!teacher || teacher.absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !slot.classCode) {
+            if (!teacher || teacher.absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !assignmentClassCode) {
               return;
             }
-            assignmentKey = buildReplacementAssignmentKey_(entry.period, slot.classCode, teacher.teacherEmail);
+            assignmentKey = buildReplacementAssignmentKey_(entry.period, assignmentClassCode, teacher.teacherEmail);
             if (!affectedMap[assignmentKey]) {
               affectedMap[assignmentKey] = {
                 teacher: teacher,
                 period: String(entry.period || ''),
-                slot: slot,
+                slot: Object.assign({}, slot, { classCode: assignmentClassCode }),
                 originalStatus: String(entry.reason || '').toUpperCase() === 'SERVIZIO_FUORI_AULA' ? 'SERVICE_OUT_OF_CLASS' : 'HOURLY_ABSENCE'
               };
             }
@@ -2064,7 +2080,7 @@
             var teacher = meta.teacher;
             var slot = meta.slot || {};
             var draftEntry = draftAssignmentMap[assignmentKey] || {};
-            var classCode = normalizeReplacementClassCode_(slot.classCode);
+            var classCode = getReplacementSlotAssignmentClassCode_(slot);
             var classHandlingType = normalizeReplacementClassHandlingType_(draftEntry.classHandlingType);
             var handlingType = normalizeReplacementHandlingType_(draftEntry.handlingType);
             var hourlyAbsenceEntry = hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacher.teacherEmail, meta.period)] || null;
@@ -2457,7 +2473,7 @@
               startTime: timeMeta.startTime || '',
               endTime: timeMeta.endTime || ''
             };
-            var classCode = normalizeReplacementClassCode_(slot.classCode);
+            var classCode = getReplacementSlotAssignmentClassCode_(slot);
             var assignment = assignmentIndex[buildReplacementAssignmentKey_(period, classCode, teacher.teacherEmail)] || null;
             var hourlyAbsence = hourlyAbsenceMap[buildReplacementHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
             var isAccompanying = isReplacementTeacherAccompanyingAtPeriod_(teacher.teacherEmail, period);
@@ -3573,7 +3589,7 @@
               var removeButton = ROOMS_UI.el('button', 'button secondary', 'Rimuovi');
               var hasClassSlots = Object.keys(teacher.periods || {}).some(function (period) {
                 var slot = teacher.periods[period];
-                return slot && isReplacementCoverableSlot_(teacher, slot) && slot.classCode;
+                return slot && isReplacementCoverableSlot_(teacher, slot) && getReplacementSlotAssignmentClassCode_(slot);
               });
               var isSelectedTeacher = normalizeReplacementTeacherEmail_(teacher.teacherEmail) === normalizeReplacementTeacherEmail_(replacementState.selectedTeacherEmail);
               manageButton.type = 'button';

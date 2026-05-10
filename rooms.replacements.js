@@ -1052,8 +1052,9 @@ ROOMS_APP.Replacements = {
       }
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
-        if (slot && ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) && slot.classCode) {
-          classSet[slot.classCode] = true;
+        var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
+        if (slot && ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) && assignmentClassCode) {
+          classSet[assignmentClassCode] = true;
         }
       });
     });
@@ -1459,19 +1460,20 @@ ROOMS_APP.Replacements = {
       }
       Object.keys(teacher.periods || {}).forEach(function (period) {
         var slot = teacher.periods[period];
+        var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
         var key;
-        if (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
+        if (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !assignmentClassCode) {
           return;
         }
         if (teacher.accompanist && !teacher.absent &&
           !ROOMS_APP.Replacements.isTeacherAccompanyingAtPeriodInState_(effectiveTripState, teacher.teacherEmail, period)) {
           return;
         }
-        key = ROOMS_APP.Replacements.buildAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
+        key = ROOMS_APP.Replacements.buildAssignmentKey_(period, assignmentClassCode, teacher.teacherEmail);
         affectedMap[key] = {
           teacher: teacher,
           period: period,
-          slot: slot,
+          slot: Object.assign({}, slot, { classCode: assignmentClassCode }),
           originalStatus: teacher.serviceOutOfClass && !teacher.absent ? 'SERVICE_OUT_OF_CLASS' : (teacher.absent ? 'ABSENT' : 'ACCOMPANIST'),
           hourlyAbsence: null
         };
@@ -1481,16 +1483,17 @@ ROOMS_APP.Replacements = {
     (hourlyAbsences || []).forEach(function (entry) {
       var teacher = teacherMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(entry.teacherEmail)] || null;
       var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
       var key;
-      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
+      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !assignmentClassCode) {
         return;
       }
-      key = ROOMS_APP.Replacements.buildAssignmentKey_(entry.period, slot.classCode, teacher.teacherEmail);
+      key = ROOMS_APP.Replacements.buildAssignmentKey_(entry.period, assignmentClassCode, teacher.teacherEmail);
       if (!affectedMap[key]) {
         affectedMap[key] = {
           teacher: teacher,
           period: entry.period,
-          slot: slot,
+          slot: Object.assign({}, slot, { classCode: assignmentClassCode }),
           originalStatus: ROOMS_APP.Replacements.isServiceOutOfClassHourlyAbsenceEntry_(entry) ? 'SERVICE_OUT_OF_CLASS' : 'HOURLY_ABSENCE',
           hourlyAbsence: entry
         };
@@ -1647,7 +1650,8 @@ ROOMS_APP.Replacements = {
         endTime: periodMap[period].endTime
       };
       var hourlyAbsence = normalized.hourlyAbsenceMap[self.buildHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
-      var assignmentKey = ROOMS_APP.Replacements.buildAssignmentKey_(period, slot.classCode, teacher.teacherEmail);
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
+      var assignmentKey = ROOMS_APP.Replacements.buildAssignmentKey_(period, assignmentClassCode, teacher.teacherEmail);
       var assignment = assignmentsByKey[assignmentKey] || null;
       var isAccompanying = ROOMS_APP.Replacements.isTeacherAccompanyingAtPeriod_(
         normalized,
@@ -1661,7 +1665,7 @@ ROOMS_APP.Replacements = {
         startTime: slot.startTime,
         endTime: slot.endTime,
         slotType: slot.type,
-        classCode: slot.classCode,
+        classCode: assignmentClassCode,
         label: slot.label,
         canMarkHourlyAbsence: Boolean(isCoverableSlot && !teacher.absent && !isAccompanying),
         hourlyAbsence: hourlyAbsence,
@@ -2309,7 +2313,7 @@ ROOMS_APP.Replacements = {
     (normalized && normalized.hourlyAbsences || []).forEach(function (entry) {
       var teacher = normalized.teacherMap[self.normalizeTeacherEmail_(entry.teacherEmail)] || null;
       var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
-      if (!teacher || !slot || !self.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
+      if (!teacher || !slot || !self.isCoverableTeacherSlot_(teacher, slot) || !self.getTeacherSlotAssignmentClassCode_(slot)) {
         errors.push('Assenza oraria non valida per ' + (entry.teacherName || entry.teacherEmail) + ' alla ' + entry.period + 'ª ora.');
       }
     });
@@ -3101,10 +3105,11 @@ ROOMS_APP.Replacements = {
       var normalizedEntry = ROOMS_APP.Replacements.normalizeHourlyAbsenceEntry_(entry, targetDate);
       var teacher = teacherMap && teacherMap[normalizedEntry.teacherEmail] ? teacherMap[normalizedEntry.teacherEmail] : null;
       var slot = teacher && teacher.periods ? teacher.periods[normalizedEntry.period] : null;
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
       if (!normalizedEntry.teacherEmail || !normalizedEntry.period) {
         return;
       }
-      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !slot.classCode) {
+      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !assignmentClassCode) {
         return;
       }
       if (!normalizedEntry.teacherName) {
@@ -3643,6 +3648,19 @@ ROOMS_APP.Replacements = {
       return true;
     }
     return slot.type === 'CLASS';
+  },
+
+  getTeacherSlotAssignmentClassCode_: function (slot) {
+    var classCode = ROOMS_APP.normalizeString(slot && slot.classCode).toUpperCase();
+    var rawValue = ROOMS_APP.normalizeString(slot && slot.rawValue).toUpperCase();
+    var serviceSubtype = ROOMS_APP.normalizeString(slot && slot.serviceSubtype).toUpperCase();
+    if (classCode) {
+      return classCode;
+    }
+    if (serviceSubtype === this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA || rawValue === 'AL') {
+      return this.SERVICE_OUT_OF_CLASS_.ALTERNATIVA;
+    }
+    return '';
   },
 
   resolvePeriodFromOccurrence_: function (occurrence) {
@@ -4384,14 +4402,15 @@ ROOMS_APP.Replacements = {
       return Number(left) - Number(right);
     }).map(function (period) {
       var slot = teacher.periods[period] || {};
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
       if (!ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot)) {
         return null;
       }
       return {
         period: String(period || ''),
         periodLabel: String(period || '') + 'a ora',
-        classCode: ROOMS_APP.normalizeString(slot.classCode).toUpperCase(),
-        label: String(period || '') + 'a ora' + (slot.classCode ? (' · ' + slot.classCode) : ''),
+        classCode: assignmentClassCode,
+        label: String(period || '') + 'a ora' + (assignmentClassCode ? (' · ' + (slot.label || assignmentClassCode)) : ''),
         startTime: slot.startTime || '',
         endTime: slot.endTime || ''
       };
