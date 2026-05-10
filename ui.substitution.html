@@ -1793,6 +1793,12 @@
                 teacherName: entry.teacherName || '',
                 period: entry.period || '',
                 reason: entry.reason || '',
+                classCode: entry.classCode || '',
+                label: entry.label || '',
+                slotType: entry.slotType || '',
+                startTime: entry.startTime || '',
+                endTime: entry.endTime || '',
+                derivedActionable: Boolean(entry.derivedActionable),
                 recoveryRequired: Boolean(entry.recoveryRequired),
                 recoveryStatus: entry.recoveryStatus || '',
                 recoveredOnDate: entry.recoveredOnDate || '',
@@ -1943,19 +1949,23 @@
             var teacher = baseMap[teacherEmail] || null;
             var draftTeacher = draftMap[teacherEmail] || {};
             var slot = teacher && teacher.periods ? teacher.periods[period] : null;
-            var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot);
+            var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot) || normalizeReplacementClassCode_(entry && entry.classCode);
             var nextEntry;
             var absent;
             if (!teacherEmail || !period || !teacher) {
               return;
             }
             absent = Boolean(draftTeacher.absent);
-            if (absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !assignmentClassCode) {
+            if (absent || !assignmentClassCode) {
+              return;
+            }
+            if (!entry.derivedActionable && (!slot || !isReplacementCoverableSlot_(teacher, slot))) {
               return;
             }
             nextEntry = Object.assign({}, entry, {
               teacherEmail: teacherEmail,
-              teacherName: entry && entry.teacherName ? entry.teacherName : (teacher.teacherName || '')
+              teacherName: entry && entry.teacherName ? entry.teacherName : (teacher.teacherName || ''),
+              classCode: assignmentClassCode
             });
             map[buildReplacementHourlyAbsenceKey_(teacherEmail, period)] = nextEntry;
           });
@@ -2103,9 +2113,27 @@
             var entry = hourlyAbsenceMap[key];
             var teacher = teacherMap[normalizeReplacementTeacherEmail_(entry.teacherEmail)] || null;
             var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
-            var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot);
+            var assignmentClassCode = getReplacementSlotAssignmentClassCode_(slot) || normalizeReplacementClassCode_(entry && entry.classCode);
             var assignmentKey;
-            if (!teacher || teacher.absent || !slot || !isReplacementCoverableSlot_(teacher, slot) || !assignmentClassCode) {
+            if (!teacher || teacher.absent || !assignmentClassCode) {
+              return;
+            }
+            if (!slot || !isReplacementCoverableSlot_(teacher, slot)) {
+              if (!entry.derivedActionable) {
+                return;
+              }
+              slot = {
+                period: String(entry.period || ''),
+                startTime: entry.startTime || '',
+                endTime: entry.endTime || '',
+                rawValue: assignmentClassCode,
+                type: assignmentClassCode === 'ALTERNATIVA' ? 'SERVICE' : 'CLASS',
+                classCode: assignmentClassCode,
+                label: entry.label || (assignmentClassCode === 'ALTERNATIVA' ? 'Alternativa' : assignmentClassCode),
+                coverageRequired: true
+              };
+            }
+            if (!isReplacementCoverableSlot_(teacher, slot)) {
               return;
             }
             assignmentKey = buildReplacementAssignmentKey_(entry.period, assignmentClassCode, teacher.teacherEmail);

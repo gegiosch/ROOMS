@@ -34,6 +34,7 @@ ROOMS_APP.Replacements = {
     ALTERNATIVA: 'ALTERNATIVA',
     ACCOMPANIMENT: 'ACCOMPAGNAMENTO'
   },
+  ABSENCE_WORKLOAD_DERIVED_VERSION_: '2026-05-10.1',
   MIN_CLASS_PRESENCE_PERIODS_: 4,
   TRIP_TYPES_: {
     DAILY: 'DAILY',
@@ -221,25 +222,7 @@ ROOMS_APP.Replacements = {
         return;
       }
       seen[candidate.absenceId] = true;
-      normalizedRows.push({
-        AbsenceId: candidate.absenceId,
-        TeacherEmail: candidate.teacherEmail,
-        TeacherName: candidate.teacherName,
-        AbsenceMode: candidate.absenceMode,
-        AbsenceType: candidate.absenceType,
-        ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
-        StartDate: candidate.startDate,
-        EndDate: candidate.endDate,
-        HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
-        RecoveryRequired: candidate.recoveryRequired ? 'TRUE' : 'FALSE',
-        Notes: candidate.notes,
-        Status: 'ACTIVE',
-        Enabled: 'TRUE',
-        CreatedAtISO: existing && existing.createdAtISO ? existing.createdAtISO : nowIso,
-        CreatedBy: existing && existing.createdBy ? existing.createdBy : actor.email,
-        UpdatedAtISO: nowIso,
-        UpdatedBy: actor.email
-      });
+      normalizedRows.push(ROOMS_APP.Replacements.buildAbsenceSheetRow_(candidate, actor, nowIso, existing));
     });
 
     ROOMS_APP.DB.replaceRows(
@@ -273,46 +256,10 @@ ROOMS_APP.Replacements = {
       }
       replaced = true;
       previousRow = ROOMS_APP.Replacements.readAbsenceRow_(row);
-      return {
-        AbsenceId: candidate.absenceId,
-        TeacherEmail: candidate.teacherEmail,
-        TeacherName: candidate.teacherName,
-        AbsenceMode: candidate.absenceMode,
-        AbsenceType: candidate.absenceType,
-        ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
-        StartDate: candidate.startDate,
-        EndDate: candidate.endDate,
-        HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
-        RecoveryRequired: candidate.recoveryRequired ? 'TRUE' : 'FALSE',
-        Notes: candidate.notes,
-        Status: 'ACTIVE',
-        Enabled: 'TRUE',
-        CreatedAtISO: row.CreatedAtISO || nowIso,
-        CreatedBy: row.CreatedBy || actor.email,
-        UpdatedAtISO: nowIso,
-        UpdatedBy: actor.email
-      };
+      return ROOMS_APP.Replacements.buildAbsenceSheetRow_(candidate, actor, nowIso, previousRow || row);
     });
     if (!replaced) {
-      nextRows.push({
-        AbsenceId: candidate.absenceId,
-        TeacherEmail: candidate.teacherEmail,
-        TeacherName: candidate.teacherName,
-        AbsenceMode: candidate.absenceMode,
-        AbsenceType: candidate.absenceType,
-        ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
-        StartDate: candidate.startDate,
-        EndDate: candidate.endDate,
-        HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
-        RecoveryRequired: candidate.recoveryRequired ? 'TRUE' : 'FALSE',
-        Notes: candidate.notes,
-        Status: 'ACTIVE',
-        Enabled: 'TRUE',
-        CreatedAtISO: nowIso,
-        CreatedBy: actor.email,
-        UpdatedAtISO: nowIso,
-        UpdatedBy: actor.email
-      });
+      nextRows.push(this.buildAbsenceSheetRow_(candidate, actor, nowIso, null));
     }
     ROOMS_APP.DB.replaceRows(
       ROOMS_APP.SHEET_NAMES.REPL_ABSENCES,
@@ -325,6 +272,140 @@ ROOMS_APP.Replacements = {
       'ABSENCE_SAVE'
     );
     return this.getAbsenceRegistryModel(candidate.startDate);
+  },
+
+  buildAbsenceSheetRow_: function (candidate, actor, nowIso, existingRow) {
+    var existing = existingRow || {};
+    var derived = this.buildAbsenceEffectiveWorkload_(candidate, nowIso);
+    return {
+      AbsenceId: candidate.absenceId,
+      TeacherEmail: candidate.teacherEmail,
+      TeacherName: candidate.teacherName,
+      AbsenceMode: candidate.absenceMode,
+      AbsenceType: candidate.absenceType,
+      ServiceOutOfClassScope: candidate.serviceOutOfClassScope,
+      StartDate: candidate.startDate,
+      EndDate: candidate.endDate,
+      HourlyPeriodsJson: JSON.stringify(candidate.hourlyPeriods),
+      MatchedPeriodsJson: JSON.stringify(derived.matchedPeriods),
+      EffectiveWorkloadJson: JSON.stringify(derived.effectiveWorkload),
+      HasActionableWorkload: derived.hasActionableWorkload ? 'TRUE' : 'FALSE',
+      ActionableHoursCount: String(derived.actionableHoursCount || 0),
+      DerivedAtISO: derived.derivedAtISO,
+      DerivedVersion: derived.derivedVersion,
+      RecoveryRequired: candidate.recoveryRequired ? 'TRUE' : 'FALSE',
+      Notes: candidate.notes,
+      Status: 'ACTIVE',
+      Enabled: 'TRUE',
+      CreatedAtISO: existing.createdAtISO || existing.CreatedAtISO || nowIso,
+      CreatedBy: existing.createdBy || existing.CreatedBy || actor.email,
+      UpdatedAtISO: nowIso,
+      UpdatedBy: actor.email
+    };
+  },
+
+  isHourlyAbsenceCandidate_: function (candidate) {
+    return Boolean(candidate && (
+      candidate.absenceType === this.ABSENCE_TYPES_.HOURLY_PERMISSION ||
+      this.isHourlyServiceOutOfClassAbsence_(candidate)
+    ));
+  },
+
+  getTeacherDayMapForWorkloadDerivation_: function (dateString) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString);
+    var bucket = this.getReplacementRequestCacheBucket_();
+    var cacheKey = 'absenceWorkloadTeachers:' + targetDate;
+    if (bucket && bucket[cacheKey]) {
+      return bucket[cacheKey];
+    }
+    var teacherMap = this.indexByTeacherEmail_(this.buildTeacherDayTeachers_(targetDate));
+    if (bucket) {
+      bucket[cacheKey] = teacherMap;
+    }
+    return teacherMap;
+  },
+
+  buildAbsenceEffectiveWorkload_: function (candidate, nowIso) {
+    var selectedMap = {};
+    var selectedPeriods = [];
+    var matchedPeriods = [];
+    var items = [];
+    var targetDate = ROOMS_APP.toIsoDate(candidate && candidate.startDate);
+    var teacherEmail = this.normalizeTeacherEmail_(candidate && candidate.teacherEmail);
+    var teacherName = ROOMS_APP.normalizeString(candidate && candidate.teacherName);
+    var teacherMap;
+    var teacher;
+    var identity;
+    var derivedAtIso = nowIso || ROOMS_APP.toIsoDateTime(new Date());
+
+    (candidate && candidate.hourlyPeriods || []).forEach(function (period) {
+      var normalizedPeriod = ROOMS_APP.normalizeString(period);
+      if (normalizedPeriod) {
+        selectedMap[normalizedPeriod] = true;
+      }
+    });
+    selectedPeriods = Object.keys(selectedMap).sort(function (left, right) {
+      return Number(left) - Number(right);
+    });
+
+    if (this.isHourlyAbsenceCandidate_(candidate) && targetDate && teacherEmail) {
+      teacherMap = this.getTeacherDayMapForWorkloadDerivation_(targetDate);
+      teacher = teacherMap[teacherEmail] || null;
+      if (!teacher && teacherName) {
+        teacher = teacherMap[this.buildTeacherSyntheticEmail_(teacherName)] || null;
+      }
+      if (!teacher) {
+        identity = this.resolveAbsenceTeacherIdentityForDate_(
+          teacherEmail,
+          teacherName,
+          this.getActiveLongAssignmentsForDate_(targetDate, true)
+        );
+        teacher = identity && identity.teacherEmail ? teacherMap[identity.teacherEmail] : null;
+      }
+      selectedPeriods.forEach(function (period) {
+        var slot = teacher && teacher.periods ? teacher.periods[period] : null;
+        var classCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
+        var label;
+        if (!teacher || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !classCode) {
+          return;
+        }
+        label = classCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA
+          ? 'Alternativa'
+          : (slot.label || classCode);
+        matchedPeriods.push(period);
+        items.push({
+          period: period,
+          classCode: classCode,
+          label: label,
+          slotType: slot.type || '',
+          rawValue: slot.rawValue || '',
+          serviceType: slot.serviceType || '',
+          serviceSubtype: slot.serviceSubtype || '',
+          startTime: slot.startTime || '',
+          endTime: slot.endTime || '',
+          actionable: true
+        });
+      });
+    }
+
+    return {
+      matchedPeriods: matchedPeriods,
+      hasActionableWorkload: Boolean(items.length),
+      actionableHoursCount: items.length,
+      derivedAtISO: derivedAtIso,
+      derivedVersion: this.ABSENCE_WORKLOAD_DERIVED_VERSION_,
+      effectiveWorkload: {
+        version: this.ABSENCE_WORKLOAD_DERIVED_VERSION_,
+        date: targetDate,
+        teacherEmail: teacherEmail,
+        teacherName: teacherName,
+        absenceType: candidate && candidate.absenceType || '',
+        serviceOutOfClassScope: candidate && candidate.serviceOutOfClassScope || '',
+        selectedPeriods: selectedPeriods,
+        matchedPeriods: matchedPeriods,
+        items: items
+      }
+    };
   },
 
   deleteAbsence: function (absenceId) {
@@ -1204,6 +1285,7 @@ ROOMS_APP.Replacements = {
       var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row.TeacherEmail);
       var teacherName = ROOMS_APP.normalizeString(row.TeacherName);
       var period = ROOMS_APP.normalizeString(row.Period);
+      var classCode = ROOMS_APP.normalizeString(row.ClassCode).toUpperCase();
       var slot;
       if (!teacherEmail) {
         teacherEmail = ROOMS_APP.Replacements.buildTeacherSyntheticEmail_(teacherName);
@@ -1220,16 +1302,23 @@ ROOMS_APP.Replacements = {
         };
       }
       slot = periodMap[period] || {};
+      if (classCode) {
+        classSet[classCode] = true;
+      }
       if (period && !teacherMap[teacherEmail].periods[period]) {
         teacherMap[teacherEmail].periods[period] = {
           period: String(period || ''),
           startTime: slot.startTime || '',
           endTime: slot.endTime || '',
-          rawValue: '',
-          type: 'FREE',
-          classCode: '',
-          label: '',
-          coverageRequired: false
+          rawValue: classCode || '',
+          type: ROOMS_APP.asBoolean(row.DerivedActionable) && classCode
+            ? (classCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA ? 'SERVICE' : 'CLASS')
+            : 'FREE',
+          classCode: ROOMS_APP.asBoolean(row.DerivedActionable) ? classCode : '',
+          label: ROOMS_APP.asBoolean(row.DerivedActionable)
+            ? (ROOMS_APP.normalizeString(row.Label) || (classCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA ? 'Alternativa' : classCode))
+            : '',
+          coverageRequired: Boolean(ROOMS_APP.asBoolean(row.DerivedActionable) && classCode)
         };
       }
     });
@@ -1543,9 +1632,27 @@ ROOMS_APP.Replacements = {
     (hourlyAbsences || []).forEach(function (entry) {
       var teacher = teacherMap[ROOMS_APP.Replacements.normalizeTeacherEmail_(entry.teacherEmail)] || null;
       var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
-      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot) || ROOMS_APP.normalizeString(entry.classCode).toUpperCase();
       var key;
-      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !assignmentClassCode) {
+      if (!teacher || teacher.absent || !assignmentClassCode) {
+        return;
+      }
+      if (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot)) {
+        if (!entry.derivedActionable) {
+          return;
+        }
+        slot = {
+          period: String(entry.period || ''),
+          startTime: entry.startTime || '',
+          endTime: entry.endTime || '',
+          rawValue: assignmentClassCode,
+          type: assignmentClassCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA ? 'SERVICE' : 'CLASS',
+          classCode: assignmentClassCode,
+          label: entry.label || (assignmentClassCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA ? 'Alternativa' : assignmentClassCode),
+          coverageRequired: true
+        };
+      }
+      if (!ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot)) {
         return;
       }
       key = ROOMS_APP.Replacements.buildAssignmentKey_(entry.period, assignmentClassCode, teacher.teacherEmail);
@@ -3145,6 +3252,12 @@ ROOMS_APP.Replacements = {
       teacherName: ROOMS_APP.normalizeString(row && row.TeacherName),
       period: ROOMS_APP.normalizeString(row && row.Period),
       reason: ROOMS_APP.normalizeString(row && row.Reason),
+      classCode: ROOMS_APP.normalizeString(row && row.ClassCode).toUpperCase(),
+      label: ROOMS_APP.normalizeString(row && row.Label),
+      slotType: ROOMS_APP.normalizeString(row && row.SlotType),
+      startTime: ROOMS_APP.normalizeString(row && row.StartTime),
+      endTime: ROOMS_APP.normalizeString(row && row.EndTime),
+      derivedActionable: ROOMS_APP.asBoolean(row && row.DerivedActionable),
       recoveryRequired: ROOMS_APP.asBoolean(row && row.RecoveryRequired),
       recoveryStatus: ROOMS_APP.normalizeString(row && row.RecoveryStatus),
       recoveredOnDate: ROOMS_APP.toIsoDate(row && row.RecoveredOnDate),
@@ -3167,6 +3280,12 @@ ROOMS_APP.Replacements = {
       teacherName: teacherName,
       period: ROOMS_APP.normalizeString(entry && (entry.period || entry.Period)),
       reason: ROOMS_APP.normalizeString(entry && (entry.reason || entry.Reason)),
+      classCode: ROOMS_APP.normalizeString(entry && (entry.classCode || entry.ClassCode)).toUpperCase(),
+      label: ROOMS_APP.normalizeString(entry && (entry.label || entry.Label)),
+      slotType: ROOMS_APP.normalizeString(entry && (entry.slotType || entry.SlotType)),
+      startTime: ROOMS_APP.normalizeString(entry && (entry.startTime || entry.StartTime)),
+      endTime: ROOMS_APP.normalizeString(entry && (entry.endTime || entry.EndTime)),
+      derivedActionable: ROOMS_APP.asBoolean(entry && (entry.derivedActionable || entry.DerivedActionable)),
       recoveryRequired: ROOMS_APP.asBoolean(entry && Object.prototype.hasOwnProperty.call(entry, 'recoveryRequired') ? entry.recoveryRequired : entry && entry.RecoveryRequired),
       recoveryStatus: ROOMS_APP.normalizeString(entry && (entry.recoveryStatus || entry.RecoveryStatus)) || this.RECOVERY_STATUSES_.PENDING,
       recoveredOnDate: ROOMS_APP.toIsoDate(entry && (entry.recoveredOnDate || entry.RecoveredOnDate)),
@@ -3185,16 +3304,21 @@ ROOMS_APP.Replacements = {
       var normalizedEntry = ROOMS_APP.Replacements.normalizeHourlyAbsenceEntry_(entry, targetDate);
       var teacher = teacherMap && teacherMap[normalizedEntry.teacherEmail] ? teacherMap[normalizedEntry.teacherEmail] : null;
       var slot = teacher && teacher.periods ? teacher.periods[normalizedEntry.period] : null;
-      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot) || normalizedEntry.classCode;
       if (!normalizedEntry.teacherEmail || !normalizedEntry.period) {
         return;
       }
-      if (!teacher || teacher.absent || !slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || !assignmentClassCode) {
+      if (!teacher || teacher.absent || !assignmentClassCode) {
+        return;
+      }
+      if (!normalizedEntry.derivedActionable &&
+          (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot))) {
         return;
       }
       if (!normalizedEntry.teacherName) {
         normalizedEntry.teacherName = teacher.teacherName;
       }
+      normalizedEntry.classCode = assignmentClassCode;
       map[ROOMS_APP.Replacements.buildHourlyAbsenceKey_(normalizedEntry.teacherEmail, normalizedEntry.period)] = normalizedEntry;
     });
     return map;
@@ -4276,6 +4400,11 @@ ROOMS_APP.Replacements = {
     var rawServiceOutOfClassScope = ROOMS_APP.normalizeString(row && row.ServiceOutOfClassScope);
     var serviceOutOfClassScope;
     var hourlyPeriods = ROOMS_APP.parseJson(row && row.HourlyPeriodsJson, []);
+    var matchedPeriods = ROOMS_APP.parseJson(row && row.MatchedPeriodsJson, []);
+    var effectiveWorkload = ROOMS_APP.parseJson(row && row.EffectiveWorkloadJson, null);
+    var derivedVersion = ROOMS_APP.normalizeString(row && row.DerivedVersion);
+    var derivedAtISO = ROOMS_APP.normalizeString(row && row.DerivedAtISO);
+    var hasDerivedWorkload = Boolean(derivedVersion || derivedAtISO || row && row.EffectiveWorkloadJson || row && row.MatchedPeriodsJson);
     if (!Array.isArray(hourlyPeriods)) {
       hourlyPeriods = [];
     }
@@ -4286,6 +4415,19 @@ ROOMS_APP.Replacements = {
     }).sort(function (left, right) {
       return Number(left) - Number(right);
     });
+    if (!Array.isArray(matchedPeriods)) {
+      matchedPeriods = [];
+    }
+    matchedPeriods = matchedPeriods.map(function (entry) {
+      return ROOMS_APP.normalizeString(entry);
+    }).filter(function (entry) {
+      return Boolean(entry);
+    }).sort(function (left, right) {
+      return Number(left) - Number(right);
+    });
+    if (!effectiveWorkload || typeof effectiveWorkload !== 'object') {
+      effectiveWorkload = null;
+    }
     serviceOutOfClassScope = absenceType === this.ABSENCE_TYPES_.SERVICE_OUT_OF_CLASS
       ? (rawServiceOutOfClassScope ? this.normalizeServiceOutOfClassScope_(rawServiceOutOfClassScope) : (hourlyPeriods.length ? 'HOURLY' : 'DAILY'))
       : '';
@@ -4299,6 +4441,13 @@ ROOMS_APP.Replacements = {
       startDate: ROOMS_APP.toIsoDate(row && row.StartDate),
       endDate: ROOMS_APP.toIsoDate(row && row.EndDate),
       hourlyPeriods: hourlyPeriods,
+      matchedPeriods: matchedPeriods,
+      effectiveWorkload: effectiveWorkload,
+      hasDerivedWorkload: hasDerivedWorkload,
+      hasActionableWorkload: hasDerivedWorkload ? ROOMS_APP.asBoolean(row && row.HasActionableWorkload) : Boolean(matchedPeriods.length),
+      actionableHoursCount: Number(row && row.ActionableHoursCount || 0),
+      derivedAtISO: derivedAtISO,
+      derivedVersion: derivedVersion,
       recoveryRequired: ROOMS_APP.asBoolean(row && row.RecoveryRequired),
       notes: ROOMS_APP.normalizeString(row && row.Notes),
       status: ROOMS_APP.normalizeString(row && row.Status).toUpperCase() || 'ACTIVE',
@@ -4386,7 +4535,12 @@ ROOMS_APP.Replacements = {
         ServiceOutOfClassScope: row.serviceOutOfClassScope,
         StartDate: row.startDate,
         EndDate: row.endDate,
-        HourlyPeriods: (row.hourlyPeriods || []).slice()
+        HourlyPeriods: (row.hourlyPeriods || []).slice(),
+        MatchedPeriods: (row.matchedPeriods || []).slice(),
+        HasActionableWorkload: Boolean(row.hasActionableWorkload),
+        ActionableHoursCount: Number(row.actionableHoursCount || 0),
+        DerivedAtISO: row.derivedAtISO || '',
+        DerivedVersion: row.derivedVersion || ''
       });
       controlledTeacherMap[teacherEmail] = true;
       if (row.absenceType === self.ABSENCE_TYPES_.DAILY || self.isDailyServiceOutOfClassAbsence_(row)) {
@@ -4407,7 +4561,23 @@ ROOMS_APP.Replacements = {
         return;
       }
       (row.hourlyPeriods || []).forEach(function (period) {
-        var key = self.buildHourlyAbsenceKey_(teacherEmail, period);
+        var controlledKey = self.buildHourlyAbsenceKey_(teacherEmail, period);
+        controlledHourlyMap[controlledKey] = true;
+      });
+      (row.hasDerivedWorkload
+        ? ((row.effectiveWorkload && Array.isArray(row.effectiveWorkload.items) ? row.effectiveWorkload.items : []).filter(function (item) {
+          return Boolean(item && item.actionable && ROOMS_APP.normalizeString(item.period));
+        }))
+        : (row.hourlyPeriods || []).map(function (period) {
+          return { period: period };
+        })
+      ).forEach(function (item) {
+        var period = ROOMS_APP.normalizeString(item && item.period);
+        var key;
+        if (!period) {
+          return;
+        }
+        key = self.buildHourlyAbsenceKey_(teacherEmail, period);
         controlledHourlyMap[key] = true;
         if (self.isHourlyServiceOutOfClassAbsence_(row)) {
           serviceHourlyMap[key] = true;
@@ -4416,8 +4586,14 @@ ROOMS_APP.Replacements = {
           Date: targetDate,
           TeacherEmail: teacherEmail,
           TeacherName: teacherName,
-          Period: ROOMS_APP.normalizeString(period),
+          Period: period,
           Reason: self.isHourlyServiceOutOfClassAbsence_(row) ? self.SERVICE_OUT_OF_CLASS_.GENERAL : '',
+          ClassCode: ROOMS_APP.normalizeString(item && item.classCode).toUpperCase(),
+          Label: ROOMS_APP.normalizeString(item && item.label),
+          SlotType: ROOMS_APP.normalizeString(item && item.slotType),
+          StartTime: ROOMS_APP.normalizeString(item && item.startTime),
+          EndTime: ROOMS_APP.normalizeString(item && item.endTime),
+          DerivedActionable: row.hasDerivedWorkload ? 'TRUE' : '',
           RecoveryRequired: row.absenceType === self.ABSENCE_TYPES_.HOURLY_PERMISSION && row.recoveryRequired ? 'TRUE' : 'FALSE',
           RecoveryStatus: '',
           RecoveredOnDate: '',
