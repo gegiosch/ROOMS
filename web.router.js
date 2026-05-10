@@ -335,6 +335,12 @@ function deleteReplacementAbsence(absenceId, requestContext) {
   });
 }
 
+function deleteReplacementAbsencesForTeacherDate(teacherEmail, dateString, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.Replacements.deleteAbsencesForTeacherDate(teacherEmail, dateString);
+  });
+}
+
 function saveReplacementDay(dateString, draft, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.Replacements.saveDay(dateString, draft);
@@ -656,6 +662,9 @@ function routeApiRequest_(payload) {
   }
   if (action === 'deleteReplacementAbsence') {
     return ROOMS_APP.Replacements.deleteAbsence(payload.absenceId);
+  }
+  if (action === 'deleteReplacementAbsencesForTeacherDate') {
+    return ROOMS_APP.Replacements.deleteAbsencesForTeacherDate(payload.teacherEmail, payload.date);
   }
   if (action === 'saveReplacementDay') {
     return ROOMS_APP.Replacements.saveDay(payload.date, payload.draft);

@@ -357,6 +357,66 @@ ROOMS_APP.Replacements = {
     return this.getAbsenceRegistryModel('');
   },
 
+  deleteAbsencesForTeacherDate: function (teacherEmail, dateString) {
+    ROOMS_APP.Auth.requireCanManageReplacement();
+    this.ensureSchema_();
+    var targetDate = ROOMS_APP.toIsoDate(dateString || '');
+    var targetEmail = this.normalizeTeacherEmail_(teacherEmail);
+    var activeLongAssignmentMap;
+    var removedRows = [];
+    var nextRows;
+    if (!targetDate || !targetEmail) {
+      throw new Error('Docente o data non validi.');
+    }
+    activeLongAssignmentMap = this.getActiveLongAssignmentsForDate_(targetDate, true);
+    nextRows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES).filter(function (row) {
+      var entry = ROOMS_APP.Replacements.readAbsenceRow_(row);
+      var identity = ROOMS_APP.Replacements.resolveAbsenceTeacherIdentityForDate_(
+        entry.teacherEmail,
+        entry.teacherName,
+        activeLongAssignmentMap
+      );
+      var endDate;
+      var matchesDate;
+      if (!entry || !entry.absenceId || !entry.enabled || entry.status === 'DELETED') {
+        return true;
+      }
+      if (entry.absenceType === ROOMS_APP.Replacements.ABSENCE_TYPES_.HOURLY_PERMISSION ||
+          ROOMS_APP.Replacements.isHourlyServiceOutOfClassAbsence_(entry)) {
+        matchesDate = entry.startDate === targetDate;
+      } else {
+        endDate = entry.endDate || entry.startDate;
+        matchesDate = Boolean(entry.startDate <= targetDate && endDate >= targetDate);
+      }
+      if (matchesDate && ROOMS_APP.Replacements.normalizeTeacherEmail_(identity.teacherEmail) === targetEmail) {
+        removedRows.push(entry);
+        return false;
+      }
+      return true;
+    });
+    if (!removedRows.length) {
+      throw new Error('Nessuna assenza/evento sorgente trovata per il docente selezionato.');
+    }
+    ROOMS_APP.DB.replaceRows(
+      ROOMS_APP.SHEET_NAMES.REPL_ABSENCES,
+      ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
+      nextRows
+    );
+    this.prepareDailyContextCacheAfterSourceChange_(
+      targetDate,
+      this.collectAbsenceCacheDates_(removedRows, targetDate),
+      'ABSENCE_DELETE_FROM_REPLACEMENTS'
+    );
+    return {
+      ok: true,
+      removedCount: removedRows.length,
+      model: this.getModalModel(targetDate, null, {
+        includeEditorData: false,
+        useDailyCache: false
+      })
+    };
+  },
+
   previewReport: function (dateString, draft) {
     ROOMS_APP.Auth.requireCanManageReplacement();
     this.ensureSchema_();
@@ -1634,11 +1694,20 @@ ROOMS_APP.Replacements = {
   buildTeacherDetailRows_: function (normalized, teacher) {
     var self = this;
     var assignmentsByKey = normalized.assignmentMap;
+    var assignmentsByTeacherPeriod = {};
     var assignedByPeriod = this.buildAssignedTeacherSetByPeriod_(normalized.assignments);
     var rows = [];
     var periodMap = ROOMS_APP.Timetable.getPeriodTimeMap();
     var periodKeys = Object.keys(periodMap).sort(function (left, right) {
       return Number(left) - Number(right);
+    });
+
+    (normalized.assignments || []).forEach(function (assignment) {
+      var teacherEmail = self.normalizeTeacherEmail_(assignment && assignment.originalTeacherEmail);
+      var period = ROOMS_APP.normalizeString(assignment && assignment.period);
+      if (teacherEmail && period) {
+        assignmentsByTeacherPeriod[self.buildHourlyAbsenceKey_(teacherEmail, period)] = assignment;
+      }
     });
 
     periodKeys.forEach(function (period) {
@@ -1650,16 +1719,26 @@ ROOMS_APP.Replacements = {
         endTime: periodMap[period].endTime
       };
       var hourlyAbsence = normalized.hourlyAbsenceMap[self.buildHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
-      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot);
+      var fallbackAssignment = assignmentsByTeacherPeriod[self.buildHourlyAbsenceKey_(teacher.teacherEmail, period)] || null;
+      var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot) ||
+        ROOMS_APP.normalizeString(fallbackAssignment && fallbackAssignment.classCode).toUpperCase();
       var assignmentKey = ROOMS_APP.Replacements.buildAssignmentKey_(period, assignmentClassCode, teacher.teacherEmail);
-      var assignment = assignmentsByKey[assignmentKey] || null;
+      var assignment = assignmentsByKey[assignmentKey] || fallbackAssignment || null;
       var isAccompanying = ROOMS_APP.Replacements.isTeacherAccompanyingAtPeriod_(
         normalized,
         teacher.teacherEmail,
         period
       );
-      var isCoverableSlot = ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot);
-      var requiresReplacement = Boolean(isCoverableSlot && (teacher.absent || hourlyAbsence || isAccompanying));
+      if (assignment && assignmentClassCode === ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.ALTERNATIVA && slot.type === 'FREE') {
+        slot = Object.assign({}, slot, {
+          type: 'SERVICE',
+          classCode: assignmentClassCode,
+          label: 'Alternativa',
+          coverageRequired: true
+        });
+      }
+      var isCoverableSlot = ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot) || Boolean(assignment);
+      var requiresReplacement = Boolean((isCoverableSlot && (teacher.absent || hourlyAbsence || isAccompanying)) || assignment);
       var row = {
         period: period,
         startTime: slot.startTime,
@@ -4296,7 +4375,14 @@ ROOMS_APP.Replacements = {
       }
       sourceRows.push({
         UpdatedAtISO: row.updatedAtISO || row.createdAtISO || '',
-        AbsenceId: row.absenceId
+        AbsenceId: row.absenceId,
+        TeacherEmail: teacherEmail,
+        TeacherName: teacherName,
+        AbsenceType: row.absenceType,
+        ServiceOutOfClassScope: row.serviceOutOfClassScope,
+        StartDate: row.startDate,
+        EndDate: row.endDate,
+        HourlyPeriods: (row.hourlyPeriods || []).slice()
       });
       controlledTeacherMap[teacherEmail] = true;
       if (row.absenceType === self.ABSENCE_TYPES_.DAILY || self.isDailyServiceOutOfClassAbsence_(row)) {
