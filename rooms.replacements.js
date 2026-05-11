@@ -192,7 +192,9 @@ ROOMS_APP.Replacements = {
     var persistedRows;
     var persistedById = {};
     var candidateRows = Array.isArray(rows) ? rows : [];
+    var normalizedCandidates = [];
     var normalizedRows = [];
+    var affectedDates;
     var seen = {};
     this.ensureSchema_();
     dateState = this.resolveSelectedDate_(referenceDate || ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow()), true);
@@ -222,6 +224,7 @@ ROOMS_APP.Replacements = {
         return;
       }
       seen[candidate.absenceId] = true;
+      normalizedCandidates.push(candidate);
       normalizedRows.push(ROOMS_APP.Replacements.buildAbsenceSheetRow_(candidate, actor, nowIso, existing));
     });
 
@@ -230,9 +233,11 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       normalizedRows
     );
+    affectedDates = this.collectAbsenceCacheDates_(persistedRows.concat(normalizedCandidates), dateState.selectedDate);
+    this.syncOperationalHourlyRowsForSourceCandidates_(normalizedCandidates, affectedDates, actor, nowIso, true);
     this.prepareDailyContextCacheAfterSourceChange_(
       dateState.selectedDate,
-      this.collectAbsenceCacheDates_(persistedRows.concat(candidateRows), dateState.selectedDate),
+      affectedDates,
       'ABSENCE_REGISTRY_SAVE'
     );
     return this.getAbsenceRegistryModel(dateState.selectedDate);
@@ -266,6 +271,7 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       nextRows
     );
+    this.syncOperationalHourlyRowsForSourceCandidates_([candidate], this.collectAbsenceCacheDates_(previousRow ? [previousRow, candidate] : [candidate], candidate.startDate), actor, nowIso, false);
     this.prepareDailyContextCacheAfterSourceChange_(
       candidate.startDate,
       this.collectAbsenceCacheDates_(previousRow ? [previousRow, candidate] : [candidate], candidate.startDate),
@@ -333,6 +339,8 @@ ROOMS_APP.Replacements = {
     var targetDate = ROOMS_APP.toIsoDate(candidate && candidate.startDate);
     var teacherEmail = this.normalizeTeacherEmail_(candidate && candidate.teacherEmail);
     var teacherName = ROOMS_APP.normalizeString(candidate && candidate.teacherName);
+    var effectiveTeacherEmail = teacherEmail;
+    var effectiveTeacherName = teacherName;
     var teacherMap;
     var teacher;
     var identity;
@@ -361,6 +369,10 @@ ROOMS_APP.Replacements = {
           this.getActiveLongAssignmentsForDate_(targetDate, true)
         );
         teacher = identity && identity.teacherEmail ? teacherMap[identity.teacherEmail] : null;
+      }
+      if (teacher) {
+        effectiveTeacherEmail = teacher.teacherEmail || effectiveTeacherEmail;
+        effectiveTeacherName = teacher.teacherName || effectiveTeacherName;
       }
       selectedPeriods.forEach(function (period) {
         var slot = teacher && teacher.periods ? teacher.periods[period] : null;
@@ -397,14 +409,163 @@ ROOMS_APP.Replacements = {
       effectiveWorkload: {
         version: this.ABSENCE_WORKLOAD_DERIVED_VERSION_,
         date: targetDate,
-        teacherEmail: teacherEmail,
-        teacherName: teacherName,
+        teacherEmail: effectiveTeacherEmail,
+        teacherName: effectiveTeacherName,
         absenceType: candidate && candidate.absenceType || '',
         serviceOutOfClassScope: candidate && candidate.serviceOutOfClassScope || '',
         selectedPeriods: selectedPeriods,
         matchedPeriods: matchedPeriods,
         items: items
       }
+    };
+  },
+
+  syncOperationalHourlyRowsForSourceCandidates_: function (candidates, affectedDates, actor, nowIso, pruneMissingForDates) {
+    var sheetName = ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES;
+    var headers = ROOMS_APP.DB.getHeaders(sheetName);
+    var dateMap = {};
+    var activeSourceIds = {};
+    var replaceSourceIds = {};
+    var existingBySourceKey = {};
+    var nextRows;
+    var self = this;
+
+    (affectedDates || []).forEach(function (dateValue) {
+      var dateKey = ROOMS_APP.toIsoDate(dateValue);
+      if (dateKey) {
+        dateMap[dateKey] = true;
+      }
+    });
+    (candidates || []).forEach(function (candidate) {
+      if (candidate && candidate.absenceId) {
+        activeSourceIds[candidate.absenceId] = true;
+        replaceSourceIds[candidate.absenceId] = true;
+      }
+      if (candidate && candidate.startDate) {
+        dateMap[ROOMS_APP.toIsoDate(candidate.startDate)] = true;
+      }
+    });
+
+    nextRows = ROOMS_APP.DB.readRows(sheetName).map(function (row) {
+      return ROOMS_APP.Replacements.readHourlyAbsenceRow_(row);
+    }).filter(function (row) {
+      var sourceId = ROOMS_APP.normalizeString(row.sourceAbsenceId);
+      var inAffectedDate = Boolean(dateMap[row.date]);
+      if (sourceId) {
+        existingBySourceKey[[sourceId, row.period].join('|')] = row;
+      }
+      if (sourceId && replaceSourceIds[sourceId]) {
+        return false;
+      }
+      if (pruneMissingForDates && inAffectedDate && row.sourceType === 'REPL_ABSENCES' && sourceId && !activeSourceIds[sourceId]) {
+        return false;
+      }
+      return true;
+    });
+
+    (candidates || []).forEach(function (candidate) {
+      self.buildOperationalHourlyRowsForAbsenceCandidate_(candidate, actor, nowIso, existingBySourceKey).forEach(function (row) {
+        nextRows.push(row);
+      });
+    });
+
+    ROOMS_APP.DB.replaceRows(sheetName, headers, nextRows.map(function (row) {
+      return ROOMS_APP.Replacements.serializeHourlyAbsenceRow_(row, row.updatedAtISO || nowIso, row.updatedBy || actor && actor.email);
+    }));
+  },
+
+  buildOperationalHourlyRowsForAbsenceCandidate_: function (candidate, actor, nowIso, existingBySourceKey) {
+    var derived;
+    var isServiceOut;
+    if (!this.isHourlyAbsenceCandidate_(candidate)) {
+      return [];
+    }
+    derived = this.buildAbsenceEffectiveWorkload_(candidate, nowIso);
+    isServiceOut = this.isHourlyServiceOutOfClassAbsence_(candidate);
+    return ((derived.effectiveWorkload && derived.effectiveWorkload.items) || []).filter(function (item) {
+      return Boolean(item && item.actionable && item.period && item.classCode);
+    }).map(function (item) {
+      var existing = existingBySourceKey && existingBySourceKey[[candidate.absenceId, item.period].join('|')] || {};
+      var recoveryRequired = !isServiceOut && Boolean(candidate.recoveryRequired);
+      var recovered = recoveryRequired && existing.recoveryStatus === ROOMS_APP.Replacements.RECOVERY_STATUSES_.RECOVERED;
+      return {
+        date: candidate.startDate,
+        teacherEmail: derived.effectiveWorkload.teacherEmail || candidate.teacherEmail,
+        teacherName: derived.effectiveWorkload.teacherName || candidate.teacherName,
+        period: item.period,
+        reason: isServiceOut ? ROOMS_APP.Replacements.SERVICE_OUT_OF_CLASS_.GENERAL : '',
+        classCode: item.classCode,
+        label: item.label,
+        slotType: item.slotType,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        derivedActionable: true,
+        sourceAbsenceId: candidate.absenceId,
+        sourceType: 'REPL_ABSENCES',
+        recoveryRequired: recoveryRequired,
+        recoveryStatus: recovered ? ROOMS_APP.Replacements.RECOVERY_STATUSES_.RECOVERED : (recoveryRequired ? ROOMS_APP.Replacements.RECOVERY_STATUSES_.PENDING : ''),
+        recoveredOnDate: recovered ? existing.recoveredOnDate : '',
+        recoveredByAssignmentKey: recovered ? existing.recoveredByAssignmentKey : '',
+        notes: candidate.notes,
+        updatedAtISO: nowIso || '',
+        updatedBy: actor && actor.email || ''
+      };
+    });
+  },
+
+  removeOperationalHourlyRowsForSourceAbsences_: function (sourceRows) {
+    var sheetName = ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES;
+    var headers = ROOMS_APP.DB.getHeaders(sheetName);
+    var sourceIds = {};
+    var fallbackKeys = {};
+    (sourceRows || []).forEach(function (row) {
+      var sourceId = ROOMS_APP.normalizeString(row && row.absenceId);
+      var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(row && row.teacherEmail);
+      var dateKey = ROOMS_APP.toIsoDate(row && row.startDate);
+      if (sourceId) {
+        sourceIds[sourceId] = true;
+      }
+      (row && row.hourlyPeriods || []).forEach(function (period) {
+        fallbackKeys[ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(dateKey, teacherEmail, period)] = true;
+      });
+    });
+    ROOMS_APP.DB.replaceRows(sheetName, headers, ROOMS_APP.DB.readRows(sheetName).map(function (row) {
+      return ROOMS_APP.Replacements.readHourlyAbsenceRow_(row);
+    }).filter(function (row) {
+      if (row.sourceAbsenceId && sourceIds[row.sourceAbsenceId]) {
+        return false;
+      }
+      if (!row.sourceAbsenceId && fallbackKeys[ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(row.date, row.teacherEmail, row.period)]) {
+        return false;
+      }
+      return true;
+    }).map(function (row) {
+      return ROOMS_APP.Replacements.serializeHourlyAbsenceRow_(row, row.updatedAtISO, row.updatedBy);
+    }));
+  },
+
+  serializeHourlyAbsenceRow_: function (row, nowIso, updatedBy) {
+    return {
+      Date: row.date,
+      TeacherEmail: row.teacherEmail,
+      TeacherName: row.teacherName,
+      Period: row.period,
+      Reason: ROOMS_APP.normalizeString(row.reason),
+      ClassCode: ROOMS_APP.normalizeString(row.classCode).toUpperCase(),
+      Label: ROOMS_APP.normalizeString(row.label),
+      SlotType: ROOMS_APP.normalizeString(row.slotType),
+      StartTime: ROOMS_APP.normalizeString(row.startTime),
+      EndTime: ROOMS_APP.normalizeString(row.endTime),
+      DerivedActionable: row.derivedActionable ? 'TRUE' : '',
+      SourceAbsenceId: ROOMS_APP.normalizeString(row.sourceAbsenceId),
+      SourceType: ROOMS_APP.normalizeString(row.sourceType),
+      RecoveryRequired: row.recoveryRequired ? 'TRUE' : 'FALSE',
+      RecoveryStatus: row.recoveryStatus,
+      RecoveredOnDate: row.recoveredOnDate,
+      RecoveredByAssignmentKey: row.recoveredByAssignmentKey,
+      Notes: row.notes,
+      UpdatedAtISO: nowIso || row.updatedAtISO || '',
+      UpdatedBy: updatedBy || row.updatedBy || ''
     };
   },
 
@@ -430,6 +591,7 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       nextRows
     );
+    this.removeOperationalHourlyRowsForSourceAbsences_(removedRows);
     this.prepareDailyContextCacheAfterSourceChange_(
       removedRows[0] && removedRows[0].startDate,
       this.collectAbsenceCacheDates_(removedRows, removedRows[0] && removedRows[0].startDate),
@@ -483,6 +645,7 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_ABSENCES),
       nextRows
     );
+    this.removeOperationalHourlyRowsForSourceAbsences_(removedRows);
     this.prepareDailyContextCacheAfterSourceChange_(
       targetDate,
       this.collectAbsenceCacheDates_(removedRows, targetDate),
@@ -3154,6 +3317,14 @@ ROOMS_APP.Replacements = {
         teacherName: entry.teacherName,
         period: entry.period,
         reason: ROOMS_APP.normalizeString(entry.reason),
+        classCode: ROOMS_APP.normalizeString(entry.classCode).toUpperCase(),
+        label: ROOMS_APP.normalizeString(entry.label),
+        slotType: ROOMS_APP.normalizeString(entry.slotType),
+        startTime: ROOMS_APP.normalizeString(entry.startTime),
+        endTime: ROOMS_APP.normalizeString(entry.endTime),
+        derivedActionable: Boolean(entry.derivedActionable),
+        sourceAbsenceId: ROOMS_APP.normalizeString(entry.sourceAbsenceId),
+        sourceType: ROOMS_APP.normalizeString(entry.sourceType),
         recoveryRequired: Boolean(entry.recoveryRequired),
         recoveryStatus: '',
         recoveredOnDate: '',
@@ -3179,20 +3350,7 @@ ROOMS_APP.Replacements = {
     });
 
     ROOMS_APP.DB.replaceRows(sheetName, headers, nextRows.map(function (row) {
-      return {
-        Date: row.date,
-        TeacherEmail: row.teacherEmail,
-        TeacherName: row.teacherName,
-        Period: row.period,
-        Reason: ROOMS_APP.normalizeString(row.reason),
-        RecoveryRequired: row.recoveryRequired ? 'TRUE' : 'FALSE',
-        RecoveryStatus: row.recoveryStatus,
-        RecoveredOnDate: row.recoveredOnDate,
-        RecoveredByAssignmentKey: row.recoveredByAssignmentKey,
-        Notes: row.notes,
-        UpdatedAtISO: nowIso || row.updatedAtISO || '',
-        UpdatedBy: updatedBy || row.updatedBy || ''
-      };
+      return ROOMS_APP.Replacements.serializeHourlyAbsenceRow_(row, nowIso, updatedBy);
     }));
   },
 
@@ -3258,6 +3416,8 @@ ROOMS_APP.Replacements = {
       startTime: ROOMS_APP.normalizeString(row && row.StartTime),
       endTime: ROOMS_APP.normalizeString(row && row.EndTime),
       derivedActionable: ROOMS_APP.asBoolean(row && row.DerivedActionable),
+      sourceAbsenceId: ROOMS_APP.normalizeString(row && row.SourceAbsenceId),
+      sourceType: ROOMS_APP.normalizeString(row && row.SourceType),
       recoveryRequired: ROOMS_APP.asBoolean(row && row.RecoveryRequired),
       recoveryStatus: ROOMS_APP.normalizeString(row && row.RecoveryStatus),
       recoveredOnDate: ROOMS_APP.toIsoDate(row && row.RecoveredOnDate),
@@ -3286,6 +3446,8 @@ ROOMS_APP.Replacements = {
       startTime: ROOMS_APP.normalizeString(entry && (entry.startTime || entry.StartTime)),
       endTime: ROOMS_APP.normalizeString(entry && (entry.endTime || entry.EndTime)),
       derivedActionable: ROOMS_APP.asBoolean(entry && (entry.derivedActionable || entry.DerivedActionable)),
+      sourceAbsenceId: ROOMS_APP.normalizeString(entry && (entry.sourceAbsenceId || entry.SourceAbsenceId)),
+      sourceType: ROOMS_APP.normalizeString(entry && (entry.sourceType || entry.SourceType)),
       recoveryRequired: ROOMS_APP.asBoolean(entry && Object.prototype.hasOwnProperty.call(entry, 'recoveryRequired') ? entry.recoveryRequired : entry && entry.RecoveryRequired),
       recoveryStatus: ROOMS_APP.normalizeString(entry && (entry.recoveryStatus || entry.RecoveryStatus)) || this.RECOVERY_STATUSES_.PENDING,
       recoveredOnDate: ROOMS_APP.toIsoDate(entry && (entry.recoveredOnDate || entry.RecoveredOnDate)),
@@ -4542,8 +4704,8 @@ ROOMS_APP.Replacements = {
         DerivedAtISO: row.derivedAtISO || '',
         DerivedVersion: row.derivedVersion || ''
       });
-      controlledTeacherMap[teacherEmail] = true;
       if (row.absenceType === self.ABSENCE_TYPES_.DAILY || self.isDailyServiceOutOfClassAbsence_(row)) {
+        controlledTeacherMap[teacherEmail] = true;
         if (self.isDailyServiceOutOfClassAbsence_(row)) {
           serviceTeacherMap[teacherEmail] = true;
         }
@@ -4558,6 +4720,9 @@ ROOMS_APP.Replacements = {
           UpdatedAtISO: row.updatedAtISO || row.createdAtISO || '',
           UpdatedBy: row.updatedBy || row.createdBy || ''
         };
+        return;
+      }
+      if (row.hasDerivedWorkload) {
         return;
       }
       (row.hourlyPeriods || []).forEach(function (period) {
@@ -4648,14 +4813,27 @@ ROOMS_APP.Replacements = {
     var controlledTeacherMap = registryState && registryState.controlledTeacherMap ? registryState.controlledTeacherMap : {};
     var controlledHourlyMap = registryState && registryState.controlledHourlyMap ? registryState.controlledHourlyMap : {};
     var self = this;
-    return (legacyRows || []).filter(function (row) {
+    var acceptedKeyMap = {};
+    var acceptedRows = (legacyRows || []).filter(function (row) {
       var identity = self.resolveAbsenceTeacherIdentityForDate_(row && row.TeacherEmail, row && row.TeacherName, activeLongAssignmentMap);
       var key = self.buildHourlyAbsenceKey_(identity.teacherEmail, row && row.Period);
+      if (ROOMS_APP.normalizeString(row && row.SourceAbsenceId)) {
+        acceptedKeyMap[key] = true;
+        return true;
+      }
       if (controlledTeacherMap[identity.teacherEmail]) {
         return false;
       }
-      return !controlledHourlyMap[key];
-    }).concat(registryRows);
+      if (controlledHourlyMap[key]) {
+        return false;
+      }
+      acceptedKeyMap[key] = true;
+      return true;
+    });
+    return acceptedRows.concat((registryRows || []).filter(function (row) {
+      var identity = self.resolveAbsenceTeacherIdentityForDate_(row && row.TeacherEmail, row && row.TeacherName, activeLongAssignmentMap);
+      return !acceptedKeyMap[self.buildHourlyAbsenceKey_(identity.teacherEmail, row && row.Period)];
+    }));
   },
 
   getTeacherServicePeriodsForDate_: function (teacherEmail, dateString) {
