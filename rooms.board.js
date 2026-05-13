@@ -376,15 +376,20 @@ ROOMS_APP.Board = {
   },
 
   getBookingActorLabel_: function (booking) {
+    var requesterMode = ROOMS_APP.normalizeString(booking && (booking.RequesterMode || booking.requesterMode)).toUpperCase();
     var surname = ROOMS_APP.normalizeString(booking && booking.BookerSurname);
     var name = ROOMS_APP.normalizeString(booking && booking.BookerName);
+    var manualName = ROOMS_APP.normalizeString(booking && (booking.RequesterManualName || booking.requesterManualName));
     var joined = [surname, name].filter(function (token) {
       return Boolean(token);
     }).join(' ');
-    return joined ||
-      ROOMS_APP.normalizeString(booking && (booking.RequesterManualName || booking.requesterManualName)) ||
-      ROOMS_APP.normalizeString(booking && booking.BookerEmail) ||
-      'N/D';
+    if (requesterMode === 'NONE') {
+      return '';
+    }
+    if (requesterMode === 'MANUAL') {
+      return manualName || joined;
+    }
+    return joined || manualName;
   },
 
   buildAfternoonBookingSummary_: function (bookings, resourceNames, visibleOccupancyKeys, currentTime) {

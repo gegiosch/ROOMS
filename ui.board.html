@@ -656,7 +656,14 @@
           } else {
             rows.forEach(function (booking) {
               var line = ROOMS_UI.el('div', 'afternoon-summary-line');
-              var summaryText = (booking.roomName || '-') + ' · ' + (booking.activityDescription || 'Attivita non specificata') + ' · ' + (booking.actorLabel || 'N/D');
+              var summaryParts = [
+                booking.roomName || '-',
+                booking.activityDescription || 'Attivita non specificata'
+              ];
+              if (booking.actorLabel) {
+                summaryParts.push(booking.actorLabel);
+              }
+              var summaryText = summaryParts.join(' · ');
               var summaryLine = ROOMS_UI.el('div', 'afternoon-summary-text monitor-marquee-line');
               line.appendChild(ROOMS_UI.el('div', 'afternoon-summary-time', formatBookingTimeRange_(booking)));
               summaryLine.appendChild(ROOMS_UI.el('span', 'monitor-marquee-text', summaryText));
