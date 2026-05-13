@@ -381,7 +381,10 @@ ROOMS_APP.Board = {
     var joined = [surname, name].filter(function (token) {
       return Boolean(token);
     }).join(' ');
-    return joined || ROOMS_APP.normalizeString(booking && booking.BookerEmail) || 'N/D';
+    return joined ||
+      ROOMS_APP.normalizeString(booking && (booking.RequesterManualName || booking.requesterManualName)) ||
+      ROOMS_APP.normalizeString(booking && booking.BookerEmail) ||
+      'N/D';
   },
 
   buildAfternoonBookingSummary_: function (bookings, resourceNames, visibleOccupancyKeys, currentTime) {

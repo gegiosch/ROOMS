@@ -546,6 +546,8 @@ ROOMS_APP.Schema = {
       'Title',
       'ActivityDescription',
       'DisplayMode',
+      'RequesterMode',
+      'RequesterManualName',
       'BookerEmail',
       'BookerName',
       'BookerSurname',

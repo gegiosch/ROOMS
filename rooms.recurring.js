@@ -184,8 +184,18 @@ ROOMS_APP.Recurring = {
     var startTime = ROOMS_APP.toTimeString(source.startTime || source.StartTime);
     var endTime = ROOMS_APP.toTimeString(source.endTime || source.EndTime);
     var activityDescription = ROOMS_APP.normalizeString(source.activityDescription || source.ActivityDescription);
+    var requesterMode = ROOMS_APP.Booking.normalizeRequesterMode_(source.requesterMode || source.RequesterMode);
+    var requesterManualName = requesterMode === 'MANUAL'
+      ? ROOMS_APP.normalizeString(source.requesterManualName || source.RequesterManualName)
+      : '';
+    var displayMode = requesterMode === 'NONE'
+      ? 'ACTIVITY'
+      : ROOMS_APP.Booking.normalizeDisplayMode_(source.displayMode || source.DisplayMode);
     if (!activityDescription) {
       throw new Error('Descrizione attività obbligatoria.');
+    }
+    if (requesterMode === 'MANUAL' && !requesterManualName) {
+      throw new Error('Nominativo manuale obbligatorio.');
     }
     return {
       draftId: ROOMS_APP.normalizeString(source.draftId || source.bookingId || source.BookingId) || ('row-' + String((rowIndex || 0) + 1)),
@@ -203,10 +213,12 @@ ROOMS_APP.Recurring = {
         endTime: endTime,
         title: ROOMS_APP.normalizeString(source.title || source.Title),
         activityDescription: activityDescription,
-        displayMode: ROOMS_APP.Booking.normalizeDisplayMode_(source.displayMode || source.DisplayMode),
+        displayMode: displayMode,
+        requesterMode: requesterMode,
+        requesterManualName: requesterManualName,
         notes: ROOMS_APP.normalizeString(source.notes || source.Notes),
-        bookerName: ROOMS_APP.normalizeString(source.bookerName || source.BookerName),
-        bookerSurname: ROOMS_APP.normalizeString(source.bookerSurname || source.BookerSurname)
+        bookerName: requesterMode === 'NONE' ? '' : ROOMS_APP.normalizeString(source.bookerName || source.BookerName),
+        bookerSurname: requesterMode === 'NONE' ? '' : ROOMS_APP.normalizeString(source.bookerSurname || source.BookerSurname)
       }
     };
   },

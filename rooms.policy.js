@@ -5,6 +5,30 @@ ROOMS_APP.Policy = {
     return String(value || '').toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
   },
 
+  normalizeBookingRequesterMode_: function (value) {
+    var normalized = String(value || '').toUpperCase();
+    if (normalized === 'MANUAL' || normalized === 'NONE') {
+      return normalized;
+    }
+    return 'LIST';
+  },
+
+  parseRequesterName_: function (value) {
+    var tokens = ROOMS_APP.normalizeString(value).split(/\s+/).filter(function (token) {
+      return Boolean(token);
+    });
+    if (!tokens.length) {
+      return { firstName: '', surname: '' };
+    }
+    if (tokens.length === 1) {
+      return { firstName: '', surname: tokens[0] };
+    }
+    return {
+      surname: tokens[0],
+      firstName: tokens.slice(1).join(' ')
+    };
+  },
+
   getResource: function (resourceId) {
     var resources = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.RESOURCES);
     return resources.filter(function (row) {
@@ -190,6 +214,8 @@ ROOMS_APP.Policy = {
       title: ROOMS_APP.normalizeString(request.title || request.Title),
       activityDescription: ROOMS_APP.normalizeString(request.activityDescription || request.ActivityDescription),
       displayMode: this.normalizeBookingDisplayMode_(request.displayMode || request.DisplayMode),
+      requesterMode: this.normalizeBookingRequesterMode_(request.requesterMode || request.RequesterMode),
+      requesterManualName: ROOMS_APP.normalizeString(request.requesterManualName || request.RequesterManualName),
       notes: ROOMS_APP.normalizeString(request.notes || request.Notes),
       bookerName: ROOMS_APP.normalizeString(request.bookerName || request.BookerName),
       bookerSurname: ROOMS_APP.normalizeString(request.bookerSurname || request.BookerSurname),
@@ -197,10 +223,29 @@ ROOMS_APP.Policy = {
       bookingId: ROOMS_APP.normalizeString(request.bookingId || request.BookingId)
     };
 
-    if (!normalized.bookerName && emailIdentity.firstName) {
+    if (normalized.requesterMode === 'NONE') {
+      normalized.displayMode = 'ACTIVITY';
+      normalized.bookerName = '';
+      normalized.bookerSurname = '';
+      normalized.requesterManualName = '';
+    } else if (normalized.requesterMode === 'MANUAL') {
+      normalized.requesterManualName = normalized.requesterManualName || ROOMS_APP.normalizeString([
+        normalized.bookerSurname,
+        normalized.bookerName
+      ].filter(function (token) {
+        return Boolean(token);
+      }).join(' '));
+      if (normalized.requesterManualName && !normalized.bookerName && !normalized.bookerSurname) {
+        var manualIdentity = this.parseRequesterName_(normalized.requesterManualName);
+        normalized.bookerName = manualIdentity.firstName;
+        normalized.bookerSurname = manualIdentity.surname;
+      }
+    }
+
+    if (normalized.requesterMode !== 'NONE' && !normalized.bookerName && emailIdentity.firstName) {
       normalized.bookerName = emailIdentity.firstName;
     }
-    if (!normalized.bookerSurname && emailIdentity.surname) {
+    if (normalized.requesterMode !== 'NONE' && !normalized.bookerSurname && emailIdentity.surname) {
       normalized.bookerSurname = emailIdentity.surname;
     }
     if (!user.canAccessAdmin) {

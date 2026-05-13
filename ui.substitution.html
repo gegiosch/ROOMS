@@ -321,6 +321,9 @@
       .admin-existing-edit .grid-span-3 {
         grid-column: 1 / -1;
       }
+      .admin-booking-form-body .grid-span-3 {
+        grid-column: 1 / -1;
+      }
       .admin-existing-help {
         margin-top: 8px;
         color: var(--muted);
@@ -805,9 +808,30 @@
                         </label>
                       </div>
                     </div>
-                    <div>
-                      <label for="admin-booking-teacher">Docente / richiedente *</label>
+                    <div class="grid-span-3">
+                      <label>Docente / richiedente *</label>
+                      <div class="substitution-absence-inline" style="margin-top:6px;">
+                        <label class="substitution-absence-check" for="admin-booking-requester-list">
+                          <input id="admin-booking-requester-list" name="admin-booking-requester-mode" type="radio" value="LIST" checked>
+                          <span>Docente in elenco</span>
+                        </label>
+                        <label class="substitution-absence-check" for="admin-booking-requester-manual">
+                          <input id="admin-booking-requester-manual" name="admin-booking-requester-mode" type="radio" value="MANUAL">
+                          <span>Nominativo manuale</span>
+                        </label>
+                        <label class="substitution-absence-check" for="admin-booking-requester-none">
+                          <input id="admin-booking-requester-none" name="admin-booking-requester-mode" type="radio" value="NONE">
+                          <span>Nessun nominativo</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div id="admin-booking-teacher-wrap">
+                      <label for="admin-booking-teacher">Docente in elenco *</label>
                       <select id="admin-booking-teacher" class="select"></select>
+                    </div>
+                    <div id="admin-booking-manual-wrap" style="display:none;">
+                      <label for="admin-booking-manual-name">Nominativo manuale *</label>
+                      <input id="admin-booking-manual-name" class="input" type="text" placeholder="Nome e cognome">
                     </div>
                     <div>
                       <label for="admin-booking-activity">Descrizione attività *</label>
@@ -7660,7 +7684,11 @@
         var absenceFormBody = document.getElementById('substitution-absence-form-body');
         var adminBookingDate = document.getElementById('admin-booking-date');
         var adminBookingRoom = document.getElementById('admin-booking-room');
+        var adminBookingRequesterModeInputs = Array.prototype.slice.call(document.querySelectorAll('[name="admin-booking-requester-mode"]'));
+        var adminBookingTeacherWrap = document.getElementById('admin-booking-teacher-wrap');
         var adminBookingTeacher = document.getElementById('admin-booking-teacher');
+        var adminBookingManualWrap = document.getElementById('admin-booking-manual-wrap');
+        var adminBookingManualName = document.getElementById('admin-booking-manual-name');
         var adminBookingActivity = document.getElementById('admin-booking-activity');
         var adminBookingNotes = document.getElementById('admin-booking-notes');
         var adminBookingRepeatWeekly = document.getElementById('admin-booking-repeat-weekly');
@@ -8446,17 +8474,115 @@
           };
         }
 
+        function normalizeAdminBookingRequesterMode_(mode) {
+          var normalized = String(mode || '').toUpperCase();
+          if (normalized === 'MANUAL' || normalized === 'NONE') {
+            return normalized;
+          }
+          return 'LIST';
+        }
+
+        function getAdminBookingRequesterMode_() {
+          var checked = adminBookingRequesterModeInputs.filter(function (input) {
+            return input && input.checked;
+          })[0];
+          return normalizeAdminBookingRequesterMode_(checked ? checked.value : 'LIST');
+        }
+
+        function setAdminBookingRequesterMode_(mode) {
+          var normalized = normalizeAdminBookingRequesterMode_(mode);
+          adminBookingRequesterModeInputs.forEach(function (input) {
+            input.checked = normalizeAdminBookingRequesterMode_(input.value) === normalized;
+          });
+          syncAdminBookingRequesterModeUi_();
+        }
+
+        function getAdminBookingManualName_() {
+          return adminBookingManualName ? String(adminBookingManualName.value || '').trim() : '';
+        }
+
+        function getAdminBookingRequester_() {
+          var mode = getAdminBookingRequesterMode_();
+          var teacher = getAdminBookingTeacher_();
+          var manualName = getAdminBookingManualName_();
+          var requesterName = mode === 'MANUAL' ? manualName : (mode === 'LIST' ? teacher.teacherName : '');
+          var parsed = parseFullName(requesterName);
+          return {
+            requesterMode: mode,
+            requesterManualName: mode === 'MANUAL' ? manualName : '',
+            teacherEmail: mode === 'LIST' ? teacher.teacherEmail : '',
+            teacherName: mode === 'LIST' ? teacher.teacherName : '',
+            requesterDisplayName: requesterName,
+            bookerName: mode === 'NONE' ? '' : parsed.firstName,
+            bookerSurname: mode === 'NONE' ? '' : parsed.surname
+          };
+        }
+
+        function inferAdminBookingRequesterMode_(row) {
+          var explicitMode = row && row.requesterMode ? normalizeAdminBookingRequesterMode_(row.requesterMode) : '';
+          if (explicitMode) {
+            return explicitMode;
+          }
+          if (row && row.requesterManualName) {
+            return 'MANUAL';
+          }
+          if (row && (row.teacherEmail || row.teacherName || row.bookerName || row.bookerSurname)) {
+            return 'LIST';
+          }
+          return 'NONE';
+        }
+
+        function getAdminBookingRequesterLabel_(row) {
+          var mode = inferAdminBookingRequesterMode_(row || {});
+          if (mode === 'MANUAL') {
+            return (row && row.requesterManualName) || [row && row.bookerSurname, row && row.bookerName].filter(Boolean).join(' ') || '-';
+          }
+          if (mode === 'NONE') {
+            return '-';
+          }
+          return (row && row.teacherName) || [row && row.bookerSurname, row && row.bookerName].filter(Boolean).join(' ') || '-';
+        }
+
+        function syncAdminBookingRequesterModeUi_() {
+          var mode = getAdminBookingRequesterMode_();
+          if (adminBookingTeacherWrap) {
+            adminBookingTeacherWrap.style.display = mode === 'LIST' ? '' : 'none';
+          }
+          if (adminBookingTeacher) {
+            adminBookingTeacher.disabled = mode !== 'LIST';
+          }
+          if (adminBookingManualWrap) {
+            adminBookingManualWrap.style.display = mode === 'MANUAL' ? '' : 'none';
+          }
+          if (adminBookingManualName) {
+            adminBookingManualName.disabled = mode !== 'MANUAL';
+          }
+          if (adminBookingDisplayTeacher) {
+            adminBookingDisplayTeacher.disabled = mode === 'NONE';
+          }
+          if (mode === 'NONE') {
+            setAdminBookingDisplayMode_('ACTIVITY');
+          }
+        }
+
         function getAdminBookingDisplayMode_() {
-          if (adminBookingDisplayActivity && adminBookingDisplayActivity.checked) {
+          if (getAdminBookingRequesterMode_() === 'NONE') {
             return 'ACTIVITY';
           }
-          return 'TEACHER';
+          if (adminBookingDisplayTeacher && adminBookingDisplayTeacher.checked) {
+            return 'TEACHER';
+          }
+          return 'ACTIVITY';
         }
 
         function setAdminBookingDisplayMode_(mode) {
           var normalized = String(mode || '').toUpperCase() === 'ACTIVITY' ? 'ACTIVITY' : 'TEACHER';
+          if (normalized === 'TEACHER' && getAdminBookingRequesterMode_() === 'NONE') {
+            normalized = 'ACTIVITY';
+          }
           if (adminBookingDisplayTeacher) {
             adminBookingDisplayTeacher.checked = normalized === 'TEACHER';
+            adminBookingDisplayTeacher.disabled = getAdminBookingRequesterMode_() === 'NONE';
           }
           if (adminBookingDisplayActivity) {
             adminBookingDisplayActivity.checked = normalized === 'ACTIVITY';
@@ -8901,6 +9027,10 @@
           if (adminBookingTeacher) {
             adminBookingTeacher.value = '';
           }
+          setAdminBookingRequesterMode_('LIST');
+          if (adminBookingManualName) {
+            adminBookingManualName.value = '';
+          }
           if (adminBookingActivity) {
             adminBookingActivity.value = '';
           }
@@ -8926,17 +9056,24 @@
         }
 
         function getAdminBookingDraftValidationMessage_() {
+          var requester = getAdminBookingRequester_();
           if (!(adminBookingDate && adminBookingDate.value)) {
             return 'Selezionare una data.';
           }
           if (!(adminBookingRoom && adminBookingRoom.value)) {
             return 'Selezionare un\'aula.';
           }
-          if (!(adminBookingTeacher && adminBookingTeacher.value)) {
+          if (requester.requesterMode === 'LIST' && !(adminBookingTeacher && adminBookingTeacher.value)) {
             return 'Selezionare un docente.';
+          }
+          if (requester.requesterMode === 'MANUAL' && !requester.requesterManualName) {
+            return 'Inserire il nominativo manuale.';
           }
           if (!(adminBookingActivity && String(adminBookingActivity.value || '').trim())) {
             return 'Inserire la descrizione attività.';
+          }
+          if (getAdminBookingDisplayMode_() === 'TEACHER' && !requester.requesterDisplayName) {
+            return 'Mostra docente richiede un nominativo.';
           }
           if (!getAdminBookingDisplayMode_()) {
             return 'Selezionare cosa visualizzare sul monitor.';
@@ -8963,7 +9100,7 @@
         }
 
         function addAdminBookingDraft_() {
-          var teacher = getAdminBookingTeacher_();
+          var requester = getAdminBookingRequester_();
           var selectedSlots = getAdminBookingSelectedSlots_();
           var groupingAnalysis = ROOMS_UI.analyzeSlotActivityGrouping(selectedSlots);
           var groupingMode = groupingAnalysis.fullyConsecutive
@@ -8977,7 +9114,6 @@
           var displayMode = getAdminBookingDisplayMode_();
           var repeatWeekly = Boolean(adminBookingRepeatWeekly && adminBookingRepeatWeekly.checked);
           var repeatUntil = repeatWeekly && adminBookingRepeatUntil ? adminBookingRepeatUntil.value : '';
-          var parsedTeacher = parseFullName(teacher.teacherName);
           var validationMessage = getAdminBookingDraftValidationMessage_();
           var rowsToAdd = [];
           if (validationMessage) {
@@ -8995,10 +9131,12 @@
               roomName: getAdminBookingRoomName_(resourceId),
               startTime: block.startTime,
               endTime: block.endTime,
-              teacherEmail: teacher.teacherEmail,
-              teacherName: teacher.teacherName,
-              bookerName: parsedTeacher.firstName,
-              bookerSurname: parsedTeacher.surname,
+              requesterMode: requester.requesterMode,
+              requesterManualName: requester.requesterManualName,
+              teacherEmail: requester.teacherEmail,
+              teacherName: requester.teacherName,
+              bookerName: requester.bookerName,
+              bookerSurname: requester.bookerSurname,
               activityDescription: activityDescription,
               displayMode: displayMode,
               notes: notes,
@@ -9033,9 +9171,11 @@
           var row = safeArray(adminBookingState.draftRows).filter(function (entry) {
             return entry.draftId === draftId;
           })[0];
+          var requesterMode;
           if (!row) {
             return;
           }
+          requesterMode = inferAdminBookingRequesterMode_(row);
           adminBookingState.editingDraftId = row.draftId;
           if (adminBookingDate) {
             adminBookingDate.value = row.date || '';
@@ -9046,6 +9186,13 @@
           if (adminBookingTeacher) {
             adminBookingTeacher.value = row.teacherEmail || '';
           }
+          setAdminBookingRequesterMode_(requesterMode);
+          if (adminBookingManualName) {
+            adminBookingManualName.value = requesterMode === 'MANUAL'
+              ? (row.requesterManualName || [row.bookerSurname, row.bookerName].filter(Boolean).join(' '))
+              : '';
+          }
+          syncAdminBookingRequesterModeUi_();
           if (adminBookingActivity) {
             adminBookingActivity.value = row.activityDescription || '';
           }
@@ -9059,7 +9206,7 @@
             adminBookingRepeatUntil.value = row.repeatUntil || '';
           }
           syncAdminBookingRepeatUi_();
-          setAdminBookingDisplayMode_(row.displayMode || 'TEACHER');
+          setAdminBookingDisplayMode_(row.displayMode || (requesterMode === 'NONE' ? 'ACTIVITY' : 'TEACHER'));
           loadAdminBookingModel_().then(function () {
             clearAdminBookingSelectedSlots_();
             syncAdminBookingSlotSelection_(getAdminBookingSlotKey_({
@@ -9140,7 +9287,7 @@
                 formatIsoDateLabel_(row.date),
                 row.roomName || row.resourceId,
                 (row.startTime || '') + ' - ' + (row.endTime || ''),
-                row.teacherName || '-',
+                getAdminBookingRequesterLabel_(row),
                 row.activityDescription || '-',
                 getAdminBookingDisplayModeLabel_(row.displayMode),
                 row.repeatWeekly && row.repeatUntil ? ('Ogni settimana fino al ' + formatIsoDateLabel_(row.repeatUntil)) : '-',
@@ -10050,6 +10197,12 @@
             });
           });
         }
+        adminBookingRequesterModeInputs.forEach(function (input) {
+          input.addEventListener('change', function () {
+            syncAdminBookingRequesterModeUi_();
+            setAdminBookingNotice_('', '');
+          });
+        });
         if (adminBookingRepeatWeekly) {
           adminBookingRepeatWeekly.addEventListener('change', function () {
             syncAdminBookingRepeatUi_();
