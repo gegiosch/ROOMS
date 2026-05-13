@@ -31,7 +31,7 @@
 
         <div class="replacement-tabs">
           <button id="replacement-tab-daily" class="button secondary replacement-tab-button" type="button" data-tab="daily">Sostituzioni giornaliere</button>
-          <button id="replacement-tab-trips" class="button secondary replacement-tab-button" type="button" data-tab="trips">Uscite didattiche</button>
+          <button id="replacement-tab-trips" class="button secondary replacement-tab-button" type="button" data-tab="trips">Eventi classe</button>
           <button id="replacement-tab-long" class="button secondary replacement-tab-button" type="button" data-tab="long">Supplenze lunghe</button>
         </div>
 
@@ -51,9 +51,9 @@
               </section>
 
               <section class="panel form-card replacement-section">
-                <h3>Uscite didattiche</h3>
+                <h3>Eventi classe</h3>
                 <div class="notice">
-                  Le classi in uscita e i docenti accompagnatori vengono letti automaticamente dalla tab dedicata "Uscite didattiche".
+                  Le classi coinvolte e i docenti supervisori vengono letti automaticamente dalla tab dedicata "Eventi classe".
                 </div>
               </section>
 
@@ -112,7 +112,7 @@
             <section class="panel table-card replacement-section">
               <div class="replacement-detail-header">
                 <div>
-                  <h3>Uscite didattiche</h3>
+                  <h3>Eventi classe</h3>
                   <p class="subtitle">Gestione centralizzata di uscite giornaliere, viaggi di istruzione e uscite orarie.</p>
                   <p id="replacement-trip-draft-status" class="subtitle" style="margin-top:4px;">Bozza locale allineata con il salvato.</p>
                 </div>
@@ -123,13 +123,20 @@
             <section class="panel form-card replacement-section">
               <div class="replacement-detail-header">
                 <div>
-                  <h3 id="replacement-trip-form-title">Nuova uscita didattica</h3>
-                  <p class="subtitle">Gli accompagnatori proposti derivano dalle associazioni docente-classe del timetable.</p>
+                  <h3 id="replacement-trip-form-title">Nuovo evento classe</h3>
+                  <p class="subtitle">I docenti proposti derivano dalle associazioni docente-classe del timetable.</p>
                 </div>
               </div>
               <div class="grid grid-2">
                 <div>
-                  <label for="replacement-trip-type">Tipo uscita</label>
+                  <label for="replacement-trip-event-type">Tipo evento</label>
+                  <select id="replacement-trip-event-type" class="select">
+                    <option value="FIELD_TRIP">Uscita didattica</option>
+                    <option value="CLASS_EVENT">Altri eventi</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="replacement-trip-type">Durata</label>
                   <select id="replacement-trip-type" class="select">
                     <option value="DAILY">Uscita giornaliera</option>
                     <option value="MULTI_DAY">Uscita di piu giorni</option>
@@ -139,6 +146,10 @@
                 <div>
                   <label for="replacement-trip-class">Classe</label>
                   <select id="replacement-trip-class" class="select"></select>
+                </div>
+                <div id="replacement-trip-class-list-wrap" style="display:none;">
+                  <label for="replacement-trip-class-list">Classi coinvolte</label>
+                  <input id="replacement-trip-class-list" class="input" type="text" placeholder="Es. 5AS, 5BS">
                 </div>
                 <div>
                   <label for="replacement-trip-date">Giorno</label>
@@ -161,6 +172,10 @@
                   <input id="replacement-trip-title-input" class="input" type="text" placeholder="Titolo opzionale">
                 </div>
                 <div>
+                  <label for="replacement-trip-location">Luogo</label>
+                  <input id="replacement-trip-location" class="input" type="text" placeholder="Aula Magna, laboratorio, esterno...">
+                </div>
+                <div>
                   <label for="replacement-trip-enabled">Stato</label>
                   <label id="replacement-trip-enabled-wrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
                     <input id="replacement-trip-enabled" type="checkbox">
@@ -175,13 +190,17 @@
               <div style="margin-top:12px;">
                 <div class="replacement-detail-header">
                   <div>
-                    <h3 style="margin:0;">Accompagnatori</h3>
+                    <h3 id="replacement-trip-teacher-heading" style="margin:0;">Accompagnatori</h3>
                     <p class="subtitle">Proposti in base alla classe selezionata.</p>
                   </div>
                 </div>
                 <div id="replacement-trip-teacher-options"></div>
                 <div style="margin-top:12px;">
                   <label for="replacement-trip-extra-teacher">Aggiungi altro docente</label>
+                  <label style="display:flex;gap:8px;align-items:center;margin:6px 0 8px;">
+                    <input id="replacement-trip-show-all-teachers" type="checkbox">
+                    <span>Mostra tutti i docenti</span>
+                  </label>
                   <select id="replacement-trip-extra-teacher" class="select"></select>
                 </div>
               </div>

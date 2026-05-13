@@ -332,9 +332,12 @@ ROOMS_APP.Schema = {
   ensureReplacementFieldTrips: function () {
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIPS, [
       'TripId',
+      'EventType',
       'TripType',
       'ClassCode',
+      'ClassCodes',
       'Title',
+      'Location',
       'StartDate',
       'EndDate',
       'StartTime',
@@ -424,6 +427,7 @@ ROOMS_APP.Schema = {
       'ReplacementTeacherEmail',
       'ReplacementTeacherName',
       'ReplacementSource',
+      'CompensationType',
       'ReplacementStatus',
       'RecoverySourceDate',
       'RecoverySourcePeriod',

@@ -41,6 +41,14 @@ ROOMS_APP.Replacements = {
     MULTI_DAY: 'MULTI_DAY',
     HOURLY: 'HOURLY'
   },
+  EVENT_TYPES_: {
+    FIELD_TRIP: 'FIELD_TRIP',
+    CLASS_EVENT: 'CLASS_EVENT'
+  },
+  COMPENSATION_TYPES_: {
+    PAID: 'PAID',
+    CREDIT: 'CREDIT'
+  },
   TRIP_ROLE_: 'ACCOMPANIST',
   SHIFT_SOURCE_VALUE_PREFIX_: 'SHIFT|',
   RECOVERY_SOURCE_VALUE_PREFIX_: 'RECOVERY|',
@@ -744,6 +752,7 @@ ROOMS_APP.Replacements = {
         ReplacementTeacherEmail: entry.replacementTeacherEmail,
         ReplacementTeacherName: entry.replacementTeacherName,
         ReplacementSource: entry.replacementSource,
+        CompensationType: entry.compensationType || '',
         ReplacementStatus: entry.replacementStatus,
         RecoverySourceDate: entry.recoverySourceDate,
         RecoverySourcePeriod: entry.recoverySourcePeriod,
@@ -1113,6 +1122,7 @@ ROOMS_APP.Replacements = {
       ROOMS_APP.DB.getHeaders(ROOMS_APP.SHEET_NAMES.REPL_FIELD_TRIP_TEACHERS),
       persistenceRows.tripTeacherRows
     );
+    this.syncOperationalHourlyRowsForClassEvents_(normalizedTrips, this.collectTripCacheDates_(previousTrips.concat(normalizedTrips), referenceDate), actor, nowIso);
     this.prepareDailyContextCacheAfterSourceChange_(
       referenceDate || (normalizedTrips[0] && normalizedTrips[0].startDate) || ROOMS_APP.toIsoDate(new Date()),
       this.collectTripCacheDates_(previousTrips.concat(normalizedTrips), referenceDate),
@@ -1124,6 +1134,102 @@ ROOMS_APP.Replacements = {
         allowAutoShift: false
       })
     };
+  },
+
+  syncOperationalHourlyRowsForClassEvents_: function (trips, affectedDates, actor, nowIso) {
+    var sheetName = ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES;
+    var headers = ROOMS_APP.DB.getHeaders(sheetName);
+    var periodMap = ROOMS_APP.Timetable.getPeriodTimeMap();
+    var dateMap = {};
+    var generatedRows = [];
+    var self = this;
+    (affectedDates || []).forEach(function (dateValue) {
+      var dateKey = ROOMS_APP.toIsoDate(dateValue);
+      if (dateKey) {
+        dateMap[dateKey] = true;
+      }
+    });
+    (trips || []).forEach(function (trip) {
+      if (!trip || trip.eventType !== self.EVENT_TYPES_.CLASS_EVENT || !trip.enabled) {
+        return;
+      }
+      self.iterateEducationalTripDates_(trip, function (dateKey) {
+        var periods = self.getTripPeriodsForDate_(trip, dateKey);
+        var teacherMap = self.indexByTeacherEmail_(self.buildTeacherDayTeachers_(dateKey));
+        dateMap[dateKey] = true;
+        (trip.teachers || []).forEach(function (tripTeacher) {
+          var teacherEmail = self.normalizeTeacherEmail_(tripTeacher.teacherEmail);
+          var teacher = teacherMap[teacherEmail] || null;
+          var sourceId = [trip.tripId, teacherEmail].join('|');
+          if (!teacherEmail) {
+            return;
+          }
+          periods.forEach(function (period) {
+            var slot = teacher && teacher.periods ? teacher.periods[period] : null;
+            var periodInfo = periodMap[period] || {};
+            var classCode = self.getTeacherSlotAssignmentClassCode_(slot);
+            var isCoverable = Boolean(teacher && slot && self.isCoverableTeacherSlot_(teacher, slot) && classCode);
+            var isPot = slot && slot.type === 'P';
+            if (isCoverable) {
+              generatedRows.push({
+                date: dateKey,
+                teacherEmail: teacherEmail,
+                teacherName: (teacher && teacher.teacherName) || tripTeacher.teacherName || teacherEmail,
+                period: period,
+                reason: self.SERVICE_OUT_OF_CLASS_.GENERAL,
+                classCode: classCode,
+                label: slot.label || classCode,
+                slotType: slot.type || '',
+                startTime: slot.startTime || '',
+                endTime: slot.endTime || '',
+                derivedActionable: true,
+                sourceAbsenceId: sourceId,
+                sourceType: 'REPL_FIELD_TRIPS',
+                recoveryRequired: false,
+                recoveryStatus: '',
+                recoveredOnDate: '',
+                recoveredByAssignmentKey: '',
+                notes: trip.title || 'Evento classe',
+                updatedAtISO: nowIso,
+                updatedBy: actor && actor.email || ''
+              });
+              return;
+            }
+            if (!isPot) {
+              generatedRows.push({
+                date: dateKey,
+                teacherEmail: teacherEmail,
+                teacherName: (teacher && teacher.teacherName) || tripTeacher.teacherName || teacherEmail,
+                period: period,
+                reason: 'SUPERVISIONE_EVENTO_CLASSE',
+                classCode: '',
+                label: trip.title || 'Evento classe',
+                slotType: slot && slot.type ? slot.type : 'FREE',
+                startTime: slot && slot.startTime ? slot.startTime : (periodInfo.startTime || ''),
+                endTime: slot && slot.endTime ? slot.endTime : (periodInfo.endTime || ''),
+                derivedActionable: false,
+                sourceAbsenceId: sourceId,
+                sourceType: 'REPL_FIELD_TRIPS',
+                recoveryRequired: true,
+                recoveryStatus: self.RECOVERY_STATUSES_.PENDING,
+                recoveredOnDate: '',
+                recoveredByAssignmentKey: '',
+                notes: trip.title || 'Credito supervisione evento classe',
+                updatedAtISO: nowIso,
+                updatedBy: actor && actor.email || ''
+              });
+            }
+          });
+        });
+      });
+    });
+    ROOMS_APP.DB.replaceRows(sheetName, headers, ROOMS_APP.DB.readRows(sheetName).map(function (row) {
+      return ROOMS_APP.Replacements.readHourlyAbsenceRow_(row);
+    }).filter(function (row) {
+      return !(dateMap[row.date] && row.sourceType === 'REPL_FIELD_TRIPS');
+    }).concat(generatedRows).map(function (row) {
+      return ROOMS_APP.Replacements.serializeHourlyAbsenceRow_(row, row.updatedAtISO || nowIso, row.updatedBy || actor && actor.email);
+    }));
   },
 
   applySavedStateToOccurrences_: function (dateString, occurrences) {
@@ -1797,7 +1903,14 @@ ROOMS_APP.Replacements = {
       var slot = teacher && teacher.periods ? teacher.periods[entry.period] : null;
       var assignmentClassCode = ROOMS_APP.Replacements.getTeacherSlotAssignmentClassCode_(slot) || ROOMS_APP.normalizeString(entry.classCode).toUpperCase();
       var key;
-      if (!teacher || teacher.absent || !assignmentClassCode) {
+      if (!teacher || teacher.absent) {
+        return;
+      }
+      if (!assignmentClassCode && normalizedEntry.recoveryRequired && !normalizedEntry.derivedActionable) {
+        map[ROOMS_APP.Replacements.buildHourlyAbsenceKey_(normalizedEntry.teacherEmail, normalizedEntry.period)] = normalizedEntry;
+        return;
+      }
+      if (!assignmentClassCode) {
         return;
       }
       if (!slot || !ROOMS_APP.Replacements.isCoverableTeacherSlot_(teacher, slot)) {
@@ -1860,6 +1973,7 @@ ROOMS_APP.Replacements = {
         replacementTeacherEmail: replacementTeacherEmail,
         replacementTeacherName: replacementTeacherName,
         replacementSource: ROOMS_APP.normalizeString(legacyState.replacementSource),
+        compensationType: ROOMS_APP.Replacements.normalizeCompensationType_(legacyState.compensationType),
         replacementStatus: '',
         recoverySourceDate: ROOMS_APP.toIsoDate(legacyState.recoverySourceDate),
         recoverySourcePeriod: ROOMS_APP.normalizeString(legacyState.recoverySourcePeriod),
@@ -2095,22 +2209,42 @@ ROOMS_APP.Replacements = {
       }
 
       if (slot.type === 'CLASS' && ROOMS_APP.Replacements.isClassOutAtPeriod_(normalized, slot.classCode, period)) {
-        classOutCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita'));
+        classOutCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita', {
+          slotType: slot.type,
+          requiresCompensationChoice: true
+        }));
         seen[teacherEmail] = true;
         return;
       }
       if (slot.type === 'P') {
-        pCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'P', 'P'));
+        pCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'P', 'P', {
+          slotType: slot.type,
+          requiresCompensationChoice: true
+        }));
+        manualCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'MANUAL', 'Altro docente', {
+          slotType: slot.type,
+          requiresCompensationChoice: true,
+          fullListOnly: true
+        }));
         seen[teacherEmail] = true;
         return;
       }
       if (slot.type === 'D') {
-        dCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'D', 'D'));
+        dCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'D', 'D', {
+          slotType: slot.type
+        }));
+        manualCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'MANUAL', 'Altro docente', {
+          slotType: slot.type,
+          fullListOnly: true
+        }));
         seen[teacherEmail] = true;
         return;
       }
       if (slot.type === 'FREE' || slot.type === 'OTHER') {
-        manualCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'MANUAL', 'Altro docente'));
+        manualCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'MANUAL', 'Altro docente', {
+          slotType: slot.type,
+          requiresCompensationChoice: true
+        }));
       }
     });
 
@@ -2275,14 +2409,18 @@ ROOMS_APP.Replacements = {
     };
   },
 
-  buildCandidate_: function (teacher, source, reasonLabel) {
+  buildCandidate_: function (teacher, source, reasonLabel, options) {
     var teacherEmail = this.normalizeTeacherEmail_(teacher.teacherEmail);
     var teacherName = ROOMS_APP.normalizeString(teacher.teacherName);
+    var settings = options || {};
     return {
       value: teacherEmail + '|' + source,
       teacherEmail: teacherEmail,
       teacherName: teacherName,
       source: source,
+      slotType: ROOMS_APP.normalizeString(settings.slotType),
+      requiresCompensationChoice: Boolean(settings.requiresCompensationChoice),
+      fullListOnly: Boolean(settings.fullListOnly),
       label: teacherName + ' (' + reasonLabel + ')'
     };
   },
@@ -2654,6 +2792,17 @@ ROOMS_APP.Replacements = {
     return this.CLASS_HANDLING_TYPES_.NONE;
   },
 
+  normalizeCompensationType_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value).toUpperCase();
+    if (normalized === this.COMPENSATION_TYPES_.PAID || normalized === 'A_PAGAMENTO') {
+      return this.COMPENSATION_TYPES_.PAID;
+    }
+    if (normalized === this.COMPENSATION_TYPES_.CREDIT || normalized === 'A_CREDITO') {
+      return this.COMPENSATION_TYPES_.CREDIT;
+    }
+    return '';
+  },
+
   validateDraft_: function (normalized) {
     var errors = [];
     var assignedByPeriod = this.buildAssignedTeacherSetByPeriod_(normalized.assignments);
@@ -2724,13 +2873,32 @@ ROOMS_APP.Replacements = {
         return;
       }
       if (entry.replacementStatus === 'ASSIGNED') {
+        var selectedManualCandidate = null;
+        var selectedListedCandidate = null;
         matchFound = candidateInfo.candidates.some(function (candidate) {
-          return candidate.teacherEmail === self.normalizeTeacherEmail_(entry.replacementTeacherEmail);
+          var matches = candidate.teacherEmail === self.normalizeTeacherEmail_(entry.replacementTeacherEmail);
+          if (matches) {
+            selectedListedCandidate = candidate;
+          }
+          return matches;
         }) || candidateInfo.manualCandidates.some(function (candidate) {
-          return candidate.teacherEmail === self.normalizeTeacherEmail_(entry.replacementTeacherEmail);
+          var matches = candidate.teacherEmail === self.normalizeTeacherEmail_(entry.replacementTeacherEmail);
+          if (matches) {
+            selectedManualCandidate = candidate;
+          }
+          return matches;
         });
         if (!matchFound) {
           errors.push('Sostituzione non valida per ' + entry.classCode + ' alla ' + entry.period + 'ª ora.');
+        } else if (entry.replacementSource === 'MANUAL' &&
+            selectedManualCandidate &&
+            selectedManualCandidate.requiresCompensationChoice &&
+            !self.normalizeCompensationType_(entry.compensationType)) {
+          errors.push('Indicare A pagamento o A credito per ' + entry.replacementTeacherName + ' alla ' + entry.period + 'ª ora.');
+        } else if (selectedListedCandidate &&
+            selectedListedCandidate.requiresCompensationChoice &&
+            !self.normalizeCompensationType_(entry.compensationType)) {
+          errors.push('Indicare A pagamento o A credito per ' + entry.replacementTeacherName + ' alla ' + entry.period + 'ª ora.');
         }
       }
     });
@@ -3349,6 +3517,47 @@ ROOMS_APP.Replacements = {
       nextRows.push(next);
     });
 
+    (normalized.assignments || []).forEach(function (entry) {
+      var compensationType = ROOMS_APP.Replacements.normalizeCompensationType_(entry.compensationType);
+      var key;
+      var existing;
+      var creditRow;
+      if (ROOMS_APP.Replacements.normalizeHandlingType_(entry.handlingType) !== ROOMS_APP.Replacements.HANDLING_TYPES_.SUBSTITUTION ||
+          entry.replacementStatus !== 'ASSIGNED' ||
+          compensationType !== ROOMS_APP.Replacements.COMPENSATION_TYPES_.CREDIT ||
+          !entry.replacementTeacherEmail ||
+          !entry.period) {
+        return;
+      }
+      key = ROOMS_APP.Replacements.buildHourlyAbsenceDateKey_(targetDate, entry.replacementTeacherEmail, entry.period);
+      existing = existingByKey[key] || {};
+      creditRow = {
+        date: targetDate,
+        teacherEmail: entry.replacementTeacherEmail,
+        teacherName: entry.replacementTeacherName,
+        period: entry.period,
+        reason: 'SOSTITUZIONE_A_CREDITO',
+        classCode: '',
+        label: entry.classCode ? ('Sostituzione ' + entry.classCode) : 'Sostituzione',
+        slotType: 'CREDIT',
+        startTime: entry.startTime || '',
+        endTime: entry.endTime || '',
+        derivedActionable: false,
+        sourceAbsenceId: ROOMS_APP.Replacements.buildAssignmentKey_(entry.period, entry.classCode, entry.originalTeacherEmail),
+        sourceType: 'REPL_ASSIGNMENTS',
+        recoveryRequired: true,
+        recoveryStatus: existing.recoveryStatus === ROOMS_APP.Replacements.RECOVERY_STATUSES_.RECOVERED
+          ? ROOMS_APP.Replacements.RECOVERY_STATUSES_.RECOVERED
+          : ROOMS_APP.Replacements.RECOVERY_STATUSES_.PENDING,
+        recoveredOnDate: existing.recoveryStatus === ROOMS_APP.Replacements.RECOVERY_STATUSES_.RECOVERED ? existing.recoveredOnDate : '',
+        recoveredByAssignmentKey: existing.recoveryStatus === ROOMS_APP.Replacements.RECOVERY_STATUSES_.RECOVERED ? existing.recoveredByAssignmentKey : '',
+        notes: 'Sostituzione a credito',
+        updatedAtISO: nowIso,
+        updatedBy: updatedBy
+      };
+      nextRows.push(creditRow);
+    });
+
     ROOMS_APP.DB.replaceRows(sheetName, headers, nextRows.map(function (row) {
       return ROOMS_APP.Replacements.serializeHourlyAbsenceRow_(row, nowIso, updatedBy);
     }));
@@ -3513,6 +3722,7 @@ ROOMS_APP.Replacements = {
       replacementTeacherEmail: this.normalizeTeacherEmail_(row && (row.ReplacementTeacherEmail || row.replacementTeacherEmail)),
       replacementTeacherName: ROOMS_APP.normalizeString(row && (row.ReplacementTeacherName || row.replacementTeacherName)),
       replacementSource: ROOMS_APP.normalizeString(row && (row.ReplacementSource || row.replacementSource)),
+      compensationType: this.normalizeCompensationType_(row && (row.CompensationType || row.compensationType)),
       replacementStatus: ROOMS_APP.normalizeString(row && (row.ReplacementStatus || row.replacementStatus)),
       recoverySourceDate: ROOMS_APP.toIsoDate(row && (row.RecoverySourceDate || row.recoverySourceDate)),
       recoverySourcePeriod: ROOMS_APP.normalizeString(row && (row.RecoverySourcePeriod || row.recoverySourcePeriod)),
@@ -3537,6 +3747,7 @@ ROOMS_APP.Replacements = {
       replacementTeacherEmail: entry && (entry.ReplacementTeacherEmail || entry.replacementTeacherEmail),
       replacementTeacherName: entry && (entry.ReplacementTeacherName || entry.replacementTeacherName),
       replacementSource: entry && (entry.ReplacementSource || entry.replacementSource),
+      compensationType: this.normalizeCompensationType_(entry && (entry.CompensationType || entry.compensationType)),
       notes: entry && (entry.Notes || entry.notes),
       recoverySourceDate: entry && (entry.RecoverySourceDate || entry.recoverySourceDate),
       recoverySourcePeriod: entry && (entry.RecoverySourcePeriod || entry.recoverySourcePeriod),
@@ -4871,10 +5082,42 @@ ROOMS_APP.Replacements = {
     return this.TRIP_TYPES_.DAILY;
   },
 
+  normalizeEventType_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value).toUpperCase();
+    return normalized === this.EVENT_TYPES_.CLASS_EVENT ? this.EVENT_TYPES_.CLASS_EVENT : this.EVENT_TYPES_.FIELD_TRIP;
+  },
+
+  normalizeTripClassCodes_: function (payload) {
+    var source = payload && (payload.classCodes || payload.ClassCodes || payload.classCode || payload.ClassCode);
+    var seen = {};
+    if (Array.isArray(source)) {
+      return source.map(function (entry) {
+        return ROOMS_APP.normalizeString(entry).toUpperCase();
+      }).filter(function (classCode) {
+        if (!classCode || seen[classCode]) {
+          return false;
+        }
+        seen[classCode] = true;
+        return true;
+      });
+    }
+    return ROOMS_APP.normalizeString(source).toUpperCase().split(/[^A-Z0-9]+/).map(function (token) {
+      return ROOMS_APP.Timetable.extractClassCode_(token) || token;
+    }).filter(function (classCode) {
+      if (!classCode || seen[classCode]) {
+        return false;
+      }
+      seen[classCode] = true;
+      return true;
+    });
+  },
+
   normalizeEducationalTripPayload_: function (payload) {
+    var eventType = this.normalizeEventType_(payload && (payload.eventType || payload.EventType));
     var tripType = this.normalizeTripType_(payload && payload.tripType);
     var startDate = ROOMS_APP.toIsoDate(payload && (payload.startDate || payload.date));
     var endDate = ROOMS_APP.toIsoDate(payload && payload.endDate);
+    var classCodes = this.normalizeTripClassCodes_(payload || {});
     var teacherMap = {};
     (Array.isArray(payload && payload.teachers) ? payload.teachers : []).forEach(function (entry) {
       var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(entry && entry.teacherEmail);
@@ -4900,9 +5143,12 @@ ROOMS_APP.Replacements = {
     }
     return {
       tripId: ROOMS_APP.normalizeString(payload && payload.tripId),
+      eventType: eventType,
       tripType: tripType,
-      classCode: ROOMS_APP.normalizeString(payload && payload.classCode).toUpperCase(),
+      classCode: classCodes[0] || '',
+      classCodes: classCodes,
       title: ROOMS_APP.normalizeString(payload && payload.title),
+      location: ROOMS_APP.normalizeString(payload && (payload.location || payload.Location)),
       startDate: startDate,
       endDate: endDate,
       startTime: tripType === this.TRIP_TYPES_.HOURLY ? ROOMS_APP.toTimeString(payload && payload.startTime) : '',
@@ -4916,7 +5162,7 @@ ROOMS_APP.Replacements = {
   },
 
   validateEducationalTrip_: function (candidate) {
-    if (!candidate.classCode) {
+    if (!(candidate.classCodes && candidate.classCodes.length)) {
       throw new Error('Selezionare una classe.');
     }
     if (!candidate.startDate) {
@@ -4983,9 +5229,12 @@ ROOMS_APP.Replacements = {
     (trips || []).forEach(function (trip) {
       tripRows.push({
         TripId: trip.tripId,
+        EventType: trip.eventType || self.EVENT_TYPES_.FIELD_TRIP,
         TripType: trip.tripType,
         ClassCode: trip.classCode,
+        ClassCodes: (trip.classCodes || [trip.classCode]).join('|'),
         Title: trip.title,
+        Location: trip.location || '',
         StartDate: trip.startDate,
         EndDate: trip.endDate,
         StartTime: trip.startTime,
@@ -5016,9 +5265,14 @@ ROOMS_APP.Replacements = {
   readTripRow_: function (row) {
     return {
       tripId: ROOMS_APP.normalizeString(row && row.TripId),
+      eventType: this.normalizeEventType_(row && row.EventType),
       tripType: this.normalizeTripType_(row && row.TripType),
       classCode: ROOMS_APP.normalizeString(row && row.ClassCode).toUpperCase(),
+      classCodes: this.normalizeTripClassCodes_({
+        classCodes: (row && row.ClassCodes) || (row && row.ClassCode)
+      }),
       title: ROOMS_APP.normalizeString(row && row.Title),
+      location: ROOMS_APP.normalizeString(row && row.Location),
       startDate: ROOMS_APP.toIsoDate(row && row.StartDate),
       endDate: ROOMS_APP.toIsoDate((row && row.EndDate) || (row && row.StartDate)),
       startTime: ROOMS_APP.toTimeString(row && row.StartTime),
@@ -5060,7 +5314,7 @@ ROOMS_APP.Replacements = {
       });
       return trip;
     }).filter(function (trip) {
-      return Boolean(trip.tripId && trip.classCode && trip.startDate);
+      return Boolean(trip.tripId && trip.classCodes && trip.classCodes.length && trip.startDate);
     }).sort(function (left, right) {
       if (left.startDate !== right.startDate) {
         return left.startDate.localeCompare(right.startDate);
@@ -5234,7 +5488,7 @@ ROOMS_APP.Replacements = {
         return;
       }
       periods = self.getTripPeriodsForDate_(trip, targetDate);
-      if (!trip.classCode || !periods.length) {
+      if (!(trip.classCodes && trip.classCodes.length) || !periods.length) {
         return;
       }
       state.activeTrips.push(trip);
@@ -5242,10 +5496,12 @@ ROOMS_APP.Replacements = {
         UpdatedAtISO: trip.updatedAtISO || '',
         TripId: trip.tripId
       });
-      state.classOutSet[trip.classCode] = true;
-      state.classOutPeriodsByClass[trip.classCode] = state.classOutPeriodsByClass[trip.classCode] || {};
-      periods.forEach(function (period) {
-        state.classOutPeriodsByClass[trip.classCode][period] = true;
+      (trip.classCodes || [trip.classCode]).forEach(function (classCode) {
+        state.classOutSet[classCode] = true;
+        state.classOutPeriodsByClass[classCode] = state.classOutPeriodsByClass[classCode] || {};
+        periods.forEach(function (period) {
+          state.classOutPeriodsByClass[classCode][period] = true;
+        });
       });
       (trip.teachers || []).forEach(function (teacher) {
         var teacherEmail = self.normalizeTeacherEmail_(teacher.teacherEmail);
@@ -5262,7 +5518,7 @@ ROOMS_APP.Replacements = {
           state.teacherTripPeriodsByTeacher[teacherEmail][period] = true;
         });
         state.teacherTripClassesByTeacher[teacherEmail] = self.uniqueStrings_(
-          (state.teacherTripClassesByTeacher[teacherEmail] || []).concat([trip.classCode])
+          (state.teacherTripClassesByTeacher[teacherEmail] || []).concat(trip.classCodes || [trip.classCode])
         );
       });
     });

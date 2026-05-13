@@ -61,16 +61,22 @@
         var replacementActionButtons = Array.prototype.slice.call(document.querySelectorAll('.replacement-action-button'));
         var replacementTripListTable = document.getElementById('replacement-trip-list-table');
         var replacementTripFormTitle = document.getElementById('replacement-trip-form-title');
+        var replacementTripEventType = document.getElementById('replacement-trip-event-type');
         var replacementTripType = document.getElementById('replacement-trip-type');
         var replacementTripClass = document.getElementById('replacement-trip-class');
+        var replacementTripClassListWrap = document.getElementById('replacement-trip-class-list-wrap');
+        var replacementTripClassList = document.getElementById('replacement-trip-class-list');
         var replacementTripDate = document.getElementById('replacement-trip-date');
         var replacementTripEndDate = document.getElementById('replacement-trip-end-date');
         var replacementTripStartTime = document.getElementById('replacement-trip-start-time');
         var replacementTripEndTime = document.getElementById('replacement-trip-end-time');
         var replacementTripTitleInput = document.getElementById('replacement-trip-title-input');
+        var replacementTripLocation = document.getElementById('replacement-trip-location');
         var replacementTripEnabled = document.getElementById('replacement-trip-enabled');
         var replacementTripNotes = document.getElementById('replacement-trip-notes');
+        var replacementTripTeacherHeading = document.getElementById('replacement-trip-teacher-heading');
         var replacementTripTeacherOptions = document.getElementById('replacement-trip-teacher-options');
+        var replacementTripShowAllTeachers = document.getElementById('replacement-trip-show-all-teachers');
         var replacementTripExtraTeacher = document.getElementById('replacement-trip-extra-teacher');
         var replacementTripDraftStatus = document.getElementById('replacement-trip-draft-status');
         var replacementTripSave = document.getElementById('replacement-trip-save');
@@ -797,6 +803,15 @@
                 teacherEmail: entry.teacherEmail || '',
                 teacherName: entry.teacherName || '',
                 period: entry.period || '',
+                reason: entry.reason || '',
+                classCode: entry.classCode || '',
+                label: entry.label || '',
+                slotType: entry.slotType || '',
+                startTime: entry.startTime || '',
+                endTime: entry.endTime || '',
+                derivedActionable: Boolean(entry.derivedActionable),
+                sourceAbsenceId: entry.sourceAbsenceId || '',
+                sourceType: entry.sourceType || '',
                 recoveryRequired: Boolean(entry.recoveryRequired),
                 recoveryStatus: entry.recoveryStatus || '',
                 recoveredOnDate: entry.recoveredOnDate || '',
@@ -816,6 +831,7 @@
                 replacementTeacherEmail: entry.replacementTeacherEmail || '',
                 replacementTeacherName: entry.replacementTeacherName || '',
                 replacementSource: entry.replacementSource || '',
+                compensationType: entry.compensationType || '',
                 replacementStatus: entry.replacementStatus || '',
                 recoverySourceDate: entry.recoverySourceDate || '',
                 recoverySourcePeriod: entry.recoverySourcePeriod || '',
@@ -1099,6 +1115,7 @@
               replacementTeacherEmail: draftEntry.replacementTeacherEmail || '',
               replacementTeacherName: draftEntry.replacementTeacherName || '',
               replacementSource: draftEntry.replacementSource || '',
+              compensationType: draftEntry.compensationType || '',
               replacementStatus: '',
               recoverySourceDate: draftEntry.recoverySourceDate || '',
               recoverySourcePeriod: draftEntry.recoverySourcePeriod || '',
@@ -1194,12 +1211,16 @@
           return byPeriod;
         }
 
-        function buildReplacementCandidate_(teacher, source, label) {
+        function buildReplacementCandidate_(teacher, source, label, options) {
+          var settings = options || {};
           return {
             value: normalizeReplacementTeacherEmail_(teacher.teacherEmail) + '|' + source,
             teacherEmail: normalizeReplacementTeacherEmail_(teacher.teacherEmail),
             teacherName: teacher.teacherName || teacher.teacherEmail || '',
             source: source,
+            slotType: settings.slotType || '',
+            requiresCompensationChoice: Boolean(settings.requiresCompensationChoice),
+            fullListOnly: Boolean(settings.fullListOnly),
             label: (teacher.teacherName || teacher.teacherEmail || '') + ' (' + label + ')'
           };
         }
@@ -1245,19 +1266,21 @@
               return;
             }
             if (slot.type === 'CLASS' && isReplacementClassOutAtPeriod_(slotClassCode, period)) {
-              classOutCandidates.push(buildReplacementCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita'));
+              classOutCandidates.push(buildReplacementCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita', { slotType: slot.type, requiresCompensationChoice: true }));
               return;
             }
             if (slot.type === 'P') {
-              pCandidates.push(buildReplacementCandidate_(teacher, 'P', 'P'));
+              pCandidates.push(buildReplacementCandidate_(teacher, 'P', 'P', { slotType: slot.type, requiresCompensationChoice: true }));
+              manualCandidates.push(buildReplacementCandidate_(teacher, 'MANUAL', 'Altro docente', { slotType: slot.type, requiresCompensationChoice: true, fullListOnly: true }));
               return;
             }
             if (slot.type === 'D') {
-              dCandidates.push(buildReplacementCandidate_(teacher, 'D', 'D'));
+              dCandidates.push(buildReplacementCandidate_(teacher, 'D', 'D', { slotType: slot.type }));
+              manualCandidates.push(buildReplacementCandidate_(teacher, 'MANUAL', 'Altro docente', { slotType: slot.type, fullListOnly: true }));
               return;
             }
             if (slot.type === 'FREE' || slot.type === 'OTHER') {
-              manualCandidates.push(buildReplacementCandidate_(teacher, 'MANUAL', 'Altro docente'));
+              manualCandidates.push(buildReplacementCandidate_(teacher, 'MANUAL', 'Altro docente', { slotType: slot.type, requiresCompensationChoice: true }));
             }
           });
 
@@ -2588,6 +2611,7 @@
                         replacementTeacherEmail: '',
                         replacementTeacherName: '',
                         replacementSource: '',
+                        compensationType: '',
                         recoverySourceDate: '',
                         recoverySourcePeriod: '',
                         shiftOriginPeriod: '',
@@ -2639,6 +2663,7 @@
                             replacementTeacherEmail: '',
                             replacementTeacherName: '',
                             replacementSource: '',
+                            compensationType: '',
                             recoverySourceDate: '',
                             recoverySourcePeriod: '',
                             shiftOriginPeriod: '',
@@ -2667,6 +2692,7 @@
                             replacementTeacherEmail: parts[3] || '',
                             replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
                             replacementSource: 'RECOVERY',
+                            compensationType: '',
                             recoverySourceDate: parts[1] || '',
                             recoverySourcePeriod: parts[2] || '',
                             replacementStatus: 'ASSIGNED'
@@ -2680,6 +2706,7 @@
                             shiftTargetPeriod: row.period,
                             replacementTeacherEmail: parts[1] || '',
                             replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
+                            compensationType: '',
                             replacementStatus: 'SHIFT_WITHIN_CLASS'
                           });
                         } else {
@@ -2688,6 +2715,7 @@
                             replacementTeacherEmail: parts[0] || '',
                             replacementTeacherName: selectedCandidate ? selectedCandidate.teacherName : '',
                             replacementSource: parts[1] || '',
+                            compensationType: '',
                             replacementStatus: 'ASSIGNED'
                           });
                         }
@@ -2698,16 +2726,37 @@
                       actions.appendChild(select);
 
                       if (currentHandling === 'SUBSTITUTION' && (assignment.replacementSource === 'MANUAL' || replacementState.pendingManualAssignmentKeys[assignmentKey])) {
+                        var showAllManual = document.createElement('label');
+                        var showAllManualCheckbox = document.createElement('input');
                         var manualSelect = document.createElement('select');
+                        var desiredManualValue = assignment.replacementSource === 'MANUAL' && assignment.replacementTeacherEmail
+                          ? String(assignment.replacementTeacherEmail || '') + '|MANUAL'
+                          : '';
+                        var renderManualOptions = function () {
+                          var currentValue = manualSelect.value || desiredManualValue;
+                          ROOMS_UI.clearNode(manualSelect);
+                          manualSelect.appendChild(new Option('Seleziona altro docente', ''));
+                          safeArray(row.manualCandidates).filter(function (candidate) {
+                            return showAllManualCheckbox.checked || !candidate.fullListOnly || candidate.value === currentValue;
+                          }).forEach(function (candidate) {
+                            manualSelect.appendChild(new Option(candidate.label, candidate.value));
+                          });
+                          manualSelect.value = currentValue;
+                        };
+                        showAllManual.style.display = 'flex';
+                        showAllManual.style.gap = '8px';
+                        showAllManual.style.alignItems = 'center';
+                        showAllManualCheckbox.type = 'checkbox';
+                        showAllManual.appendChild(showAllManualCheckbox);
+                        showAllManual.appendChild(ROOMS_UI.el('span', 'muted', 'Mostra tutti i docenti'));
+                        actions.appendChild(showAllManual);
                         manualSelect.className = 'select replacement-detail-select';
                         manualSelect.disabled = !isReplacementDateValid_();
-                        manualSelect.appendChild(new Option('Seleziona altro docente', ''));
-                        safeArray(row.manualCandidates).forEach(function (candidate) {
-                          manualSelect.appendChild(new Option(candidate.label, candidate.value));
-                        });
                         if (assignment.replacementSource === 'MANUAL' && assignment.replacementTeacherEmail) {
-                          manualSelect.value = String(assignment.replacementTeacherEmail || '') + '|MANUAL';
+                          showAllManualCheckbox.checked = true;
                         }
+                        renderManualOptions();
+                        showAllManualCheckbox.addEventListener('change', renderManualOptions);
                         manualSelect.addEventListener('change', function () {
                           var manualCandidate;
                           var manualParts;
@@ -2717,6 +2766,7 @@
                               replacementTeacherEmail: '',
                               replacementTeacherName: '',
                               replacementSource: '',
+                              compensationType: '',
                               replacementStatus: 'TO_ASSIGN'
                             });
                           } else {
@@ -2729,6 +2779,7 @@
                               replacementTeacherEmail: manualParts[0] || '',
                               replacementTeacherName: manualCandidate ? manualCandidate.teacherName : '',
                               replacementSource: 'MANUAL',
+                              compensationType: '',
                               replacementStatus: 'ASSIGNED'
                             });
                           }
@@ -2738,6 +2789,53 @@
                           });
                         });
                         actions.appendChild(manualSelect);
+                        if (assignment.replacementSource === 'MANUAL' && assignment.replacementTeacherEmail) {
+                          var selectedManualCandidate = safeArray(row.manualCandidates).filter(function (candidate) {
+                            return candidate.teacherEmail === normalizeReplacementTeacherEmail_(assignment.replacementTeacherEmail);
+                          })[0] || null;
+                          if (selectedManualCandidate && selectedManualCandidate.requiresCompensationChoice) {
+                            var compensationSelect = document.createElement('select');
+                            compensationSelect.className = 'select replacement-detail-select';
+                            compensationSelect.disabled = !isReplacementDateValid_();
+                            compensationSelect.appendChild(new Option('Pagamento/credito', ''));
+                            compensationSelect.appendChild(new Option('A pagamento', 'PAID'));
+                            compensationSelect.appendChild(new Option('A credito', 'CREDIT'));
+                            compensationSelect.value = assignment.compensationType || '';
+                            compensationSelect.addEventListener('change', function () {
+                              upsertReplacementAssignment_(assignment, {
+                                compensationType: compensationSelect.value || ''
+                              });
+                              markReplacementDraftChanged_({
+                                clearNotice: true
+                              });
+                            });
+                            actions.appendChild(compensationSelect);
+                          }
+                        }
+                      }
+                      if (assignment.replacementStatus === 'ASSIGNED' && assignment.replacementSource !== 'MANUAL') {
+                        var selectedListedCandidateForComp = safeArray(row.candidates).filter(function (candidate) {
+                          return candidate.teacherEmail === normalizeReplacementTeacherEmail_(assignment.replacementTeacherEmail) &&
+                            candidate.source === assignment.replacementSource;
+                        })[0] || null;
+                        if (selectedListedCandidateForComp && selectedListedCandidateForComp.requiresCompensationChoice) {
+                          var listedCompensationSelect = document.createElement('select');
+                          listedCompensationSelect.className = 'select replacement-detail-select';
+                          listedCompensationSelect.disabled = !isReplacementDateValid_();
+                          listedCompensationSelect.appendChild(new Option('Pagamento/credito', ''));
+                          listedCompensationSelect.appendChild(new Option('A pagamento', 'PAID'));
+                          listedCompensationSelect.appendChild(new Option('A credito', 'CREDIT'));
+                          listedCompensationSelect.value = assignment.compensationType || '';
+                          listedCompensationSelect.addEventListener('change', function () {
+                            upsertReplacementAssignment_(assignment, {
+                              compensationType: listedCompensationSelect.value || ''
+                            });
+                            markReplacementDraftChanged_({
+                              clearNotice: true
+                            });
+                          });
+                          actions.appendChild(listedCompensationSelect);
+                        }
                       }
                     }
                   }
@@ -2821,9 +2919,12 @@
         function buildEmptyReplacementTripForm_() {
           return {
             tripId: '',
+            eventType: 'FIELD_TRIP',
             tripType: 'DAILY',
             classCode: '',
+            classCodes: [],
             title: '',
+            location: '',
             startDate: replacementState.date || getDefaultPanelDate_(),
             endDate: replacementState.date || getDefaultPanelDate_(),
             startTime: '',
@@ -2837,9 +2938,14 @@
         function cloneReplacementTrip_(entry) {
           return {
             tripId: entry && entry.tripId ? String(entry.tripId) : '',
+            eventType: entry && entry.eventType ? String(entry.eventType) : 'FIELD_TRIP',
             tripType: entry && entry.tripType ? String(entry.tripType) : 'DAILY',
             classCode: entry && entry.classCode ? String(entry.classCode) : '',
+            classCodes: safeArray(entry && entry.classCodes).length ? safeArray(entry.classCodes).map(function (classCode) {
+              return String(classCode || '');
+            }) : (entry && entry.classCode ? [String(entry.classCode)] : []),
             title: entry && entry.title ? String(entry.title) : '',
+            location: entry && entry.location ? String(entry.location) : '',
             startDate: entry && entry.startDate ? String(entry.startDate) : '',
             endDate: entry && entry.endDate ? String(entry.endDate) : '',
             startTime: entry && entry.startTime ? String(entry.startTime) : '',
@@ -2888,9 +2994,14 @@
         function normalizeReplacementTripForCompare_(entry) {
           return {
             tripId: entry && entry.tripId ? String(entry.tripId) : '',
+            eventType: entry && entry.eventType ? String(entry.eventType) : 'FIELD_TRIP',
             tripType: entry && entry.tripType ? String(entry.tripType) : 'DAILY',
             classCode: entry && entry.classCode ? String(entry.classCode) : '',
+            classCodes: safeArray(entry && entry.classCodes).map(function (classCode) {
+              return String(classCode || '');
+            }).filter(Boolean).sort(),
             title: entry && entry.title ? String(entry.title) : '',
+            location: entry && entry.location ? String(entry.location) : '',
             startDate: entry && entry.startDate ? String(entry.startDate) : '',
             endDate: getReplacementTripEffectiveEndDate_(entry),
             startTime: entry && entry.tripType === 'HOURLY' ? String(entry.startTime || '') : '',
@@ -3067,6 +3178,16 @@
               teacherName: teacher.teacherName || teacherEmail
             };
           });
+          safeArray(replacementState.model && replacementState.model.teachers).forEach(function (teacher) {
+            var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+            if (!teacherEmail || map[teacherEmail]) {
+              return;
+            }
+            map[teacherEmail] = {
+              teacherEmail: teacherEmail,
+              teacherName: teacher.teacherName || teacherEmail
+            };
+          });
           replacementState.tripTeacherDirectory = Object.keys(map).map(function (key) {
             return map[key];
           }).sort(function (left, right) {
@@ -3082,10 +3203,17 @@
 
         function syncReplacementTripFormFromInputs_() {
           var current = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          var eventType = replacementTripEventType ? replacementTripEventType.value : (current.eventType || 'FIELD_TRIP');
+          var classCodes = eventType === 'CLASS_EVENT' && replacementTripClassList
+            ? String(replacementTripClassList.value || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)
+            : (replacementTripClass ? [replacementTripClass.value].filter(Boolean) : current.classCodes);
           replacementState.tripForm = Object.assign({}, current, {
+            eventType: eventType,
             tripType: replacementTripType ? replacementTripType.value : current.tripType,
-            classCode: replacementTripClass ? replacementTripClass.value : current.classCode,
+            classCode: classCodes[0] || '',
+            classCodes: classCodes,
             title: replacementTripTitleInput ? replacementTripTitleInput.value : current.title,
+            location: replacementTripLocation ? replacementTripLocation.value : current.location,
             startDate: replacementTripDate ? replacementTripDate.value : current.startDate,
             endDate: replacementTripEndDate ? replacementTripEndDate.value : current.endDate,
             startTime: replacementTripStartTime ? replacementTripStartTime.value : current.startTime,
@@ -3096,7 +3224,7 @@
         }
 
         function validateReplacementTripPayload_(candidate) {
-          if (!candidate.classCode) {
+          if (!safeArray(candidate.classCodes).length && !candidate.classCode) {
             throw new Error('Selezionare una classe.');
           }
           if (!candidate.startDate) {
@@ -3195,15 +3323,21 @@
           var unavailableTeacherMap = buildReplacementTripUnavailableTeacherMap_(form);
           var showEndDate = form.tripType === 'MULTI_DAY';
           var showTimes = form.tripType === 'HOURLY';
+          var isClassEvent = form.eventType === 'CLASS_EVENT';
 
           if (replacementTripFormTitle) {
-            replacementTripFormTitle.textContent = form.tripId ? 'Modifica uscita didattica' : 'Nuova uscita didattica';
+            replacementTripFormTitle.textContent = form.tripId
+              ? (isClassEvent ? 'Modifica altri eventi' : 'Modifica uscita didattica')
+              : (isClassEvent ? 'Nuovo altro evento' : 'Nuova uscita didattica');
           }
           if (replacementTripSave) {
             replacementTripSave.textContent = form.tripId ? 'Aggiorna bozza' : 'Aggiungi alla bozza';
           }
           if (replacementTripType) {
             replacementTripType.value = form.tripType || 'DAILY';
+          }
+          if (replacementTripEventType) {
+            replacementTripEventType.value = form.eventType || 'FIELD_TRIP';
           }
           if (replacementTripClass) {
             ROOMS_UI.clearNode(replacementTripClass);
@@ -3215,6 +3349,12 @@
               }
               replacementTripClass.appendChild(option);
             });
+          }
+          if (replacementTripClassListWrap) {
+            replacementTripClassListWrap.style.display = isClassEvent ? 'block' : 'none';
+          }
+          if (replacementTripClassList) {
+            replacementTripClassList.value = safeArray(form.classCodes).join(', ');
           }
           if (replacementTripDate) {
             replacementTripDate.value = form.startDate || '';
@@ -3237,8 +3377,14 @@
           if (replacementTripTitleInput) {
             replacementTripTitleInput.value = form.title || '';
           }
+          if (replacementTripLocation) {
+            replacementTripLocation.value = form.location || '';
+          }
           if (replacementTripEnabled) {
             replacementTripEnabled.checked = Boolean(form.enabled);
+          }
+          if (replacementTripTeacherHeading) {
+            replacementTripTeacherHeading.textContent = isClassEvent ? 'Docenti supervisori' : 'Accompagnatori';
           }
           if (replacementTripNotes) {
             replacementTripNotes.value = form.notes || '';
@@ -3295,7 +3441,14 @@
           if (replacementTripExtraTeacher) {
             ROOMS_UI.clearNode(replacementTripExtraTeacher);
             replacementTripExtraTeacher.appendChild(new Option('Seleziona docente aggiuntivo', ''));
-            allTeachers.forEach(function (teacher) {
+            allTeachers.filter(function (teacher) {
+              if (replacementTripShowAllTeachers && replacementTripShowAllTeachers.checked) {
+                return true;
+              }
+              return suggestedTeachers.some(function (candidate) {
+                return normalizeReplacementTeacherEmail_(candidate.teacherEmail) === normalizeReplacementTeacherEmail_(teacher.teacherEmail);
+              });
+            }).forEach(function (teacher) {
               var teacherEmail = normalizeReplacementTeacherEmail_(teacher.teacherEmail);
               if (selectedTeacherMap[teacherEmail] || unavailableTeacherMap[teacherEmail]) {
                 return;
@@ -3387,8 +3540,10 @@
               actions.appendChild(deleteButton);
 
               return [
-                entry.tripType === 'MULTI_DAY' ? 'Uscita di piu giorni' : (entry.tripType === 'HOURLY' ? 'Uscita oraria' : 'Uscita giornaliera'),
-                entry.classCode || '',
+                entry.eventType === 'CLASS_EVENT'
+                  ? 'Altri eventi'
+                  : (entry.tripType === 'MULTI_DAY' ? 'Uscita di piu giorni' : (entry.tripType === 'HOURLY' ? 'Uscita oraria' : 'Uscita giornaliera')),
+                safeArray(entry.classCodes).join(', ') || entry.classCode || '',
                 periodLabel,
                 safeArray(entry.teachers).map(function (teacher) {
                   return teacher.teacherName || teacher.teacherEmail || '';
@@ -3406,9 +3561,12 @@
           var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
           return {
             tripId: form.tripId || '',
+            eventType: form.eventType || 'FIELD_TRIP',
             tripType: form.tripType || 'DAILY',
             classCode: form.classCode || '',
+            classCodes: safeArray(form.classCodes).length ? safeArray(form.classCodes) : [form.classCode].filter(Boolean),
             title: form.title || '',
+            location: form.location || '',
             startDate: form.startDate || '',
             endDate: form.tripType === 'MULTI_DAY' ? (form.endDate || '') : (form.startDate || ''),
             startTime: form.tripType === 'HOURLY' ? (form.startTime || '') : '',
@@ -5544,13 +5702,19 @@
             renderReplacementTripForm_();
           });
         }
+        if (replacementTripEventType) {
+          replacementTripEventType.addEventListener('change', function () {
+            syncReplacementTripFormFromInputs_();
+            renderReplacementTripForm_();
+          });
+        }
         if (replacementTripClass) {
           replacementTripClass.addEventListener('change', function () {
             syncReplacementTripFormFromInputs_();
             renderReplacementTripForm_();
           });
         }
-        [replacementTripDate, replacementTripEndDate, replacementTripStartTime, replacementTripEndTime, replacementTripTitleInput, replacementTripNotes, replacementTripEnabled].forEach(function (field) {
+        [replacementTripClassList, replacementTripDate, replacementTripEndDate, replacementTripStartTime, replacementTripEndTime, replacementTripTitleInput, replacementTripLocation, replacementTripNotes, replacementTripEnabled, replacementTripShowAllTeachers].forEach(function (field) {
           if (!field) {
             return;
           }
