@@ -2419,7 +2419,7 @@
               return;
             }
             if (slot.type === 'CLASS' && isReplacementClassOutAtPeriod_(slotClassCode, period)) {
-              classOutCandidates.push(buildReplacementCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita', { slotType: slot.type, requiresCompensationChoice: true }));
+              classOutCandidates.push(buildReplacementCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita', { slotType: slot.type }));
               return;
             }
             if (slot.type === 'P') {
@@ -4650,12 +4650,16 @@
         function syncReplacementTripFormFromInputs_() {
           var current = replacementState.tripForm || buildEmptyReplacementTripForm_();
           var eventType = replacementTripEventType ? replacementTripEventType.value : (current.eventType || 'FIELD_TRIP');
+          var tripType = replacementTripType ? replacementTripType.value : current.tripType;
           var classCodes = eventType === 'CLASS_EVENT' && replacementTripClassList
             ? String(replacementTripClassList.value || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)
             : (replacementTripClass ? [replacementTripClass.value].filter(Boolean) : current.classCodes);
+          if (eventType === 'CLASS_EVENT' && tripType === 'DAILY') {
+            tripType = 'HOURLY';
+          }
           replacementState.tripForm = Object.assign({}, current, {
             eventType: eventType,
-            tripType: replacementTripType ? replacementTripType.value : current.tripType,
+            tripType: tripType,
             classCode: classCodes[0] || '',
             classCodes: classCodes,
             title: replacementTripTitleInput ? replacementTripTitleInput.value : current.title,
@@ -4770,6 +4774,13 @@
           var showEndDate = form.tripType === 'MULTI_DAY';
           var showTimes = form.tripType === 'HOURLY';
           var isClassEvent = form.eventType === 'CLASS_EVENT';
+          if (isClassEvent && form.tripType === 'DAILY') {
+            form = Object.assign({}, form, {
+              tripType: 'HOURLY'
+            });
+            replacementState.tripForm = form;
+            showTimes = true;
+          }
 
           if (replacementTripFormTitle) {
             replacementTripFormTitle.textContent = form.tripId
@@ -5005,18 +5016,19 @@
         function getReplacementTripFormPayload_() {
           syncReplacementTripFormFromInputs_();
           var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          var tripType = form.eventType === 'CLASS_EVENT' && form.tripType === 'DAILY' ? 'HOURLY' : (form.tripType || 'DAILY');
           return {
             tripId: form.tripId || '',
             eventType: form.eventType || 'FIELD_TRIP',
-            tripType: form.tripType || 'DAILY',
+            tripType: tripType,
             classCode: form.classCode || '',
             classCodes: safeArray(form.classCodes).length ? safeArray(form.classCodes) : [form.classCode].filter(Boolean),
             title: form.title || '',
             location: form.location || '',
             startDate: form.startDate || '',
-            endDate: form.tripType === 'MULTI_DAY' ? (form.endDate || '') : (form.startDate || ''),
-            startTime: form.tripType === 'HOURLY' ? (form.startTime || '') : '',
-            endTime: form.tripType === 'HOURLY' ? (form.endTime || '') : '',
+            endDate: tripType === 'MULTI_DAY' ? (form.endDate || '') : (form.startDate || ''),
+            startTime: tripType === 'HOURLY' ? (form.startTime || '') : '',
+            endTime: tripType === 'HOURLY' ? (form.endTime || '') : '',
             notes: form.notes || '',
             enabled: form.enabled !== false,
             teachers: safeArray(form.teachers).map(function (teacher) {

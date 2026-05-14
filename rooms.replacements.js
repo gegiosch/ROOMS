@@ -1170,6 +1170,7 @@ ROOMS_APP.Replacements = {
             var classCode = self.getTeacherSlotAssignmentClassCode_(slot);
             var isCoverable = Boolean(teacher && slot && self.isCoverableTeacherSlot_(teacher, slot) && classCode);
             var isPot = slot && slot.type === 'P';
+            var isFreeForCredit = !slot || slot.type === 'FREE';
             if (isCoverable) {
               generatedRows.push({
                 date: dateKey,
@@ -1195,7 +1196,7 @@ ROOMS_APP.Replacements = {
               });
               return;
             }
-            if (!isPot) {
+            if (isFreeForCredit && !isPot) {
               generatedRows.push({
                 date: dateKey,
                 teacherEmail: teacherEmail,
@@ -2210,8 +2211,7 @@ ROOMS_APP.Replacements = {
 
       if (slot.type === 'CLASS' && ROOMS_APP.Replacements.isClassOutAtPeriod_(normalized, slot.classCode, period)) {
         classOutCandidates.push(ROOMS_APP.Replacements.buildCandidate_(teacher, 'CLASS_OUT', 'Classe in uscita', {
-          slotType: slot.type,
-          requiresCompensationChoice: true
+          slotType: slot.type
         }));
         seen[teacherEmail] = true;
         return;
