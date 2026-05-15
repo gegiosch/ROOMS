@@ -522,11 +522,11 @@
                   </select>
                 </div>
                 <div>
-                  <label for="replacement-trip-type">Durata</label>
+                  <label for="replacement-trip-type">Estensione evento</label>
                   <select id="replacement-trip-type" class="select">
-                    <option value="DAILY">Uscita giornaliera</option>
-                    <option value="MULTI_DAY">Uscita di piu giorni</option>
-                    <option value="HOURLY">Uscita oraria</option>
+                    <option value="HOURLY">Orario</option>
+                    <option value="DAILY">Giornaliero</option>
+                    <option value="MULTI_DAY">Più giorni</option>
                   </select>
                 </div>
                 <div>
@@ -594,7 +594,7 @@
                 <button id="replacement-trip-save" class="button" type="button">Aggiungi alla bozza</button>
                 <button id="replacement-trip-cancel" class="button secondary" type="button">Annulla</button>
                 <button id="replacement-trip-reset-draft" class="button secondary" type="button">Ripristina salvate</button>
-                <button id="replacement-trip-batch-save" class="button" type="button">Salva uscite</button>
+                <button id="replacement-trip-batch-save" class="button" type="button">Salva eventi</button>
               </div>
             </section>
           </div>
@@ -4438,6 +4438,7 @@
         }
 
         function normalizeReplacementTripForCompare_(entry) {
+          var includeTimes = entry && (entry.tripType === 'HOURLY' || (entry.eventType === 'CLASS_EVENT' && (entry.startTime || entry.endTime)));
           return {
             tripId: entry && entry.tripId ? String(entry.tripId) : '',
             eventType: entry && entry.eventType ? String(entry.eventType) : 'FIELD_TRIP',
@@ -4450,8 +4451,8 @@
             location: entry && entry.location ? String(entry.location) : '',
             startDate: entry && entry.startDate ? String(entry.startDate) : '',
             endDate: getReplacementTripEffectiveEndDate_(entry),
-            startTime: entry && entry.tripType === 'HOURLY' ? String(entry.startTime || '') : '',
-            endTime: entry && entry.tripType === 'HOURLY' ? String(entry.endTime || '') : '',
+            startTime: includeTimes ? String(entry.startTime || '') : '',
+            endTime: includeTimes ? String(entry.endTime || '') : '',
             notes: entry && entry.notes ? String(entry.notes) : '',
             enabled: entry ? entry.enabled !== false : true,
             teachers: safeArray(entry && entry.teachers).map(function (teacher) {
@@ -4544,9 +4545,9 @@
         function renderReplacementTripDraftStatus_() {
           var tripCount = safeArray(replacementState.tripDraft).length;
           var conflictCount = safeArray(replacementState.tripDraftErrors).length;
-          var message = tripCount === 1 ? '1 uscita in bozza.' : String(tripCount) + ' uscite in bozza.';
+          var message = tripCount === 1 ? '1 evento in bozza.' : String(tripCount) + ' eventi in bozza.';
           if (!tripCount) {
-            message = 'Nessuna uscita in bozza.';
+            message = 'Nessun evento in bozza.';
           }
           if (conflictCount) {
             message += ' ' + (conflictCount === 1 ? '1 conflitto docenti da risolvere prima del salvataggio.' : String(conflictCount) + ' conflitti docenti da risolvere prima del salvataggio.');
@@ -4651,11 +4652,14 @@
           var current = replacementState.tripForm || buildEmptyReplacementTripForm_();
           var eventType = replacementTripEventType ? replacementTripEventType.value : (current.eventType || 'FIELD_TRIP');
           var tripType = replacementTripType ? replacementTripType.value : current.tripType;
+          var startTime = replacementTripStartTime ? replacementTripStartTime.value : current.startTime;
+          var endTime = replacementTripEndTime ? replacementTripEndTime.value : current.endTime;
           var classCodes = eventType === 'CLASS_EVENT' && replacementTripClassList
             ? String(replacementTripClassList.value || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)
             : (replacementTripClass ? [replacementTripClass.value].filter(Boolean) : current.classCodes);
-          if (eventType === 'CLASS_EVENT' && tripType === 'DAILY') {
-            tripType = 'HOURLY';
+          if (tripType !== 'HOURLY') {
+            startTime = '';
+            endTime = '';
           }
           replacementState.tripForm = Object.assign({}, current, {
             eventType: eventType,
@@ -4666,8 +4670,8 @@
             location: replacementTripLocation ? replacementTripLocation.value : current.location,
             startDate: replacementTripDate ? replacementTripDate.value : current.startDate,
             endDate: replacementTripEndDate ? replacementTripEndDate.value : current.endDate,
-            startTime: replacementTripStartTime ? replacementTripStartTime.value : current.startTime,
-            endTime: replacementTripEndTime ? replacementTripEndTime.value : current.endTime,
+            startTime: startTime,
+            endTime: endTime,
             notes: replacementTripNotes ? replacementTripNotes.value : current.notes,
             enabled: replacementTripEnabled ? Boolean(replacementTripEnabled.checked) : current.enabled
           });
@@ -4763,6 +4767,12 @@
 
         function renderReplacementTripForm_() {
           var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
+          if (form.eventType === 'CLASS_EVENT' && form.tripType !== 'HOURLY' && (form.startTime || form.endTime)) {
+            form = Object.assign({}, form, {
+              tripType: 'HOURLY'
+            });
+            replacementState.tripForm = form;
+          }
           var classOptions = safeArray(replacementState.model && replacementState.model.tripClassOptions);
           var teacherOptionsByClass = replacementState.model && replacementState.model.tripTeacherOptionsByClass
             ? replacementState.model.tripTeacherOptionsByClass
@@ -4774,14 +4784,6 @@
           var showEndDate = form.tripType === 'MULTI_DAY';
           var showTimes = form.tripType === 'HOURLY';
           var isClassEvent = form.eventType === 'CLASS_EVENT';
-          if (isClassEvent && form.tripType === 'DAILY') {
-            form = Object.assign({}, form, {
-              tripType: 'HOURLY'
-            });
-            replacementState.tripForm = form;
-            showTimes = true;
-          }
-
           if (replacementTripFormTitle) {
             replacementTripFormTitle.textContent = form.tripId
               ? (isClassEvent ? 'Modifica altri eventi' : 'Modifica uscita didattica')
@@ -4936,7 +4938,7 @@
           var rows = safeArray(replacementState.tripDraft);
           renderTable(
             'replacement-trip-list-table',
-            ['Tipo', 'Classe', 'Periodo', 'Accompagnatori', 'Stato', 'Azioni'],
+            ['Tipo', 'Classe', 'Periodo', 'Docenti', 'Stato', 'Azioni'],
             rows.map(function (entry) {
               var actions = ROOMS_UI.el('div', 'replacement-detail-actions');
               var editButton = ROOMS_UI.el('button', 'button secondary', 'Modifica');
@@ -4948,7 +4950,7 @@
 
               if (entry.tripType === 'MULTI_DAY') {
                 periodLabel = formatReplacementDate_(entry.startDate) + ' - ' + formatReplacementDate_(entry.endDate);
-              } else if (entry.tripType === 'HOURLY') {
+              } else if (entry.tripType === 'HOURLY' || (entry.eventType === 'CLASS_EVENT' && (entry.startTime || entry.endTime))) {
                 periodLabel = formatReplacementDate_(entry.startDate) + ' ' + (entry.startTime || '--:--') + ' - ' + (entry.endTime || '--:--');
               }
               statusNode.textContent = entry.enabled ? 'ATTIVA' : 'DISABILITATA';
@@ -4999,7 +5001,7 @@
               return [
                 entry.eventType === 'CLASS_EVENT'
                   ? 'Altri eventi'
-                  : (entry.tripType === 'MULTI_DAY' ? 'Uscita di piu giorni' : (entry.tripType === 'HOURLY' ? 'Uscita oraria' : 'Uscita giornaliera')),
+                  : 'Uscita didattica',
                 safeArray(entry.classCodes).join(', ') || entry.classCode || '',
                 periodLabel,
                 safeArray(entry.teachers).map(function (teacher) {
@@ -5009,14 +5011,14 @@
                 actions
               ];
             }),
-            'Nessuna uscita didattica in bozza.'
+            'Nessun evento in bozza.'
           );
         }
 
         function getReplacementTripFormPayload_() {
           syncReplacementTripFormFromInputs_();
           var form = replacementState.tripForm || buildEmptyReplacementTripForm_();
-          var tripType = form.eventType === 'CLASS_EVENT' && form.tripType === 'DAILY' ? 'HOURLY' : (form.tripType || 'DAILY');
+          var tripType = form.tripType || 'DAILY';
           return {
             tripId: form.tripId || '',
             eventType: form.eventType || 'FIELD_TRIP',
