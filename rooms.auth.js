@@ -4,6 +4,14 @@ ROOMS_APP.Auth = {
   SIMULATION_INPUT_PATTERN_: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
   USER_CONTEXT_CACHE_TTL_: 3600,
   USER_CONTEXT_CACHE_VERSION_KEY_: 'rooms:user-context-cache-version',
+  TAB_PERMISSION_KEYS_: {
+    absences: 'canAccessAbsences',
+    classEvents: 'canAccessClassEvents',
+    longReplacements: 'canAccessLongReplacements',
+    dailyReplacements: 'canAccessDailyReplacements',
+    bookings: 'canAccessBookings',
+    report: 'canAccessReport'
+  },
 
   getUserContext: function () {
     var email = ROOMS_APP.getCurrentUserEmail();
@@ -24,12 +32,13 @@ ROOMS_APP.Auth = {
       canManageAulaMagna: Boolean(permissions.canManageAulaMagna),
       canUseSimulation: Boolean(permissions.canUseSimulation),
       canAccessAdmin: Boolean(permissions.canAccessAdmin),
-      canViewReports: Boolean(
-        permissions.canAccessAdmin ||
-        permissions.canManageReplacement ||
-        permissions.canManageAulaMagna ||
-        this.isAtaLikeRole_(role)
-      ),
+      canAccessAbsences: Boolean(permissions.canAccessAbsences),
+      canAccessClassEvents: Boolean(permissions.canAccessClassEvents),
+      canAccessLongReplacements: Boolean(permissions.canAccessLongReplacements),
+      canAccessDailyReplacements: Boolean(permissions.canAccessDailyReplacements),
+      canAccessBookings: Boolean(permissions.canAccessBookings),
+      canAccessReport: Boolean(permissions.canAccessReport),
+      canViewReports: Boolean(permissions.canAccessReport),
       allowedDomain: ROOMS_APP.getAllowedDomain(),
       isAllowedDomain: ROOMS_APP.isEmailInDomain(email, ROOMS_APP.getAllowedDomain()),
       firstName: identity.firstName,
@@ -48,6 +57,7 @@ ROOMS_APP.Auth = {
 
   requireAdmin: function () {
     var user = this.getUserContext();
+    this.assertAllowedDomain(user.email);
     if (!user.canAccessAdmin) {
       throw new Error('Admin access required.');
     }
@@ -79,25 +89,43 @@ ROOMS_APP.Auth = {
   },
 
   requireCanViewReports: function () {
-    var user = this.getUserContext();
-    this.assertAllowedDomain(user.email);
-    if (!this.canViewReports(user)) {
-      throw new Error('Report access required.');
+    return this.requireAdminTab('report');
+  },
+
+  canViewReports: function (actor) {
+    return this.canAccessAdminTab(actor, 'report');
+  },
+
+  requireAdminTab: function (tabKey) {
+    var user = this.requireAdmin();
+    if (!this.canAccessAdminTab(user, tabKey)) {
+      throw new Error('Permissione non sufficiente per questa scheda amministrativa.');
     }
     return user;
   },
 
-  canViewReports: function (actor) {
+  requireAnyAdminTab: function (tabKeys) {
+    var user = this.requireAdmin();
+    var keys = Array.isArray(tabKeys) ? tabKeys : [tabKeys];
+    var index;
+    for (index = 0; index < keys.length; index += 1) {
+      if (this.canAccessAdminTab(user, keys[index])) {
+        return user;
+      }
+    }
+    throw new Error('Permissione non sufficiente per questa scheda amministrativa.');
+  },
+
+  canAccessAdminTab: function (actor, tabKey) {
     var user = actor || this.getUserContext();
+    var permissionKey = this.TAB_PERMISSION_KEYS_[tabKey] || '';
     return Boolean(
       user &&
       user.isAllowedDomain !== false &&
+      user.canAccessAdmin &&
       (
-        user.canViewReports ||
-        user.canAccessAdmin ||
-        user.canManageReplacement ||
-        user.canManageAulaMagna ||
-        this.isAtaLikeRole_(user.role)
+        user.isSuperAdmin ||
+        (permissionKey && user[permissionKey])
       )
     );
   },
@@ -251,6 +279,12 @@ ROOMS_APP.Auth = {
           CanManageAulaMagna: row.CanManageAulaMagna,
           CanUseSimulation: row.CanUseSimulation,
           CanAccessAdmin: row.CanAccessAdmin,
+          CanAccessAbsences: row.CanAccessAbsences,
+          CanAccessClassEvents: row.CanAccessClassEvents,
+          CanAccessLongReplacements: row.CanAccessLongReplacements,
+          CanAccessDailyReplacements: row.CanAccessDailyReplacements,
+          CanAccessBookings: row.CanAccessBookings,
+          CanAccessReport: row.CanAccessReport,
           Notes: ROOMS_APP.normalizeString(row.Notes)
         };
       });
@@ -278,6 +312,13 @@ ROOMS_APP.Auth = {
       canManageAulaMagna: Boolean(permissions.canManageAulaMagna),
       canUseSimulation: Boolean(permissions.canUseSimulation),
       canAccessAdmin: Boolean(permissions.canAccessAdmin),
+      canAccessAbsences: Boolean(permissions.canAccessAbsences),
+      canAccessClassEvents: Boolean(permissions.canAccessClassEvents),
+      canAccessLongReplacements: Boolean(permissions.canAccessLongReplacements),
+      canAccessDailyReplacements: Boolean(permissions.canAccessDailyReplacements),
+      canAccessBookings: Boolean(permissions.canAccessBookings),
+      canAccessReport: Boolean(permissions.canAccessReport),
+      canViewReports: Boolean(permissions.canAccessReport),
       allowedDomain: ROOMS_APP.getAllowedDomain(),
       isAllowedDomain: ROOMS_APP.isEmailInDomain(normalized, ROOMS_APP.getAllowedDomain()),
       firstName: identity.firstName,
@@ -418,7 +459,13 @@ ROOMS_APP.Auth = {
         canManageReplacement: true,
         canManageAulaMagna: true,
         canUseSimulation: true,
-        canAccessAdmin: true
+        canAccessAdmin: true,
+        canAccessAbsences: true,
+        canAccessClassEvents: true,
+        canAccessLongReplacements: true,
+        canAccessDailyReplacements: true,
+        canAccessBookings: true,
+        canAccessReport: true
       };
     }
 
@@ -428,7 +475,13 @@ ROOMS_APP.Auth = {
       canManageReplacement: this.readPermissionValue_(entry && entry.CanManageReplacement, false),
       canManageAulaMagna: this.readPermissionValue_(entry && entry.CanManageAulaMagna, false),
       canUseSimulation: this.readPermissionValue_(entry && entry.CanUseSimulation, false),
-      canAccessAdmin: this.readPermissionValue_(entry && entry.CanAccessAdmin, role === 'ADMIN')
+      canAccessAdmin: this.readPermissionValue_(entry && entry.CanAccessAdmin, false),
+      canAccessAbsences: this.readPermissionValue_(entry && entry.CanAccessAbsences, false),
+      canAccessClassEvents: this.readPermissionValue_(entry && entry.CanAccessClassEvents, false),
+      canAccessLongReplacements: this.readPermissionValue_(entry && entry.CanAccessLongReplacements, false),
+      canAccessDailyReplacements: this.readPermissionValue_(entry && entry.CanAccessDailyReplacements, false),
+      canAccessBookings: this.readPermissionValue_(entry && entry.CanAccessBookings, false),
+      canAccessReport: this.readPermissionValue_(entry && entry.CanAccessReport, false)
     };
   },
 
@@ -439,7 +492,13 @@ ROOMS_APP.Auth = {
       canManageReplacement: false,
       canManageAulaMagna: false,
       canUseSimulation: false,
-      canAccessAdmin: false
+      canAccessAdmin: false,
+      canAccessAbsences: false,
+      canAccessClassEvents: false,
+      canAccessLongReplacements: false,
+      canAccessDailyReplacements: false,
+      canAccessBookings: false,
+      canAccessReport: false
     };
   },
 
@@ -452,7 +511,13 @@ ROOMS_APP.Auth = {
       canManageReplacement: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canManageReplacement, false),
       canManageAulaMagna: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canManageAulaMagna, false),
       canUseSimulation: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canUseSimulation, false),
-      canAccessAdmin: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessAdmin, false)
+      canAccessAdmin: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessAdmin, false),
+      canAccessAbsences: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessAbsences, false),
+      canAccessClassEvents: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessClassEvents, false),
+      canAccessLongReplacements: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessLongReplacements, false),
+      canAccessDailyReplacements: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessDailyReplacements, false),
+      canAccessBookings: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessBookings, false),
+      canAccessReport: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessReport, false)
     };
   },
 

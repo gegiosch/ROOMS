@@ -2,9 +2,10 @@ var Mod = Mod || {};
 
 Mod.Substitution = {
   handlePage: function () {
-    var actor = ROOMS_APP.Auth.getUserContext();
+    var actor = ROOMS_APP.Auth.requireAdmin();
     var dailyBootstrap = this.buildDailyBootstrap_(actor);
-    var bookingReport = ROOMS_APP.Auth.canViewReports(actor)
+    var canAccessReport = ROOMS_APP.Auth.canViewReports(actor);
+    var bookingReport = canAccessReport
       ? ROOMS_APP.Booking.getBookingReportModel('', '', actor)
       : null;
     var reportsHtml = this.renderTemplateToString_('ui.substitution.reports', {
@@ -13,7 +14,7 @@ Mod.Substitution = {
       viewerEmbedded: true,
       viewerUser: actor,
       bookingReport: bookingReport,
-      reports: ROOMS_APP.Replacements.listVisibleArchivedReports_(),
+      reports: canAccessReport ? ROOMS_APP.Replacements.listVisibleArchivedReports_() : [],
       report: null
     });
 

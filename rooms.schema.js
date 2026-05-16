@@ -11,6 +11,12 @@ ROOMS_APP.Schema = {
     'CanManageAulaMagna',
     'CanUseSimulation',
     'CanAccessAdmin',
+    'CanAccessAbsences',
+    'CanAccessClassEvents',
+    'CanAccessLongReplacements',
+    'CanAccessDailyReplacements',
+    'CanAccessBookings',
+    'CanAccessReport',
     'Notes'
   ],
 
@@ -773,6 +779,13 @@ ROOMS_APP.Schema = {
         Email: email,
         Role: 'ADMIN',
         Enabled: 'TRUE',
+        CanAccessAdmin: 'TRUE',
+        CanAccessAbsences: 'TRUE',
+        CanAccessClassEvents: 'TRUE',
+        CanAccessLongReplacements: 'TRUE',
+        CanAccessDailyReplacements: 'TRUE',
+        CanAccessBookings: 'TRUE',
+        CanAccessReport: 'TRUE',
         Notes: 'Migrato da CONFIG.ADMIN_GROUP_EMAIL'
       });
     });

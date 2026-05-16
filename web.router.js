@@ -405,12 +405,14 @@ function commitRecurringRoomBooking(payload) {
 
 function previewRecurringBookingRows(rows, requestContext) {
   return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    ROOMS_APP.Auth.requireAdminTab('bookings');
     return ROOMS_APP.Recurring.buildRowsPreview(rows || []);
   });
 }
 
 function saveRecurringBookingRows(rows, options, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    ROOMS_APP.Auth.requireAdminTab('bookings');
     return ROOMS_APP.Recurring.commitRows(rows || [], options || {});
   });
 }
@@ -531,16 +533,13 @@ function renderTemplate_(filename, viewModel) {
 }
 
 function renderSubstitutionReportsPage_(params) {
-  var actor = ROOMS_APP.Auth.getUserContext();
+  var actor = ROOMS_APP.Auth.requireAdminTab('report');
   var embedded = ROOMS_APP.normalizeString(params && params.embedded).toLowerCase() === 'true';
-  var bookingReport = ROOMS_APP.Auth.canViewReports(actor)
-    ? ROOMS_APP.Booking.getBookingReportModel(
-      params && (params.startDate || params.dal),
-      params && (params.endDate || params.al),
-      actor
-    )
-    : null;
-  ROOMS_APP.Auth.assertAllowedDomain(actor.email);
+  var bookingReport = ROOMS_APP.Booking.getBookingReportModel(
+    params && (params.startDate || params.dal),
+    params && (params.endDate || params.al),
+    actor
+  );
   return renderTemplate_('ui.substitution.reports', {
     pageTitle: 'Report',
     viewerMode: 'list',
@@ -553,11 +552,10 @@ function renderSubstitutionReportsPage_(params) {
 }
 
 function renderSubstitutionReportViewPage_(params) {
-  var actor = ROOMS_APP.Auth.getUserContext();
+  var actor = ROOMS_APP.Auth.requireAdminTab('report');
   var reportKey = ROOMS_APP.normalizeString(params && params.reportKey);
   var embedded = ROOMS_APP.normalizeString(params && params.embedded).toLowerCase() === 'true';
   var report;
-  ROOMS_APP.Auth.assertAllowedDomain(actor.email);
   report = ROOMS_APP.Replacements.getVisibleArchivedReportByKey_(reportKey);
   if (!report) {
     throw new Error('Report non trovato o non disponibile.');
@@ -721,9 +719,11 @@ function routeApiRequest_(payload) {
     return ROOMS_APP.Recurring.commitWeekly(payload);
   }
   if (action === 'previewRecurringBookingRows') {
+    ROOMS_APP.Auth.requireAdminTab('bookings');
     return ROOMS_APP.Recurring.buildRowsPreview(payload.rows || payload.draftRows || []);
   }
   if (action === 'saveRecurringBookingRows') {
+    ROOMS_APP.Auth.requireAdminTab('bookings');
     return ROOMS_APP.Recurring.commitRows(payload.rows || payload.draftRows || [], payload.options || {});
   }
   if (action === 'importTimetableClassrooms') {

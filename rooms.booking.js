@@ -63,6 +63,9 @@ ROOMS_APP.Booking = {
 
   getBookingReportModel: function (startDate, endDate, actor) {
     var reportActor = actor || ROOMS_APP.Auth.requireCanViewReports();
+    if (!ROOMS_APP.Auth.canAccessAdminTab(reportActor, 'report')) {
+      throw new Error('Report access required.');
+    }
     var today = ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, reportActor));
     var normalizedStart = ROOMS_APP.toIsoDate(startDate || today) || today;
     var normalizedEnd = ROOMS_APP.toIsoDate(endDate || normalizedStart) || normalizedStart;
@@ -905,12 +908,7 @@ ROOMS_APP.Booking = {
   },
 
   requireAdminRoomBookingActor_: function () {
-    var actor = ROOMS_APP.Auth.getUserContext();
-    ROOMS_APP.Auth.assertAllowedDomain(actor.email);
-    if (!actor.canAccessAdmin && !actor.canManageReplacement) {
-      throw new Error('Admin access required.');
-    }
-    return actor;
+    return ROOMS_APP.Auth.requireAdminTab('bookings');
   },
 
   buildAdminExistingOccupancyRows_: function (dateString, resourceId, actor) {

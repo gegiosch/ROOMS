@@ -1345,24 +1345,63 @@
         }
 
         function canViewReportsUser_(model) {
-          return Boolean(model && model.user && model.user.canViewReports);
+          return Boolean(model && model.user && model.user.canAccessReport);
         }
 
-        function isReportOnlyUser_() {
-          return canViewReportsUser_(model) && !canAccessAdminUser_(model) && !canManageReplacementUser_(model);
-        }
-
-        function applyReportOnlyTabAccess_() {
-          if (!isReportOnlyUser_()) {
-            return;
+        function isAdminTabAllowed_(tabId) {
+          var user = model && model.user ? model.user : {};
+          var normalized = String(tabId || '');
+          if (user.isSuperAdmin) {
+            return true;
           }
+          if (!user.canAccessAdmin) {
+            return false;
+          }
+          if (normalized === 'absences') {
+            return Boolean(user.canAccessAbsences);
+          }
+          if (normalized === 'trips') {
+            return Boolean(user.canAccessClassEvents);
+          }
+          if (normalized === 'long') {
+            return Boolean(user.canAccessLongReplacements);
+          }
+          if (normalized === 'daily') {
+            return Boolean(user.canAccessDailyReplacements);
+          }
+          if (normalized === 'room-bookings') {
+            return Boolean(user.canAccessBookings);
+          }
+          if (normalized === 'reports') {
+            return Boolean(user.canAccessReport);
+          }
+          return normalized === 'landing';
+        }
+
+        function applyAdminTabAccess_() {
           tabButtons.forEach(function (button) {
-            button.style.display = button.getAttribute('data-tab') === 'reports' ? 'inline-flex' : 'none';
+            var tabId = button.getAttribute('data-tab') || '';
+            button.style.display = isAdminTabAllowed_(tabId) ? 'inline-flex' : 'none';
           });
         }
 
+        function getFirstAllowedAdminTab_() {
+          var button = tabButtons.filter(function (entry) {
+            return isAdminTabAllowed_(entry.getAttribute('data-tab'));
+          })[0] || null;
+          return button ? (button.getAttribute('data-tab') || 'landing') : 'landing';
+        }
+
+        function getRequestedAdminTab_() {
+          return getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
+        }
+
         function getInitialAdminTab_() {
-          return isReportOnlyUser_() ? 'reports' : 'landing';
+          var requested = getRequestedAdminTab_();
+          if (requested && isAdminTabAllowed_(requested)) {
+            return requested;
+          }
+          return getFirstAllowedAdminTab_();
         }
 
         function parseSimulationDateTime_(value) {
@@ -3093,7 +3132,11 @@
         }
 
         function canOpenReplacementModal_() {
-          return !isMonitorModeEffective_(state) && canManageReplacementUser_(state);
+          return !isMonitorModeEffective_(state) && (
+            isAdminTabAllowed_('trips') ||
+            isAdminTabAllowed_('long') ||
+            isAdminTabAllowed_('daily')
+          );
         }
 
         function isReplacementDateValid_() {
@@ -3813,6 +3856,7 @@
                       return loadReplacementModel_(replacementState.date, null, {
                         forceRefresh: true,
                         includeEditorData: false,
+                        activeTab: 'daily',
                         keepNotice: true,
                         loadingMessage: 'Aggiornamento eventi sorgente...'
                       });
@@ -5293,12 +5337,15 @@
             replacementLongActionsBottom.style.display = isLong ? 'flex' : 'none';
           }
           if (replacementTabDaily && !replacementUsesUnifiedTabs) {
+            replacementTabDaily.style.display = isAdminTabAllowed_('daily') ? 'inline-flex' : 'none';
             replacementTabDaily.classList.toggle('active', isDaily);
           }
           if (replacementTabTrips && !replacementUsesUnifiedTabs) {
+            replacementTabTrips.style.display = isAdminTabAllowed_('trips') ? 'inline-flex' : 'none';
             replacementTabTrips.classList.toggle('active', isTrips);
           }
           if (replacementTabLong && !replacementUsesUnifiedTabs) {
+            replacementTabLong.style.display = isAdminTabAllowed_('long') ? 'inline-flex' : 'none';
             replacementTabLong.classList.toggle('active', isLong);
           }
           replacementActionButtons.forEach(function (button) {
@@ -5348,11 +5395,14 @@
 
         function switchReplacementTab_(tabName) {
           var normalizedTab = tabName === 'long' ? 'long' : (tabName === 'trips' ? 'trips' : 'daily');
+          var adminTabId = normalizedTab === 'trips' ? 'trips' : (normalizedTab === 'long' ? 'long' : 'daily');
+          if (!isAdminTabAllowed_(adminTabId)) {
+            setReplacementNotice_('Permissione non sufficiente per questa scheda.', 'error');
+            return;
+          }
           if (replacementUsesUnifiedTabs && (!replacementState.isOpen || !replacementState.model)) {
-            openReplacementUnified_().then(function () {
-              if (normalizedTab !== 'daily') {
-                switchReplacementTab_(normalizedTab);
-              }
+            openReplacementUnified_(normalizedTab).then(function () {
+              switchReplacementTab_(normalizedTab);
             });
             return;
           }
@@ -5373,6 +5423,7 @@
                 allowAutoShift: false,
                 keepNotice: true,
                 includeEditorData: false,
+                activeTab: 'daily',
                 forceRefresh: true,
                 noticeScope: 'daily',
                 loadingMessage: 'Aggiornamento assenze e sostituzioni...'
@@ -5392,6 +5443,7 @@
                 keepDirty: Boolean(replacementState.dirty),
                 keepNotice: true,
                 includeEditorData: true,
+                activeTab: normalizedTab,
                 noticeScope: normalizedTab,
                 loadingMessage: normalizedTab === 'trips'
                   ? 'Caricamento dati uscite didattiche...'
@@ -5585,6 +5637,8 @@
           var settled = false;
           var watchdogId = 0;
           var cacheKey = targetDate + '|editor:' + String(settings.includeEditorData !== false);
+          var activeTabForRequest = settings.activeTab || replacementState.activeTab || 'daily';
+          cacheKey += '|tab:' + activeTabForRequest;
           var cachedModel = !draft && !replacementState.dirty && !settings.forceRefresh && replacementState.modelCache
             ? replacementState.modelCache[cacheKey]
             : null;
@@ -5631,7 +5685,8 @@
             cloneReplacementData_(draft),
             {
               allowAutoShift: settings.allowAutoShift !== false,
-              includeEditorData: settings.includeEditorData !== false
+              includeEditorData: settings.includeEditorData !== false,
+              activeTab: activeTabForRequest
             }
           ).then(function (model) {
             if (window.console && typeof window.console.info === 'function') {
@@ -5764,6 +5819,7 @@
             allowAutoShift: true,
             keepDirty: false,
             includeEditorData: false,
+            activeTab: 'daily',
             loadingMessage: 'Caricamento sostituzioni...'
           });
         }
@@ -5785,13 +5841,15 @@
             allowAutoShift: true,
             keepDirty: false,
             includeEditorData: replacementStandaloneTab !== 'daily',
+            activeTab: replacementStandaloneTab,
             loadingMessage: 'Caricamento sostituzioni...'
           }).then(function () {
             switchReplacementTab_(replacementStandaloneTab);
           });
         }
 
-        function openReplacementUnified_() {
+        function openReplacementUnified_(targetTab) {
+          var normalizedTab = targetTab === 'long' ? 'long' : (targetTab === 'trips' ? 'trips' : 'daily');
           if (!replacementModal) {
             if (window.console && typeof window.console.error === 'function') {
               window.console.error('[substitution] bootstrap missing replacement modal in unified page');
@@ -5799,7 +5857,7 @@
             return Promise.resolve(null);
           }
           replacementState.isOpen = true;
-          replacementState.activeTab = 'daily';
+          replacementState.activeTab = normalizedTab;
           replacementModal.style.display = 'flex';
           replacementState.preview = null;
           replacementState.pendingManualAssignmentKeys = {};
@@ -5813,10 +5871,11 @@
           return loadReplacementModel_(getDefaultPanelDate_(), null, {
             allowAutoShift: true,
             keepDirty: false,
-            includeEditorData: false,
+            includeEditorData: normalizedTab !== 'daily',
+            activeTab: normalizedTab,
             loadingMessage: 'Caricamento sostituzioni...'
           }).then(function (result) {
-            switchReplacementTab_('daily');
+            switchReplacementTab_(normalizedTab);
             return result;
           }).catch(function (error) {
             setReplacementLoading_(false);
@@ -5843,6 +5902,7 @@
                 allowAutoShift: false,
                 keepDirty: false,
                 includeEditorData: replacementState.activeTab !== 'daily',
+                activeTab: replacementState.activeTab || 'daily',
                 noticeScope: replacementState.activeTab || 'daily',
                 loadingMessage: 'Caricamento nuova data...'
               });
@@ -8008,6 +8068,9 @@
 
         function activateTab_(tabId) {
           activeTabId = tabId || 'landing';
+          if (!isAdminTabAllowed_(activeTabId)) {
+            activeTabId = getFirstAllowedAdminTab_();
+          }
           var activePanelId = getPanelId_(activeTabId);
           var activeButton = tabButtons.find(function (entry) {
             return entry.getAttribute('data-tab') === activeTabId;
@@ -8088,6 +8151,10 @@
             ? targetButton.getAttribute('data-replacement-tab')
             : '';
           if (!adminShellReady || targetTab === currentTabId) {
+            return;
+          }
+          if (!isAdminTabAllowed_(targetTab)) {
+            activateTab_(getFirstAllowedAdminTab_());
             return;
           }
           if (!settings.skipBookingDraftConfirm &&
@@ -10539,7 +10606,7 @@
         updateAbsenceDraftStatus_();
         renderAdminBookingDraft_();
         renderAdminExistingOccupancies_();
-        applyReportOnlyTabAccess_();
+        applyAdminTabAccess_();
         setAdminShellReady_(true, '');
         activateTab_(getInitialAdminTab_());
       }());

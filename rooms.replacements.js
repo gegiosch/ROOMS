@@ -69,10 +69,24 @@ ROOMS_APP.Replacements = {
     ROOMS_APP.Schema.ensureReportArchiveHistory();
   },
 
+  requireReplacementTabActor_: function (activeTab) {
+    var normalized = ROOMS_APP.normalizeString(activeTab).toLowerCase();
+    if (normalized === 'trips') {
+      return ROOMS_APP.Auth.requireAdminTab('classEvents');
+    }
+    if (normalized === 'long') {
+      return ROOMS_APP.Auth.requireAdminTab('longReplacements');
+    }
+    if (normalized === 'daily') {
+      return ROOMS_APP.Auth.requireAdminTab('dailyReplacements');
+    }
+    return ROOMS_APP.Auth.requireAnyAdminTab(['dailyReplacements', 'classEvents', 'longReplacements']);
+  },
+
   getModalModel: function (dateString, draft, options) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
-    this.ensureSchema_();
     var settings = options && typeof options === 'object' ? options : {};
+    var actor = this.requireReplacementTabActor_(settings.activeTab || '');
+    this.ensureSchema_();
     var dateState = this.resolveSelectedDate_(
       dateString,
       settings.allowAutoShift !== false
@@ -114,7 +128,7 @@ ROOMS_APP.Replacements = {
   },
 
   getTeacherDetail: function (dateString, draft, teacherEmail) {
-    ROOMS_APP.Auth.requireCanManageReplacement();
+    ROOMS_APP.Auth.requireAdminTab('dailyReplacements');
     this.ensureSchema_();
     var dateState = this.resolveSelectedDate_(dateString, false);
     if (!dateState.isValid) {
@@ -144,7 +158,7 @@ ROOMS_APP.Replacements = {
   },
 
   getAbsenceRegistryModel: function (referenceDate) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('absences');
     var dateState;
     var teacherOptions;
     var rows;
@@ -171,7 +185,7 @@ ROOMS_APP.Replacements = {
   },
 
   getAbsenceTeacherPeriods: function (teacherEmail, dateString) {
-    ROOMS_APP.Auth.requireCanManageReplacement();
+    ROOMS_APP.Auth.requireAdminTab('absences');
     this.ensureSchema_();
     var dateState = this.resolveSelectedDate_(dateString, false);
     var teacherKey = this.normalizeTeacherEmail_(teacherEmail);
@@ -194,7 +208,7 @@ ROOMS_APP.Replacements = {
   },
 
   saveAbsenceRegistry: function (rows, referenceDate) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('absences');
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var dateState;
     var persistedRows;
@@ -252,7 +266,7 @@ ROOMS_APP.Replacements = {
   },
 
   saveAbsence: function (payload) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('absences');
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var candidate;
     var rows;
@@ -578,7 +592,7 @@ ROOMS_APP.Replacements = {
   },
 
   deleteAbsence: function (absenceId) {
-    ROOMS_APP.Auth.requireCanManageReplacement();
+    ROOMS_APP.Auth.requireAdminTab('absences');
     this.ensureSchema_();
     var normalizedAbsenceId = ROOMS_APP.normalizeString(absenceId);
     var removed = false;
@@ -609,7 +623,7 @@ ROOMS_APP.Replacements = {
   },
 
   deleteAbsencesForTeacherDate: function (teacherEmail, dateString) {
-    ROOMS_APP.Auth.requireCanManageReplacement();
+    ROOMS_APP.Auth.requireAdminTab('absences');
     this.ensureSchema_();
     var targetDate = ROOMS_APP.toIsoDate(dateString || '');
     var targetEmail = this.normalizeTeacherEmail_(teacherEmail);
@@ -670,7 +684,7 @@ ROOMS_APP.Replacements = {
   },
 
   previewReport: function (dateString, draft) {
-    ROOMS_APP.Auth.requireCanManageReplacement();
+    ROOMS_APP.Auth.requireAdminTab('dailyReplacements');
     this.ensureSchema_();
     var dateState = this.resolveSelectedDate_(dateString, false);
     if (!dateState.isValid) {
@@ -685,7 +699,7 @@ ROOMS_APP.Replacements = {
   },
 
   saveDay: function (dateString, draft) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('dailyReplacements');
     this.ensureSchema_();
     var dateState = this.resolveSelectedDate_(dateString, false);
     if (!dateState.isValid) {
@@ -781,7 +795,7 @@ ROOMS_APP.Replacements = {
   },
 
   sendReport: function (dateString) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('dailyReplacements');
     this.ensureSchema_();
     var targetDate = ROOMS_APP.toIsoDate(dateString || new Date());
     var context = this.buildDayContext_(targetDate, {
@@ -864,7 +878,7 @@ ROOMS_APP.Replacements = {
   },
 
   saveLongAssignment: function (payload, referenceDate) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('longReplacements');
     this.ensureSchema_();
     var normalized = this.normalizeLongAssignmentInput_(payload || {});
     var rows = this.listLongAssignmentRows_();
@@ -938,7 +952,7 @@ ROOMS_APP.Replacements = {
   },
 
   toggleLongAssignment: function (matchKey, enabled, referenceDate) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('longReplacements');
     this.ensureSchema_();
     var rows = this.listLongAssignmentRows_();
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
@@ -996,7 +1010,7 @@ ROOMS_APP.Replacements = {
   },
 
   deleteLongAssignment: function (matchKey, referenceDate) {
-    ROOMS_APP.Auth.requireCanManageReplacement();
+    ROOMS_APP.Auth.requireAdminTab('longReplacements');
     this.ensureSchema_();
     var removed = false;
     var removedRow = null;
@@ -1037,6 +1051,7 @@ ROOMS_APP.Replacements = {
   },
 
   saveEducationalTrip: function (payload, referenceDate) {
+    ROOMS_APP.Auth.requireAdminTab('classEvents');
     var normalized = this.normalizeEducationalTripPayload_(payload || {});
     var replaced = false;
     var trips = this.listEducationalTrips_().map(function (trip) {
@@ -1055,6 +1070,7 @@ ROOMS_APP.Replacements = {
   },
 
   toggleEducationalTrip: function (tripId, enabled, referenceDate) {
+    ROOMS_APP.Auth.requireAdminTab('classEvents');
     var found = false;
     var trips = this.listEducationalTrips_().map(function (trip) {
       if (ROOMS_APP.normalizeString(trip.tripId) !== ROOMS_APP.normalizeString(tripId)) {
@@ -1072,6 +1088,7 @@ ROOMS_APP.Replacements = {
   },
 
   deleteEducationalTrip: function (tripId, referenceDate) {
+    ROOMS_APP.Auth.requireAdminTab('classEvents');
     var normalizedTripId = ROOMS_APP.normalizeString(tripId);
     var removed = false;
     var trips = this.listEducationalTrips_().filter(function (trip) {
@@ -1088,7 +1105,7 @@ ROOMS_APP.Replacements = {
   },
 
   saveReplacementFieldTripRegistry: function (entries, referenceDate) {
-    var actor = ROOMS_APP.Auth.requireCanManageReplacement();
+    var actor = ROOMS_APP.Auth.requireAdminTab('classEvents');
     var self = this;
     var nowIso = ROOMS_APP.toIsoDateTime(new Date());
     var normalizedTrips = [];
