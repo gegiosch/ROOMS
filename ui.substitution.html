@@ -1375,7 +1375,7 @@
           if (normalized === 'reports') {
             return Boolean(user.canAccessReport);
           }
-          return normalized === 'landing';
+          return false;
         }
 
         function applyAdminTabAccess_() {
@@ -1389,11 +1389,29 @@
           var button = tabButtons.filter(function (entry) {
             return isAdminTabAllowed_(entry.getAttribute('data-tab'));
           })[0] || null;
-          return button ? (button.getAttribute('data-tab') || 'landing') : 'landing';
+          return button ? (button.getAttribute('data-tab') || '') : '';
+        }
+
+        function showNoAdminTabAccess_() {
+          var title = document.querySelector('[data-tab-panel="landing"] h3');
+          var text = document.querySelector('[data-tab-panel="landing"] .subtitle');
+          if (title) {
+            title.textContent = 'Nessun accesso disponibile';
+          }
+          if (text) {
+            text.textContent = 'Non sono abilitate schede amministrative per questo profilo.';
+          }
+          tabPanels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === 'landing');
+          });
+          tabButtons.forEach(function (button) {
+            button.classList.remove('active');
+          });
         }
 
         function getRequestedAdminTab_() {
-          return getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
+          var requested = getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
+          return requested === 'report' ? 'reports' : requested;
         }
 
         function getInitialAdminTab_() {
@@ -1401,7 +1419,7 @@
           if (requested && isAdminTabAllowed_(requested)) {
             return requested;
           }
-          return getFirstAllowedAdminTab_();
+          return getFirstAllowedAdminTab_() || 'landing';
         }
 
         function parseSimulationDateTime_(value) {
@@ -8069,7 +8087,11 @@
         function activateTab_(tabId) {
           activeTabId = tabId || 'landing';
           if (!isAdminTabAllowed_(activeTabId)) {
-            activeTabId = getFirstAllowedAdminTab_();
+            activeTabId = getFirstAllowedAdminTab_() || 'landing';
+          }
+          if (activeTabId === 'landing' && !getFirstAllowedAdminTab_()) {
+            showNoAdminTabAccess_();
+            return;
           }
           var activePanelId = getPanelId_(activeTabId);
           var activeButton = tabButtons.find(function (entry) {
@@ -8150,11 +8172,15 @@
           var replacementTab = targetButton && targetButton.getAttribute('data-replacement-tab')
             ? targetButton.getAttribute('data-replacement-tab')
             : '';
-          if (!adminShellReady || targetTab === currentTabId) {
+          if (!adminShellReady) {
             return;
           }
           if (!isAdminTabAllowed_(targetTab)) {
-            activateTab_(getFirstAllowedAdminTab_());
+            activateTab_(getFirstAllowedAdminTab_() || 'landing');
+            return;
+          }
+          if (targetTab === currentTabId) {
+            activateTab_(targetTab);
             return;
           }
           if (!settings.skipBookingDraftConfirm &&

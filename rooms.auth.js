@@ -4,6 +4,7 @@ ROOMS_APP.Auth = {
   SIMULATION_INPUT_PATTERN_: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
   USER_CONTEXT_CACHE_TTL_: 3600,
   USER_CONTEXT_CACHE_VERSION_KEY_: 'rooms:user-context-cache-version',
+  USER_CONTEXT_CACHE_SCHEMA_VERSION_: 'tabs-v2',
   TAB_PERMISSION_KEYS_: {
     absences: 'canAccessAbsences',
     classEvents: 'canAccessClassEvents',
@@ -380,7 +381,7 @@ ROOMS_APP.Auth = {
   },
 
   getUserContextCacheKey_: function (email) {
-    return 'rooms:user:' + ROOMS_APP.normalizeEmail(email);
+    return 'rooms:user:' + this.USER_CONTEXT_CACHE_SCHEMA_VERSION_ + ':' + ROOMS_APP.normalizeEmail(email);
   },
 
   getUserContextCacheVersion_: function () {
@@ -430,6 +431,8 @@ ROOMS_APP.Auth = {
     var normalizedEmail = ROOMS_APP.normalizeEmail(email);
     var normalizedOrgUnitPath = this.normalizeOrgUnitPath_(orgUnitPath);
     var entries = this.getAdminEntries_();
+    var orgUnitEntry = null;
+    var orgUnitEntryLength = -1;
     var index;
 
     for (index = 0; index < entries.length; index += 1) {
@@ -442,12 +445,14 @@ ROOMS_APP.Auth = {
       if (!entries[index].OrgUnitPath || !normalizedOrgUnitPath) {
         continue;
       }
-      if (normalizedOrgUnitPath.indexOf(entries[index].OrgUnitPath) === 0) {
-        return entries[index];
+      if (this.isOrgUnitPathMatch_(normalizedOrgUnitPath, entries[index].OrgUnitPath) &&
+          entries[index].OrgUnitPath.length > orgUnitEntryLength) {
+        orgUnitEntry = entries[index];
+        orgUnitEntryLength = entries[index].OrgUnitPath.length;
       }
     }
 
-    return null;
+    return orgUnitEntry;
   },
 
   buildPermissionsFromEntry_: function (entry, email) {
@@ -538,5 +543,18 @@ ROOMS_APP.Auth = {
     }
     normalized = normalized.replace(/\/+$/, '');
     return normalized || '/';
+  },
+
+  isOrgUnitPathMatch_: function (userPath, entryPath) {
+    var normalizedUserPath = this.normalizeOrgUnitPath_(userPath);
+    var normalizedEntryPath = this.normalizeOrgUnitPath_(entryPath);
+    if (!normalizedUserPath || !normalizedEntryPath) {
+      return false;
+    }
+    if (normalizedEntryPath === '/') {
+      return true;
+    }
+    return normalizedUserPath === normalizedEntryPath ||
+      normalizedUserPath.indexOf(normalizedEntryPath + '/') === 0;
   }
 };
