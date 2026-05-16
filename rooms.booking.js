@@ -61,6 +61,125 @@ ROOMS_APP.Booking = {
     );
   },
 
+  getBookingReportModel: function (startDate, endDate, actor) {
+    var reportActor = actor || ROOMS_APP.Auth.requireCanViewReports();
+    var today = ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, reportActor));
+    var normalizedStart = ROOMS_APP.toIsoDate(startDate || today) || today;
+    var normalizedEnd = ROOMS_APP.toIsoDate(endDate || normalizedStart) || normalizedStart;
+    var resourceMap = this.buildReportResourceMap_();
+    var sections = {
+      regular: [],
+      aulaMagna: []
+    };
+    var self = this;
+    if (normalizedEnd < normalizedStart) {
+      normalizedEnd = normalizedStart;
+    }
+    ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.BOOKINGS).forEach(function (booking) {
+      var bookingDate = ROOMS_APP.toIsoDate(booking.BookingDate);
+      var resourceId = ROOMS_APP.normalizeString(booking.ResourceId);
+      var resource = resourceMap[resourceId] || resourceMap[resourceId.toUpperCase()] || null;
+      var row;
+      if (!bookingDate || bookingDate < normalizedStart || bookingDate > normalizedEnd || self.isBookingCancelled_(booking)) {
+        return;
+      }
+      row = self.buildBookingReportRow_(booking, resource);
+      if (self.isAulaMagnaReportResource_(booking.ResourceId, resource)) {
+        sections.aulaMagna.push(row);
+      } else {
+        sections.regular.push(row);
+      }
+    });
+    ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.AULA_MAGNA_EVENTS).forEach(function (eventRow) {
+      var eventDate = ROOMS_APP.toIsoDate(eventRow.EventDate);
+      var isActive = ROOMS_APP.normalizeString(eventRow.IsActive) === '' ? true : ROOMS_APP.asBoolean(eventRow.IsActive);
+      if (!isActive || !eventDate || eventDate < normalizedStart || eventDate > normalizedEnd) {
+        return;
+      }
+      sections.aulaMagna.push(self.buildAulaMagnaEventReportRow_(eventRow, resourceMap));
+    });
+    sections.regular = ROOMS_APP.sortBy(sections.regular, ['date', 'startTime', 'room']);
+    sections.aulaMagna = ROOMS_APP.sortBy(sections.aulaMagna, ['date', 'startTime', 'room']);
+    return {
+      startDate: normalizedStart,
+      endDate: normalizedEnd,
+      today: today,
+      regularBookings: sections.regular,
+      aulaMagnaBookings: sections.aulaMagna,
+      user: reportActor
+    };
+  },
+
+  buildReportResourceMap_: function () {
+    var map = {};
+    ROOMS_APP.Board.listResources_().forEach(function (resource) {
+      var resourceId;
+      if (!resource || !resource.ResourceId) {
+        return;
+      }
+      resourceId = ROOMS_APP.normalizeString(resource.ResourceId);
+      map[resourceId] = resource;
+      map[resourceId.toUpperCase()] = resource;
+    });
+    return map;
+  },
+
+  isAulaMagnaReportResource_: function (resourceId, resource) {
+    var normalizedId = ROOMS_APP.normalizeString(resourceId).toUpperCase();
+    if (normalizedId === this.AULA_MAGNA_RESOURCE_ID_) {
+      return true;
+    }
+    if (resource && this.isAulaMagnaResource_(resource)) {
+      return true;
+    }
+    return ROOMS_APP.slugify(resource && resource.DisplayName || resourceId) === this.AULA_MAGNA_RESOURCE_ID_;
+  },
+
+  getBookingReportRequesterLabel_: function (booking) {
+    var requesterMode = this.normalizeRequesterMode_(booking && booking.RequesterMode);
+    var listedName = ROOMS_APP.normalizeString([
+      ROOMS_APP.normalizeString(booking && booking.BookerSurname),
+      ROOMS_APP.normalizeString(booking && booking.BookerName)
+    ].filter(function (token) {
+      return Boolean(token);
+    }).join(' '));
+    if (requesterMode === 'MANUAL') {
+      return ROOMS_APP.normalizeString(booking && booking.RequesterManualName);
+    }
+    if (requesterMode === 'NONE') {
+      return '';
+    }
+    return listedName || ROOMS_APP.normalizeString(booking && booking.RequesterManualName);
+  },
+
+  buildBookingReportRow_: function (booking, resource) {
+    return {
+      date: ROOMS_APP.toIsoDate(booking.BookingDate),
+      startTime: ROOMS_APP.toTimeString(booking.StartTime),
+      endTime: ROOMS_APP.toTimeString(booking.EndTime),
+      room: ROOMS_APP.normalizeString(resource && resource.DisplayName || booking.ResourceId),
+      activity: ROOMS_APP.normalizeString(booking.ActivityDescription || booking.Title),
+      requester: this.getBookingReportRequesterLabel_(booking),
+      notes: ROOMS_APP.normalizeString(booking.Notes),
+      source: 'BOOKING'
+    };
+  },
+
+  buildAulaMagnaEventReportRow_: function (eventRow, resourceMap) {
+    var resourceId = ROOMS_APP.normalizeString(eventRow.ResourceId || this.AULA_MAGNA_RESOURCE_ID_);
+    var resource = resourceMap[resourceId] || resourceMap[resourceId.toUpperCase()] || null;
+    return {
+      date: ROOMS_APP.toIsoDate(eventRow.EventDate),
+      startTime: ROOMS_APP.toTimeString(eventRow.StartTime),
+      endTime: ROOMS_APP.toTimeString(eventRow.EndTime),
+      room: ROOMS_APP.normalizeString(resource && resource.DisplayName || 'Aula Magna'),
+      activity: ROOMS_APP.normalizeString(eventRow.EventName),
+      requester: '',
+      notes: ROOMS_APP.normalizeString(eventRow.Notes),
+      source: 'AULA_MAGNA_EVENT'
+    };
+  },
+
   listUpcomingBookingsForRoom: function (resourceId, fromDate) {
     var startDate = fromDate || ROOMS_APP.toIsoDate(new Date());
     return ROOMS_APP.sortBy(

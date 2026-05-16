@@ -4,11 +4,15 @@ Mod.Substitution = {
   handlePage: function () {
     var actor = ROOMS_APP.Auth.getUserContext();
     var dailyBootstrap = this.buildDailyBootstrap_(actor);
+    var bookingReport = ROOMS_APP.Auth.canViewReports(actor)
+      ? ROOMS_APP.Booking.getBookingReportModel('', '', actor)
+      : null;
     var reportsHtml = this.renderTemplateToString_('ui.substitution.reports', {
-      pageTitle: 'Report sostituzioni',
+      pageTitle: 'Report',
       viewerMode: 'list',
       viewerEmbedded: true,
       viewerUser: actor,
+      bookingReport: bookingReport,
       reports: ROOMS_APP.Replacements.listVisibleArchivedReports_(),
       report: null
     });

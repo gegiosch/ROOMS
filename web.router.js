@@ -533,12 +533,20 @@ function renderTemplate_(filename, viewModel) {
 function renderSubstitutionReportsPage_(params) {
   var actor = ROOMS_APP.Auth.getUserContext();
   var embedded = ROOMS_APP.normalizeString(params && params.embedded).toLowerCase() === 'true';
+  var bookingReport = ROOMS_APP.Auth.canViewReports(actor)
+    ? ROOMS_APP.Booking.getBookingReportModel(
+      params && (params.startDate || params.dal),
+      params && (params.endDate || params.al),
+      actor
+    )
+    : null;
   ROOMS_APP.Auth.assertAllowedDomain(actor.email);
   return renderTemplate_('ui.substitution.reports', {
-    pageTitle: 'Report sostituzioni',
+    pageTitle: 'Report',
     viewerMode: 'list',
     viewerEmbedded: embedded,
     viewerUser: actor,
+    bookingReport: bookingReport,
     reports: ROOMS_APP.Replacements.listVisibleArchivedReports_(),
     report: null
   });
@@ -559,6 +567,7 @@ function renderSubstitutionReportViewPage_(params) {
     viewerMode: 'detail',
     viewerEmbedded: embedded,
     viewerUser: actor,
+    bookingReport: null,
     reports: [],
     report: report
   });

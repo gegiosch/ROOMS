@@ -1344,6 +1344,27 @@
           return Boolean(model && model.user && model.user.canManageAulaMagna);
         }
 
+        function canViewReportsUser_(model) {
+          return Boolean(model && model.user && model.user.canViewReports);
+        }
+
+        function isReportOnlyUser_() {
+          return canViewReportsUser_(model) && !canAccessAdminUser_(model) && !canManageReplacementUser_(model);
+        }
+
+        function applyReportOnlyTabAccess_() {
+          if (!isReportOnlyUser_()) {
+            return;
+          }
+          tabButtons.forEach(function (button) {
+            button.style.display = button.getAttribute('data-tab') === 'reports' ? 'inline-flex' : 'none';
+          });
+        }
+
+        function getInitialAdminTab_() {
+          return isReportOnlyUser_() ? 'reports' : 'landing';
+        }
+
         function parseSimulationDateTime_(value) {
           var normalized = String(value || '').trim();
           var match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
@@ -10487,6 +10508,16 @@
         }
 
         if (reportsRoot) {
+          reportsRoot.addEventListener('submit', function (event) {
+            var form = event.target && event.target.closest ? event.target.closest('form[data-booking-report-filter]') : null;
+            var params;
+            if (!form) {
+              return;
+            }
+            event.preventDefault();
+            params = new URLSearchParams(new FormData(form));
+            loadReportsUrl_('?' + params.toString());
+          });
           reportsRoot.addEventListener('click', function (event) {
             var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
             var href;
@@ -10508,8 +10539,9 @@
         updateAbsenceDraftStatus_();
         renderAdminBookingDraft_();
         renderAdminExistingOccupancies_();
+        applyReportOnlyTabAccess_();
         setAdminShellReady_(true, '');
-        activateTab_('landing');
+        activateTab_(getInitialAdminTab_());
       }());
     </script>
   </body>

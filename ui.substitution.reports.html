@@ -64,6 +64,56 @@
       .reports-list-table a:hover {
         color: var(--accent);
       }
+      .reports-booking-card {
+        margin-bottom: 18px;
+      }
+      .reports-booking-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        padding: 16px 18px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .reports-booking-header h2,
+      .reports-booking-section h3 {
+        margin: 0;
+      }
+      .reports-booking-filter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 10px;
+      }
+      .reports-booking-filter label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .reports-booking-filter input {
+        min-width: 150px;
+      }
+      .reports-booking-section {
+        padding: 16px 18px 18px;
+      }
+      .reports-booking-section + .reports-booking-section {
+        border-top: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .reports-booking-section-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .reports-booking-count {
+        color: var(--muted);
+        font-size: 13px;
+      }
       .reports-badge {
         display: inline-flex;
         align-items: center;
@@ -100,7 +150,9 @@
       }
       @media (max-width: 720px) {
         .reports-viewer-header,
-        .reports-detail-toolbar {
+        .reports-detail-toolbar,
+        .reports-booking-header,
+        .reports-booking-section-title {
           flex-direction: column;
           align-items: flex-start;
         }
@@ -114,6 +166,44 @@
     <div class="page-shell">
       <!-- SUBSTITUTION_REPORTS_FRAGMENT_START -->
       <div class="reports-viewer-shell" data-substitution-reports-fragment="true">
+        <?
+          var bookingReportModel = typeof bookingReport !== 'undefined' ? bookingReport : null;
+          function formatBookingReportRange_(row) {
+            var start = row && row.startTime ? row.startTime : '';
+            var end = row && row.endTime ? row.endTime : '';
+            return start && end ? (start + '-' + end) : (start || end || '-');
+          }
+          function renderBookingReportRows_(rows) {
+        ?>
+            <div style="overflow-x:auto;">
+              <table class="reports-list-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Fascia oraria</th>
+                    <th>Aula</th>
+                    <th>Attività</th>
+                    <th>Docente/richiedente</th>
+                    <th>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <? for (var bookingIndex = 0; bookingIndex < rows.length; bookingIndex += 1) { var bookingRow = rows[bookingIndex]; ?>
+                    <tr>
+                      <td><?= bookingRow.date || '-' ?></td>
+                      <td><?= formatBookingReportRange_(bookingRow) ?></td>
+                      <td><?= bookingRow.room || '-' ?></td>
+                      <td><?= bookingRow.activity || '-' ?></td>
+                      <td><?= bookingRow.requester || '-' ?></td>
+                      <td><?= bookingRow.notes || '-' ?></td>
+                    </tr>
+                  <? } ?>
+                </tbody>
+              </table>
+            </div>
+        <?
+          }
+        ?>
         <? if (!viewerEmbedded) { ?>
           <header class="reports-viewer-header">
             <div>
@@ -149,6 +239,52 @@
             </div>
           </section>
         <? } else { ?>
+          <? if (bookingReportModel) { ?>
+            <section class="panel reports-list-card reports-booking-card">
+              <div class="reports-booking-header">
+                <div>
+                  <div class="eyebrow">Preparazione aule</div>
+                  <h2>Report prenotazioni</h2>
+                  <div class="reports-viewer-meta">Dal <?= bookingReportModel.startDate ?> al <?= bookingReportModel.endDate ?></div>
+                </div>
+                <form class="reports-booking-filter" method="get" action="?" data-booking-report-filter>
+                  <input type="hidden" name="fn" value="substitutionReports">
+                  <? if (viewerEmbedded) { ?><input type="hidden" name="embedded" value="true"><? } ?>
+                  <label>
+                    Dal
+                    <input type="date" name="startDate" value="<?= bookingReportModel.startDate ?>">
+                  </label>
+                  <label>
+                    Al
+                    <input type="date" name="endDate" value="<?= bookingReportModel.endDate ?>">
+                  </label>
+                  <button class="button secondary" type="submit">Filtra</button>
+                </form>
+              </div>
+              <div class="reports-booking-section">
+                <div class="reports-booking-section-title">
+                  <h3>Prenotazioni aule</h3>
+                  <span class="reports-booking-count"><?= bookingReportModel.regularBookings.length ?> prenotazioni</span>
+                </div>
+                <? if (bookingReportModel.regularBookings.length) { ?>
+                  <? renderBookingReportRows_(bookingReportModel.regularBookings); ?>
+                <? } else { ?>
+                  <div class="reports-empty">Nessuna prenotazione aule nell'intervallo selezionato.</div>
+                <? } ?>
+              </div>
+              <div class="reports-booking-section">
+                <div class="reports-booking-section-title">
+                  <h3>Prenotazioni Aula Magna</h3>
+                  <span class="reports-booking-count"><?= bookingReportModel.aulaMagnaBookings.length ?> prenotazioni</span>
+                </div>
+                <? if (bookingReportModel.aulaMagnaBookings.length) { ?>
+                  <? renderBookingReportRows_(bookingReportModel.aulaMagnaBookings); ?>
+                <? } else { ?>
+                  <div class="reports-empty">Nessuna prenotazione Aula Magna nell'intervallo selezionato.</div>
+                <? } ?>
+              </div>
+            </section>
+          <? } ?>
           <section class="panel reports-list-card">
             <? if (reports && reports.length) { ?>
               <div style="overflow-x:auto;">

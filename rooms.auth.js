@@ -24,6 +24,12 @@ ROOMS_APP.Auth = {
       canManageAulaMagna: Boolean(permissions.canManageAulaMagna),
       canUseSimulation: Boolean(permissions.canUseSimulation),
       canAccessAdmin: Boolean(permissions.canAccessAdmin),
+      canViewReports: Boolean(
+        permissions.canAccessAdmin ||
+        permissions.canManageReplacement ||
+        permissions.canManageAulaMagna ||
+        this.isAtaLikeRole_(role)
+      ),
       allowedDomain: ROOMS_APP.getAllowedDomain(),
       isAllowedDomain: ROOMS_APP.isEmailInDomain(email, ROOMS_APP.getAllowedDomain()),
       firstName: identity.firstName,
@@ -70,6 +76,39 @@ ROOMS_APP.Auth = {
       throw new Error('Aula Magna management permission required.');
     }
     return user;
+  },
+
+  requireCanViewReports: function () {
+    var user = this.getUserContext();
+    this.assertAllowedDomain(user.email);
+    if (!this.canViewReports(user)) {
+      throw new Error('Report access required.');
+    }
+    return user;
+  },
+
+  canViewReports: function (actor) {
+    var user = actor || this.getUserContext();
+    return Boolean(
+      user &&
+      user.isAllowedDomain !== false &&
+      (
+        user.canViewReports ||
+        user.canAccessAdmin ||
+        user.canManageReplacement ||
+        user.canManageAulaMagna ||
+        this.isAtaLikeRole_(user.role)
+      )
+    );
+  },
+
+  isAtaLikeRole_: function (role) {
+    var normalized = ROOMS_APP.normalizeString(role).toUpperCase().replace(/[\s-]+/g, '_');
+    return normalized === 'ATA' ||
+      normalized === 'COLLABORATORE' ||
+      normalized === 'COLLABORATORE_SCOLASTICO' ||
+      normalized.indexOf('COLLABORATORE') >= 0 ||
+      normalized.indexOf('ATA') >= 0;
   },
 
   requireSuperAdmin: function () {
