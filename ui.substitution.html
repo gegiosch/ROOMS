@@ -1385,6 +1385,10 @@
           });
         }
 
+        function applyAdminTabAccess() {
+          return applyAdminTabAccess_();
+        }
+
         function getFirstAllowedAdminTab_() {
           var button = tabButtons.filter(function (entry) {
             return isAdminTabAllowed_(entry.getAttribute('data-tab'));
@@ -8127,6 +8131,13 @@
           }
         }
 
+        function loadAdminTab(tabId) {
+          activateTab_(tabId);
+        }
+
+        window.applyAdminTabAccess = applyAdminTabAccess;
+        window.loadAdminTab = loadAdminTab;
+
         function syncAdminBookingDraftUi_(options) {
           var settings = options || {};
           if (adminBookingDraftTable && !safeArray(adminBookingState.draftRows).length) {
@@ -8176,11 +8187,11 @@
             return;
           }
           if (!isAdminTabAllowed_(targetTab)) {
-            activateTab_(getFirstAllowedAdminTab_() || 'landing');
+            loadAdminTab(getFirstAllowedAdminTab_() || 'landing');
             return;
           }
           if (targetTab === currentTabId) {
-            activateTab_(targetTab);
+            loadAdminTab(targetTab);
             return;
           }
           if (!settings.skipBookingDraftConfirm &&
@@ -8210,7 +8221,7 @@
             }, 'Modifiche uscite non salvate', 'Sono presenti modifiche non salvate alle uscite didattiche. Continuando senza salvare, tutte le modifiche non salvate saranno perse.');
             return;
           }
-          activateTab_(targetTab);
+          loadAdminTab(targetTab);
         }
 
         function setHeader_() {
@@ -10632,9 +10643,9 @@
         updateAbsenceDraftStatus_();
         renderAdminBookingDraft_();
         renderAdminExistingOccupancies_();
-        applyAdminTabAccess_();
+        applyAdminTabAccess();
         setAdminShellReady_(true, '');
-        activateTab_(getInitialAdminTab_());
+        loadAdminTab(getInitialAdminTab_());
       }());
     </script>
   </body>
