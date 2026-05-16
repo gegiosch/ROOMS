@@ -4,7 +4,7 @@ ROOMS_APP.Auth = {
   SIMULATION_INPUT_PATTERN_: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
   USER_CONTEXT_CACHE_TTL_: 3600,
   USER_CONTEXT_CACHE_VERSION_KEY_: 'rooms:user-context-cache-version',
-  USER_CONTEXT_CACHE_SCHEMA_VERSION_: 'tabs-v2',
+  USER_CONTEXT_CACHE_SCHEMA_VERSION_: 'booking-views-v1',
   TAB_PERMISSION_KEYS_: {
     absences: 'canAccessAbsences',
     classEvents: 'canAccessClassEvents',
@@ -12,6 +12,14 @@ ROOMS_APP.Auth = {
     dailyReplacements: 'canAccessDailyReplacements',
     bookings: 'canAccessBookings',
     report: 'canAccessReport'
+  },
+  BOOKING_VIEW_PERMISSION_KEYS_: {
+    create: 'canViewBookingCreate',
+    mine: 'canViewBookingMine',
+    daily: 'canViewDailyBookings',
+    future: 'canViewFutureBookings',
+    replacementReport: 'canViewReplacementReport',
+    ownRecovery: 'canViewOwnRecovery'
   },
 
   getUserContext: function () {
@@ -40,6 +48,12 @@ ROOMS_APP.Auth = {
       canAccessBookings: Boolean(permissions.canAccessBookings),
       canAccessReport: Boolean(permissions.canAccessReport),
       canViewReports: Boolean(permissions.canAccessReport),
+      canViewBookingCreate: Boolean(permissions.canViewBookingCreate),
+      canViewBookingMine: Boolean(permissions.canViewBookingMine),
+      canViewDailyBookings: Boolean(permissions.canViewDailyBookings),
+      canViewFutureBookings: Boolean(permissions.canViewFutureBookings),
+      canViewReplacementReport: Boolean(permissions.canViewReplacementReport),
+      canViewOwnRecovery: Boolean(permissions.canViewOwnRecovery),
       allowedDomain: ROOMS_APP.getAllowedDomain(),
       isAllowedDomain: ROOMS_APP.isEmailInDomain(email, ROOMS_APP.getAllowedDomain()),
       firstName: identity.firstName,
@@ -124,6 +138,41 @@ ROOMS_APP.Auth = {
       user &&
       user.isAllowedDomain !== false &&
       user.canAccessAdmin &&
+      (
+        user.isSuperAdmin ||
+        (permissionKey && user[permissionKey])
+      )
+    );
+  },
+
+  requireBookingPageView: function (viewKey) {
+    var user = this.getUserContext();
+    this.assertAllowedDomain(user.email);
+    if (!this.canViewBookingPageSection(user, viewKey)) {
+      throw new Error('Booking page view permission required.');
+    }
+    return user;
+  },
+
+  requireAnyBookingPageView: function (viewKeys) {
+    var user = this.getUserContext();
+    var keys = Array.isArray(viewKeys) ? viewKeys : [viewKeys];
+    var index;
+    this.assertAllowedDomain(user.email);
+    for (index = 0; index < keys.length; index += 1) {
+      if (this.canViewBookingPageSection(user, keys[index])) {
+        return user;
+      }
+    }
+    throw new Error('Booking page view permission required.');
+  },
+
+  canViewBookingPageSection: function (actor, viewKey) {
+    var user = actor || this.getUserContext();
+    var permissionKey = this.BOOKING_VIEW_PERMISSION_KEYS_[viewKey] || '';
+    return Boolean(
+      user &&
+      user.isAllowedDomain !== false &&
       (
         user.isSuperAdmin ||
         (permissionKey && user[permissionKey])
@@ -286,6 +335,12 @@ ROOMS_APP.Auth = {
           CanAccessDailyReplacements: row.CanAccessDailyReplacements,
           CanAccessBookings: row.CanAccessBookings,
           CanAccessReport: row.CanAccessReport,
+          CanViewBookingCreate: row.CanViewBookingCreate,
+          CanViewBookingMine: row.CanViewBookingMine,
+          CanViewDailyBookings: row.CanViewDailyBookings,
+          CanViewFutureBookings: row.CanViewFutureBookings,
+          CanViewReplacementReport: row.CanViewReplacementReport,
+          CanViewOwnRecovery: row.CanViewOwnRecovery,
           Notes: ROOMS_APP.normalizeString(row.Notes)
         };
       });
@@ -320,6 +375,12 @@ ROOMS_APP.Auth = {
       canAccessBookings: Boolean(permissions.canAccessBookings),
       canAccessReport: Boolean(permissions.canAccessReport),
       canViewReports: Boolean(permissions.canAccessReport),
+      canViewBookingCreate: Boolean(permissions.canViewBookingCreate),
+      canViewBookingMine: Boolean(permissions.canViewBookingMine),
+      canViewDailyBookings: Boolean(permissions.canViewDailyBookings),
+      canViewFutureBookings: Boolean(permissions.canViewFutureBookings),
+      canViewReplacementReport: Boolean(permissions.canViewReplacementReport),
+      canViewOwnRecovery: Boolean(permissions.canViewOwnRecovery),
       allowedDomain: ROOMS_APP.getAllowedDomain(),
       isAllowedDomain: ROOMS_APP.isEmailInDomain(normalized, ROOMS_APP.getAllowedDomain()),
       firstName: identity.firstName,
@@ -470,7 +531,13 @@ ROOMS_APP.Auth = {
         canAccessLongReplacements: true,
         canAccessDailyReplacements: true,
         canAccessBookings: true,
-        canAccessReport: true
+        canAccessReport: true,
+        canViewBookingCreate: true,
+        canViewBookingMine: true,
+        canViewDailyBookings: true,
+        canViewFutureBookings: true,
+        canViewReplacementReport: true,
+        canViewOwnRecovery: true
       };
     }
 
@@ -486,7 +553,13 @@ ROOMS_APP.Auth = {
       canAccessLongReplacements: this.readPermissionValue_(entry && entry.CanAccessLongReplacements, false),
       canAccessDailyReplacements: this.readPermissionValue_(entry && entry.CanAccessDailyReplacements, false),
       canAccessBookings: this.readPermissionValue_(entry && entry.CanAccessBookings, false),
-      canAccessReport: this.readPermissionValue_(entry && entry.CanAccessReport, false)
+      canAccessReport: this.readPermissionValue_(entry && entry.CanAccessReport, false),
+      canViewBookingCreate: this.readPermissionValue_(entry && entry.CanViewBookingCreate, false),
+      canViewBookingMine: this.readPermissionValue_(entry && entry.CanViewBookingMine, false),
+      canViewDailyBookings: this.readPermissionValue_(entry && entry.CanViewDailyBookings, false),
+      canViewFutureBookings: this.readPermissionValue_(entry && entry.CanViewFutureBookings, false),
+      canViewReplacementReport: this.readPermissionValue_(entry && entry.CanViewReplacementReport, false),
+      canViewOwnRecovery: this.readPermissionValue_(entry && entry.CanViewOwnRecovery, false)
     };
   },
 
@@ -503,7 +576,13 @@ ROOMS_APP.Auth = {
       canAccessLongReplacements: false,
       canAccessDailyReplacements: false,
       canAccessBookings: false,
-      canAccessReport: false
+      canAccessReport: false,
+      canViewBookingCreate: false,
+      canViewBookingMine: false,
+      canViewDailyBookings: false,
+      canViewFutureBookings: false,
+      canViewReplacementReport: false,
+      canViewOwnRecovery: false
     };
   },
 
@@ -522,7 +601,13 @@ ROOMS_APP.Auth = {
       canAccessLongReplacements: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessLongReplacements, false),
       canAccessDailyReplacements: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessDailyReplacements, false),
       canAccessBookings: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessBookings, false),
-      canAccessReport: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessReport, false)
+      canAccessReport: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canAccessReport, false),
+      canViewBookingCreate: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canViewBookingCreate, false),
+      canViewBookingMine: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canViewBookingMine, false),
+      canViewDailyBookings: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canViewDailyBookings, false),
+      canViewFutureBookings: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canViewFutureBookings, false),
+      canViewReplacementReport: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canViewReplacementReport, false),
+      canViewOwnRecovery: role === 'SUPERADMIN' ? true : this.readPermissionValue_(source.canViewOwnRecovery, false)
     };
   },
 

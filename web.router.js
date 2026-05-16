@@ -622,6 +622,21 @@ function routeApiRequest_(payload) {
   if (action === 'cancelMobileBooking') {
     return ROOMS_APP.BookingMobile.cancelBooking(payload.bookingId, payload.notes);
   }
+  if (action === 'getMobileDailyBookingsReport') {
+    return ROOMS_APP.BookingMobile.getDailyBookingsReport();
+  }
+  if (action === 'getMobileFutureBookingsReport') {
+    return ROOMS_APP.BookingMobile.getFutureBookingsReport(payload.startDate || payload.dal, payload.endDate || payload.al);
+  }
+  if (action === 'listMobileReplacementReports') {
+    return ROOMS_APP.BookingMobile.listReplacementReports();
+  }
+  if (action === 'getMobileReplacementReport') {
+    return ROOMS_APP.BookingMobile.getReplacementReport(payload.reportKey);
+  }
+  if (action === 'getMobileOwnRecoveryModel') {
+    return ROOMS_APP.BookingMobile.getOwnRecoveryModel();
+  }
   if (action === 'getAdminRoomBookingModel') {
     return ROOMS_APP.Booking.getAdminRoomBookingModel(payload.date, normalizeRoomIdParam_(payload));
   }

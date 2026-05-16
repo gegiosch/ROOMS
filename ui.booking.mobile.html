@@ -65,7 +65,7 @@
 
       .mobile-segments {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 3px;
         position: sticky;
         top: 0;
@@ -360,6 +360,40 @@
         line-height: 1.32;
       }
 
+      .mobile-report-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 20px;
+      }
+
+      .mobile-report-table th,
+      .mobile-report-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .mobile-report-table th {
+        color: #cbd5e1;
+        font-size: 17px;
+        text-transform: uppercase;
+      }
+
+      .mobile-filter-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .mobile-report-frame {
+        background: #ffffff;
+        color: #111827;
+        border-radius: 10px;
+        overflow: auto;
+        max-height: 72vh;
+      }
+
       .mobile-modal {
         position: fixed;
         inset: 0;
@@ -408,8 +442,12 @@
       </header>
 
       <nav class="mobile-segments" aria-label="Sezioni prenotazione">
-        <button id="segment-new" class="mobile-segment active" type="button">Nuova prenotazione</button>
-        <button id="segment-my" class="mobile-segment" type="button">Le mie prenotazioni</button>
+        <button id="segment-new" class="mobile-segment active" type="button" data-mobile-view="new">Nuova prenotazione</button>
+        <button id="segment-my" class="mobile-segment" type="button" data-mobile-view="my">Le mie prenotazioni</button>
+        <button id="segment-daily" class="mobile-segment" type="button" data-mobile-view="daily">Prenotazioni giornaliere</button>
+        <button id="segment-future" class="mobile-segment" type="button" data-mobile-view="future">Prenotazioni future</button>
+        <button id="segment-reports" class="mobile-segment" type="button" data-mobile-view="reports">Report sostituzioni</button>
+        <button id="segment-recovery" class="mobile-segment" type="button" data-mobile-view="recovery">Le mie ore</button>
       </nav>
 
       <div id="mobile-notice" class="notice" style="display:none;"></div>
@@ -482,6 +520,59 @@
         </div>
         <div id="my-bookings-list"></div>
       </section>
+
+      <section id="view-daily" class="is-hidden">
+        <div class="mobile-card">
+          <h2>Prenotazioni giornaliere</h2>
+          <p class="subtitle">Prenotazioni di oggi per la preparazione aule.</p>
+          <button id="refresh-daily-bookings" class="button secondary" type="button" style="width:100%;">Aggiorna</button>
+        </div>
+        <div id="daily-bookings-list"></div>
+      </section>
+
+      <section id="view-future" class="is-hidden">
+        <div class="mobile-card">
+          <h2>Prenotazioni future</h2>
+          <div class="mobile-filter-row">
+            <div class="mobile-field">
+              <label for="future-start">Dal</label>
+              <input id="future-start" class="input" type="date">
+            </div>
+            <div class="mobile-field">
+              <label for="future-end">Al</label>
+              <input id="future-end" class="input" type="date">
+            </div>
+          </div>
+          <button id="refresh-future-bookings" class="button secondary" type="button" style="width:100%;">Filtra</button>
+        </div>
+        <div id="future-bookings-list"></div>
+      </section>
+
+      <section id="view-reports" class="is-hidden">
+        <div class="mobile-card">
+          <h2>Report sostituzioni</h2>
+          <p class="subtitle">Report ufficiali pubblicati.</p>
+          <button id="refresh-replacement-reports" class="button secondary" type="button" style="width:100%;">Aggiorna</button>
+        </div>
+        <div id="replacement-reports-list"></div>
+        <div id="replacement-report-detail"></div>
+      </section>
+
+      <section id="view-recovery" class="is-hidden">
+        <div class="mobile-card">
+          <h2>Le mie ore</h2>
+          <p class="subtitle">Ore personali a credito e a debito.</p>
+          <button id="refresh-own-recovery" class="button secondary" type="button" style="width:100%;">Aggiorna</button>
+        </div>
+        <div id="own-recovery-list"></div>
+      </section>
+
+      <section id="view-empty" class="is-hidden">
+        <div class="mobile-card">
+          <h2>Nessuna sezione disponibile</h2>
+          <p class="subtitle">Non sono abilitate sezioni di Prenotazione aule per questo profilo.</p>
+        </div>
+      </section>
     </main>
 
     <div class="mobile-primary-bar">
@@ -512,6 +603,7 @@
           user: null,
           resources: [],
           activeView: 'new',
+          permissions: {},
           form: {
             bookingDate: '',
             resourceId: '',
@@ -534,6 +626,23 @@
             status: 'idle',
             rows: []
           },
+          dailyBookings: {
+            status: 'idle',
+            model: null
+          },
+          futureBookings: {
+            status: 'idle',
+            model: null
+          },
+          replacementReports: {
+            status: 'idle',
+            rows: [],
+            detail: null
+          },
+          ownRecovery: {
+            status: 'idle',
+            model: null
+          },
           modal: {
             onConfirm: null
           }
@@ -546,9 +655,18 @@
             'mobile-user-pill',
             'segment-new',
             'segment-my',
+            'segment-daily',
+            'segment-future',
+            'segment-reports',
+            'segment-recovery',
             'mobile-notice',
             'view-new',
             'view-my',
+            'view-daily',
+            'view-future',
+            'view-reports',
+            'view-recovery',
+            'view-empty',
             'booking-date',
             'booking-room',
             'booking-split',
@@ -564,6 +682,17 @@
             'cancel-edit',
             'refresh-my-bookings',
             'my-bookings-list',
+            'refresh-daily-bookings',
+            'daily-bookings-list',
+            'future-start',
+            'future-end',
+            'refresh-future-bookings',
+            'future-bookings-list',
+            'refresh-replacement-reports',
+            'replacement-reports-list',
+            'replacement-report-detail',
+            'refresh-own-recovery',
+            'own-recovery-list',
             'form-title',
             'mobile-modal',
             'mobile-modal-title',
@@ -577,6 +706,15 @@
 
         function safeArray_(value) {
           return Array.isArray(value) ? value : [];
+        }
+
+        function escapeHtml_(value) {
+          return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
         }
 
         function slotKey_(slot) {
@@ -737,12 +875,43 @@
           select.value = state.form.resourceId || '';
         }
 
+        function viewPermissionKey_(viewName) {
+          return {
+            new: 'create',
+            my: 'mine',
+            daily: 'daily',
+            future: 'future',
+            reports: 'replacementReport',
+            recovery: 'ownRecovery'
+          }[viewName] || '';
+        }
+
+        function isViewAllowed_(viewName) {
+          var key = viewPermissionKey_(viewName);
+          return Boolean(key && state.permissions && state.permissions[key]);
+        }
+
+        function firstAllowedView_() {
+          return ['new', 'my', 'daily', 'future', 'reports', 'recovery'].filter(isViewAllowed_)[0] || 'empty';
+        }
+
         function renderSegments_() {
-          nodes['segment-new'].classList.toggle('active', state.activeView === 'new');
-          nodes['segment-my'].classList.toggle('active', state.activeView === 'my');
-          nodes['view-new'].classList.toggle('is-hidden', state.activeView !== 'new');
-          nodes['view-my'].classList.toggle('is-hidden', state.activeView !== 'my');
-          nodes['save-booking'].classList.toggle('is-hidden', state.activeView !== 'new');
+          ['new', 'my', 'daily', 'future', 'reports', 'recovery'].forEach(function (viewName) {
+            var segment = nodes['segment-' + viewName];
+            var view = nodes['view-' + viewName];
+            var allowed = isViewAllowed_(viewName);
+            if (segment) {
+              segment.classList.toggle('active', state.activeView === viewName);
+              segment.classList.toggle('is-hidden', !allowed);
+            }
+            if (view) {
+              view.classList.toggle('is-hidden', state.activeView !== viewName);
+            }
+          });
+          if (nodes['view-empty']) {
+            nodes['view-empty'].classList.toggle('is-hidden', state.activeView !== 'empty');
+          }
+          nodes['save-booking'].classList.toggle('is-hidden', state.activeView !== 'new' || !isViewAllowed_('new'));
           nodes['cancel-edit'].classList.toggle('is-hidden', state.activeView !== 'new' || !state.form.editingBooking);
         }
 
@@ -946,6 +1115,117 @@
           });
         }
 
+        function reportRows_(model) {
+          if (!model) {
+            return [];
+          }
+          return safeArray_(model.regularBookings).concat(safeArray_(model.aulaMagnaBookings));
+        }
+
+        function renderBookingsReport_(mountId, status, model, emptyText) {
+          var mount = nodes[mountId];
+          var rows = reportRows_(model);
+          var table;
+          var tbody;
+          if (!mount) {
+            return;
+          }
+          ROOMS_UI.clearNode(mount);
+          if (status === 'loading') {
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-card', 'Caricamento prenotazioni...'));
+            return;
+          }
+          if (!rows.length) {
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-empty', emptyText || 'Nessuna prenotazione.'));
+            return;
+          }
+          table = ROOMS_UI.el('table', 'mobile-report-table');
+          table.innerHTML = '<thead><tr><th>Data</th><th>Ora</th><th>Aula</th><th>Attività</th><th>Richiedente</th></tr></thead>';
+          tbody = document.createElement('tbody');
+          rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+              '<td>' + escapeHtml_(formatDate_(row.date)) + '</td>' +
+              '<td>' + escapeHtml_((row.startTime || '') + ' - ' + (row.endTime || '')) + '</td>' +
+              '<td>' + escapeHtml_(row.room || '-') + '</td>' +
+              '<td>' + escapeHtml_(row.activity || '-') + (row.notes ? '<br><small>' + escapeHtml_(row.notes) + '</small>' : '') + '</td>' +
+              '<td>' + escapeHtml_(row.requester || '-') + '</td>';
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          mount.appendChild(table);
+        }
+
+        function renderReplacementReports_() {
+          var list = nodes['replacement-reports-list'];
+          var detail = nodes['replacement-report-detail'];
+          if (!list || !detail) {
+            return;
+          }
+          ROOMS_UI.clearNode(list);
+          ROOMS_UI.clearNode(detail);
+          if (state.replacementReports.status === 'loading') {
+            list.appendChild(ROOMS_UI.el('div', 'mobile-card', 'Caricamento report...'));
+            return;
+          }
+          if (!state.replacementReports.rows.length) {
+            list.appendChild(ROOMS_UI.el('div', 'mobile-empty', 'Nessun report sostituzioni pubblicato.'));
+            return;
+          }
+          state.replacementReports.rows.forEach(function (report) {
+            var card = ROOMS_UI.el('article', 'mobile-booking-card');
+            var button = ROOMS_UI.el('button', 'button secondary', 'Apri');
+            card.appendChild(ROOMS_UI.el('div', 'mobile-booking-card-title', report.subject || ('Report ' + (report.referenceDate || ''))));
+            card.appendChild(ROOMS_UI.el('div', 'mobile-booking-meta', (report.referenceDateLabel || report.referenceDate || '-') + ' · ' + (report.status || '')));
+            button.type = 'button';
+            button.addEventListener('click', function () {
+              openReplacementReport_(report.reportKey);
+            });
+            card.appendChild(button);
+            list.appendChild(card);
+          });
+          if (state.replacementReports.detail) {
+            detail.appendChild(ROOMS_UI.el('div', 'mobile-card', state.replacementReports.detail.subject || 'Report sostituzioni'));
+            var frame = ROOMS_UI.el('div', 'mobile-report-frame');
+            frame.innerHTML = state.replacementReports.detail.htmlSnapshot || '<div style="padding:16px;">Snapshot non disponibile.</div>';
+            detail.appendChild(frame);
+          }
+        }
+
+        function renderOwnRecovery_() {
+          var mount = nodes['own-recovery-list'];
+          var model = state.ownRecovery.model || {};
+          if (!mount) {
+            return;
+          }
+          ROOMS_UI.clearNode(mount);
+          if (state.ownRecovery.status === 'loading') {
+            mount.appendChild(ROOMS_UI.el('div', 'mobile-card', 'Caricamento ore...'));
+            return;
+          }
+          renderRecoveryGroup_(mount, 'Ore a credito', safeArray_(model.credits));
+          renderRecoveryGroup_(mount, 'Ore a debito', safeArray_(model.debits));
+        }
+
+        function renderRecoveryGroup_(mount, title, rows) {
+          var card = ROOMS_UI.el('div', 'mobile-card');
+          card.appendChild(ROOMS_UI.el('h3', '', title));
+          if (!rows.length) {
+            card.appendChild(ROOMS_UI.el('div', 'mobile-empty', 'Nessuna ora.'));
+            mount.appendChild(card);
+            return;
+          }
+          rows.forEach(function (row) {
+            card.appendChild(ROOMS_UI.el('div', 'mobile-booking-meta', [
+              formatDate_(row.date),
+              row.period ? (row.period + 'ª ora') : '',
+              row.timeRange || '',
+              row.status || ''
+            ].filter(function (token) { return Boolean(token); }).join(' · ') + (row.label ? ' · ' + row.label : '')));
+          });
+          mount.appendChild(card);
+        }
+
         function addSelectedSlot_(slot) {
           readForm_();
           if (state.form.editingBooking) {
@@ -1031,17 +1311,23 @@
           return ROOMS_UI.call('getMobileBookingBootstrap')
             .then(function (model) {
               state.user = model.user || {};
+              state.permissions = state.user.permissions || {};
               state.resources = safeArray_(model.resources);
               state.form.bookingDate = model.defaultDate || '';
+              if (nodes['future-start'] && !nodes['future-start'].value) {
+                nodes['future-start'].value = model.defaultDate || '';
+              }
+              if (nodes['future-end'] && !nodes['future-end'].value) {
+                nodes['future-end'].value = model.defaultDate || '';
+              }
+              state.activeView = isViewAllowed_(state.activeView) ? state.activeView : firstAllowedView_();
               if (nodes['mobile-user-pill']) {
                 nodes['mobile-user-pill'].textContent = state.user.email || 'Utente';
               }
               renderResourceOptions_();
               renderForm_();
+              switchView_(state.activeView);
               clearNotice_();
-              if (!state.user.canBook) {
-                setNotice_('Utente non autorizzato alla prenotazione aule.', 'error');
-              }
             })
             .catch(function (error) {
               var message = error && error.message ? error.message : 'Errore caricamento pagina.';
@@ -1248,6 +1534,85 @@
             });
         }
 
+        function loadDailyBookings_() {
+          state.dailyBookings.status = 'loading';
+          renderBookingsReport_('daily-bookings-list', state.dailyBookings.status, state.dailyBookings.model, 'Nessuna prenotazione oggi.');
+          return ROOMS_UI.call('getMobileDailyBookingsReport')
+            .then(function (model) {
+              state.dailyBookings.status = 'loaded';
+              state.dailyBookings.model = model || null;
+              renderBookingsReport_('daily-bookings-list', state.dailyBookings.status, state.dailyBookings.model, 'Nessuna prenotazione oggi.');
+            })
+            .catch(function (error) {
+              state.dailyBookings.status = 'error';
+              setNotice_(error && error.message ? error.message : 'Errore caricamento prenotazioni giornaliere.', 'error');
+              renderBookingsReport_('daily-bookings-list', state.dailyBookings.status, null, 'Nessuna prenotazione oggi.');
+            });
+        }
+
+        function loadFutureBookings_() {
+          var start = nodes['future-start'] ? nodes['future-start'].value : '';
+          var end = nodes['future-end'] ? nodes['future-end'].value : '';
+          state.futureBookings.status = 'loading';
+          renderBookingsReport_('future-bookings-list', state.futureBookings.status, state.futureBookings.model, 'Nessuna prenotazione nell\'intervallo.');
+          return ROOMS_UI.call('getMobileFutureBookingsReport', start, end)
+            .then(function (model) {
+              state.futureBookings.status = 'loaded';
+              state.futureBookings.model = model || null;
+              renderBookingsReport_('future-bookings-list', state.futureBookings.status, state.futureBookings.model, 'Nessuna prenotazione nell\'intervallo.');
+            })
+            .catch(function (error) {
+              state.futureBookings.status = 'error';
+              setNotice_(error && error.message ? error.message : 'Errore caricamento prenotazioni future.', 'error');
+              renderBookingsReport_('future-bookings-list', state.futureBookings.status, null, 'Nessuna prenotazione nell\'intervallo.');
+            });
+        }
+
+        function loadReplacementReports_() {
+          state.replacementReports.status = 'loading';
+          renderReplacementReports_();
+          return ROOMS_UI.call('listMobileReplacementReports')
+            .then(function (rows) {
+              state.replacementReports.status = 'loaded';
+              state.replacementReports.rows = safeArray_(rows);
+              renderReplacementReports_();
+            })
+            .catch(function (error) {
+              state.replacementReports.status = 'error';
+              setNotice_(error && error.message ? error.message : 'Errore caricamento report sostituzioni.', 'error');
+              renderReplacementReports_();
+            });
+        }
+
+        function openReplacementReport_(reportKey) {
+          setNotice_('Caricamento report...', '');
+          return ROOMS_UI.call('getMobileReplacementReport', reportKey)
+            .then(function (report) {
+              state.replacementReports.detail = report || null;
+              clearNotice_();
+              renderReplacementReports_();
+            })
+            .catch(function (error) {
+              setNotice_(error && error.message ? error.message : 'Errore apertura report.', 'error');
+            });
+        }
+
+        function loadOwnRecovery_() {
+          state.ownRecovery.status = 'loading';
+          renderOwnRecovery_();
+          return ROOMS_UI.call('getMobileOwnRecoveryModel')
+            .then(function (model) {
+              state.ownRecovery.status = 'loaded';
+              state.ownRecovery.model = model || null;
+              renderOwnRecovery_();
+            })
+            .catch(function (error) {
+              state.ownRecovery.status = 'error';
+              setNotice_(error && error.message ? error.message : 'Errore caricamento ore.', 'error');
+              renderOwnRecovery_();
+            });
+        }
+
         function beginEdit_(booking) {
           state.activeView = 'new';
           state.form.editingBooking = booking;
@@ -1327,11 +1692,23 @@
         }
 
         function switchView_(viewName) {
-          state.activeView = viewName;
+          state.activeView = isViewAllowed_(viewName) ? viewName : firstAllowedView_();
           renderSegments_();
           clearNotice_();
-          if (viewName === 'my' && state.myBookings.status === 'idle') {
+          if (state.activeView === 'my' && state.myBookings.status === 'idle') {
             loadMyBookings_();
+          }
+          if (state.activeView === 'daily' && state.dailyBookings.status === 'idle') {
+            loadDailyBookings_();
+          }
+          if (state.activeView === 'future' && state.futureBookings.status === 'idle') {
+            loadFutureBookings_();
+          }
+          if (state.activeView === 'reports' && state.replacementReports.status === 'idle') {
+            loadReplacementReports_();
+          }
+          if (state.activeView === 'recovery' && state.ownRecovery.status === 'idle') {
+            loadOwnRecovery_();
           }
         }
 
@@ -1344,11 +1721,13 @@
         }
 
         function bindEvents_() {
-          nodes['segment-new'].addEventListener('click', function () {
-            switchView_('new');
-          });
-          nodes['segment-my'].addEventListener('click', function () {
-            switchView_('my');
+          ['new', 'my', 'daily', 'future', 'reports', 'recovery'].forEach(function (viewName) {
+            var segment = nodes['segment-' + viewName];
+            if (segment) {
+              segment.addEventListener('click', function () {
+                switchView_(viewName);
+              });
+            }
           });
           nodes['booking-date'].addEventListener('change', function () {
             readForm_();
@@ -1392,6 +1771,10 @@
             clearNotice_();
           });
           nodes['refresh-my-bookings'].addEventListener('click', loadMyBookings_);
+          nodes['refresh-daily-bookings'].addEventListener('click', loadDailyBookings_);
+          nodes['refresh-future-bookings'].addEventListener('click', loadFutureBookings_);
+          nodes['refresh-replacement-reports'].addEventListener('click', loadReplacementReports_);
+          nodes['refresh-own-recovery'].addEventListener('click', loadOwnRecovery_);
           nodes['mobile-modal-confirm'].addEventListener('click', function () {
             var action = state.modal.onConfirm;
             closeModal_();

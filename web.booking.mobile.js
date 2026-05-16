@@ -2,19 +2,21 @@ var ROOMS_APP = ROOMS_APP || {};
 
 ROOMS_APP.BookingMobile = {
   getBootstrapModel: function () {
-    var user = ROOMS_APP.Auth.requireCanBook();
+    var user = ROOMS_APP.Auth.getUserContext();
     ROOMS_APP.Auth.assertAllowedDomain(user.email);
     return {
       ok: true,
       user: this.toPublicUser_(user),
       defaultDate: this.getToday_(),
-      resources: this.listBookableResources_()
+      resources: ROOMS_APP.Auth.canViewBookingPageSection(user, 'create') ? this.listBookableResources_() : []
     };
   },
 
   getAvailabilityModel: function (dateString, resourceId, options) {
-    var user = ROOMS_APP.Auth.requireCanBook();
-    ROOMS_APP.Auth.assertAllowedDomain(user.email);
+    var user = ROOMS_APP.Auth.requireBookingPageView('create');
+    if (!user.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var date = ROOMS_APP.toIsoDate(dateString || this.getToday_());
     var roomId = ROOMS_APP.normalizeString(resourceId);
     var viewOptions = options && typeof options === 'object' ? options : {};
@@ -42,8 +44,7 @@ ROOMS_APP.BookingMobile = {
   },
 
   listMyBookings: function () {
-    var user = ROOMS_APP.Auth.requireCanBook();
-    ROOMS_APP.Auth.assertAllowedDomain(user.email);
+    var user = ROOMS_APP.Auth.requireBookingPageView('mine');
     var today = this.getToday_();
     var resourceMap = this.buildResourceMap_();
     var normalizedEmail = ROOMS_APP.normalizeEmail(user.email);
@@ -61,8 +62,10 @@ ROOMS_APP.BookingMobile = {
   },
 
   createBookings: function (draftRows) {
-    var user = ROOMS_APP.Auth.requireCanBook();
-    ROOMS_APP.Auth.assertAllowedDomain(user.email);
+    var user = ROOMS_APP.Auth.requireBookingPageView('create');
+    if (!user.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var rows = Array.isArray(draftRows) ? draftRows : [];
     var resourceMap = this.buildResourceMap_();
     var result = {
@@ -95,8 +98,10 @@ ROOMS_APP.BookingMobile = {
   },
 
   updateBooking: function (bookingId, payload) {
-    var user = ROOMS_APP.Auth.requireCanBook();
-    ROOMS_APP.Auth.assertAllowedDomain(user.email);
+    var user = ROOMS_APP.Auth.requireBookingPageView('mine');
+    if (!user.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var resourceMap = this.buildResourceMap_();
     var normalized = this.normalizeMobilePayload_(payload || {}, user, resourceMap);
     var updated = ROOMS_APP.Booking.updateBooking(bookingId, normalized);
@@ -104,11 +109,79 @@ ROOMS_APP.BookingMobile = {
   },
 
   cancelBooking: function (bookingId, notes) {
-    var user = ROOMS_APP.Auth.requireCanBook();
-    ROOMS_APP.Auth.assertAllowedDomain(user.email);
+    var user = ROOMS_APP.Auth.requireBookingPageView('mine');
+    if (!user.canBook) {
+      throw new Error('Booking permission required.');
+    }
     var resourceMap = this.buildResourceMap_();
     var cancelled = ROOMS_APP.Booking.cancelBooking(bookingId, notes || 'Cancellata da mobile.');
     return this.toMobileBooking_(cancelled, resourceMap);
+  },
+
+  getDailyBookingsReport: function () {
+    var user = ROOMS_APP.Auth.requireBookingPageView('daily');
+    var today = this.getToday_();
+    return ROOMS_APP.Booking.buildBookingReportModel_(today, today, user);
+  },
+
+  getFutureBookingsReport: function (startDate, endDate) {
+    var user = ROOMS_APP.Auth.requireBookingPageView('future');
+    var today = this.getToday_();
+    var start = ROOMS_APP.toIsoDate(startDate || today) || today;
+    var end = ROOMS_APP.toIsoDate(endDate || this.addDays_(start, 30)) || start;
+    if (end < start) {
+      end = start;
+    }
+    return ROOMS_APP.Booking.buildBookingReportModel_(start, end, user);
+  },
+
+  listReplacementReports: function () {
+    ROOMS_APP.Auth.requireBookingPageView('replacementReport');
+    return ROOMS_APP.Replacements.listVisibleArchivedReports_();
+  },
+
+  getReplacementReport: function (reportKey) {
+    ROOMS_APP.Auth.requireBookingPageView('replacementReport');
+    var report = ROOMS_APP.Replacements.getVisibleArchivedReportByKey_(reportKey);
+    if (!report) {
+      throw new Error('Report non trovato o non disponibile.');
+    }
+    return report;
+  },
+
+  getOwnRecoveryModel: function () {
+    var user = ROOMS_APP.Auth.requireBookingPageView('ownRecovery');
+    var teacherEmail = ROOMS_APP.Replacements.normalizeTeacherEmail_(user.email);
+    var rows = ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.REPL_HOURLY_ABSENCES).map(function (row) {
+      return ROOMS_APP.Replacements.readHourlyAbsenceRow_(row);
+    }).filter(function (row) {
+      return row.recoveryRequired &&
+        ROOMS_APP.Replacements.normalizeTeacherEmail_(row.teacherEmail) === teacherEmail;
+    });
+    var credits = [];
+    var debits = [];
+    rows.forEach(function (row) {
+      var entry = {
+        date: row.date,
+        period: row.period,
+        timeRange: [row.startTime || '', row.endTime || ''].filter(function (token) { return Boolean(token); }).join(' - '),
+        label: row.label || row.reason || '',
+        status: row.recoveryStatus || ROOMS_APP.Replacements.RECOVERY_STATUSES_.PENDING,
+        recoveredOnDate: row.recoveredOnDate || '',
+        notes: row.notes || ''
+      };
+      if (ROOMS_APP.normalizeString(row.slotType).toUpperCase() === 'CREDIT' ||
+          ROOMS_APP.normalizeString(row.reason).toUpperCase() === 'SOSTITUZIONE_A_CREDITO') {
+        credits.push(entry);
+      } else {
+        debits.push(entry);
+      }
+    });
+    return {
+      ok: true,
+      credits: ROOMS_APP.sortBy(credits, ['date', 'period']),
+      debits: ROOMS_APP.sortBy(debits, ['date', 'period'])
+    };
   },
 
   normalizeMobilePayload_: function (row, user, resourceMap) {
@@ -161,7 +234,15 @@ ROOMS_APP.BookingMobile = {
       displayName: user.displayName || [user.firstName || '', user.surname || ''].join(' ').trim(),
       firstName: user.firstName || '',
       surname: user.surname || '',
-      canBook: Boolean(user.canBook)
+      canBook: Boolean(user.canBook),
+      permissions: {
+        create: ROOMS_APP.Auth.canViewBookingPageSection(user, 'create'),
+        mine: ROOMS_APP.Auth.canViewBookingPageSection(user, 'mine'),
+        daily: ROOMS_APP.Auth.canViewBookingPageSection(user, 'daily'),
+        future: ROOMS_APP.Auth.canViewBookingPageSection(user, 'future'),
+        replacementReport: ROOMS_APP.Auth.canViewBookingPageSection(user, 'replacementReport'),
+        ownRecovery: ROOMS_APP.Auth.canViewBookingPageSection(user, 'ownRecovery')
+      }
     };
   },
 
@@ -193,6 +274,12 @@ ROOMS_APP.BookingMobile = {
     var user = ROOMS_APP.Auth.getUserContext();
     var simulation = ROOMS_APP.Auth.getSimulationContext_(null, user);
     return simulation.active ? simulation.dateIso : ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, user));
+  },
+
+  addDays_: function (dateString, days) {
+    var base = new Date(ROOMS_APP.toIsoDate(dateString) + 'T00:00:00');
+    base.setDate(base.getDate() + Number(days || 0));
+    return ROOMS_APP.toIsoDate(base);
   }
 };
 
@@ -239,5 +326,35 @@ function updateMobileBooking(bookingId, payload, requestContext) {
 function cancelMobileBooking(bookingId, notes, requestContext) {
   return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
     return ROOMS_APP.BookingMobile.cancelBooking(bookingId, notes || '');
+  });
+}
+
+function getMobileDailyBookingsReport(requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.BookingMobile.getDailyBookingsReport();
+  });
+}
+
+function getMobileFutureBookingsReport(startDate, endDate, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.BookingMobile.getFutureBookingsReport(startDate, endDate);
+  });
+}
+
+function listMobileReplacementReports(requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.BookingMobile.listReplacementReports();
+  });
+}
+
+function getMobileReplacementReport(reportKey, requestContext) {
+  return withRuntimeContext_(extractRuntimeContextFromArgs_(arguments), function () {
+    return ROOMS_APP.BookingMobile.getReplacementReport(reportKey);
+  });
+}
+
+function getMobileOwnRecoveryModel(requestContext) {
+  return withRuntimeContext_(extractRuntimeContext_(requestContext), function () {
+    return ROOMS_APP.BookingMobile.getOwnRecoveryModel();
   });
 }

@@ -17,6 +17,12 @@ ROOMS_APP.Schema = {
     'CanAccessDailyReplacements',
     'CanAccessBookings',
     'CanAccessReport',
+    'CanViewBookingCreate',
+    'CanViewBookingMine',
+    'CanViewDailyBookings',
+    'CanViewFutureBookings',
+    'CanViewReplacementReport',
+    'CanViewOwnRecovery',
     'Notes'
   ],
 
@@ -786,6 +792,12 @@ ROOMS_APP.Schema = {
         CanAccessDailyReplacements: 'TRUE',
         CanAccessBookings: 'TRUE',
         CanAccessReport: 'TRUE',
+        CanViewBookingCreate: 'TRUE',
+        CanViewBookingMine: 'TRUE',
+        CanViewDailyBookings: 'TRUE',
+        CanViewFutureBookings: 'TRUE',
+        CanViewReplacementReport: 'TRUE',
+        CanViewOwnRecovery: 'TRUE',
         Notes: 'Migrato da CONFIG.ADMIN_GROUP_EMAIL'
       });
     });

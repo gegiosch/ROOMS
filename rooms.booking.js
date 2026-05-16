@@ -66,6 +66,11 @@ ROOMS_APP.Booking = {
     if (!ROOMS_APP.Auth.canAccessAdminTab(reportActor, 'report')) {
       throw new Error('Report access required.');
     }
+    return this.buildBookingReportModel_(startDate, endDate, reportActor);
+  },
+
+  buildBookingReportModel_: function (startDate, endDate, actor) {
+    var reportActor = actor || ROOMS_APP.Auth.getUserContext();
     var today = ROOMS_APP.toIsoDate(ROOMS_APP.Auth.getEffectiveNow(null, reportActor));
     var normalizedStart = ROOMS_APP.toIsoDate(startDate || today) || today;
     var normalizedEnd = ROOMS_APP.toIsoDate(endDate || normalizedStart) || normalizedStart;
