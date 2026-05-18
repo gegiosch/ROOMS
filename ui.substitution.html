@@ -8072,6 +8072,92 @@
           return activeButton ? (activeButton.getAttribute('data-tab') || activeTabId || 'landing') : (activeTabId || 'landing');
         }
 
+        function getQueryParamLocal_(key) {
+          try {
+            return String(new URLSearchParams(window.location.search).get(key) || '');
+          } catch (error) {
+            return '';
+          }
+        }
+
+        function isAdminTabAllowed_(tabId) {
+          var user = model && model.user ? model.user : {};
+          var normalized = String(tabId || '');
+          if (user.isSuperAdmin) {
+            return true;
+          }
+          if (!user.canAccessAdmin) {
+            return false;
+          }
+          if (normalized === 'absences') {
+            return Boolean(user.canAccessAbsences);
+          }
+          if (normalized === 'trips') {
+            return Boolean(user.canAccessClassEvents);
+          }
+          if (normalized === 'long') {
+            return Boolean(user.canAccessLongReplacements);
+          }
+          if (normalized === 'daily') {
+            return Boolean(user.canAccessDailyReplacements);
+          }
+          if (normalized === 'room-bookings') {
+            return Boolean(user.canAccessBookings);
+          }
+          if (normalized === 'reports') {
+            return Boolean(user.canAccessReport);
+          }
+          return false;
+        }
+
+        function applyAdminTabAccess_() {
+          tabButtons.forEach(function (button) {
+            var tabId = button.getAttribute('data-tab') || '';
+            button.style.display = isAdminTabAllowed_(tabId) ? 'inline-flex' : 'none';
+          });
+        }
+
+        function applyAdminTabAccess() {
+          return applyAdminTabAccess_();
+        }
+
+        function getFirstAllowedAdminTab_() {
+          var button = tabButtons.filter(function (entry) {
+            return isAdminTabAllowed_(entry.getAttribute('data-tab'));
+          })[0] || null;
+          return button ? (button.getAttribute('data-tab') || '') : '';
+        }
+
+        function showNoAdminTabAccess_() {
+          var title = document.querySelector('[data-tab-panel="landing"] h3');
+          var text = document.querySelector('[data-tab-panel="landing"] .subtitle');
+          if (title) {
+            title.textContent = 'Nessun accesso disponibile';
+          }
+          if (text) {
+            text.textContent = 'Non sono abilitate schede amministrative per questo profilo.';
+          }
+          tabPanels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === 'landing');
+          });
+          tabButtons.forEach(function (button) {
+            button.classList.remove('active');
+          });
+        }
+
+        function getRequestedAdminTab_() {
+          var requested = getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
+          return requested === 'report' ? 'reports' : requested;
+        }
+
+        function getInitialAdminTab_() {
+          var requested = getRequestedAdminTab_();
+          if (requested && isAdminTabAllowed_(requested)) {
+            return requested;
+          }
+          return getFirstAllowedAdminTab_() || 'landing';
+        }
+
         function setAdminShellReady_(ready, message) {
           adminShellReady = Boolean(ready);
           if (adminShellBootstrap) {
