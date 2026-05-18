@@ -1009,6 +1009,7 @@
     <script>
       (function () {
         var state = window.ROOMS_INITIAL_MODEL || {};
+        var shellModel = window.ROOMS_SUBSTITUTION_SHELL_MODEL || {};
         var pageIndex = 0;
         var rotationTimer;
         var refreshTimer;
@@ -1018,6 +1019,8 @@
         var fullscreenButton = document.getElementById('board-fullscreen-toggle');
         var adminButton = document.getElementById('board-admin-button');
         var replacementsButton = document.getElementById('board-replacements-button');
+        var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.substitution-tab-button'));
+        var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
         var simulationButton = document.getElementById('board-simulation-toggle');
         var simulationIndicator = document.getElementById('board-simulation-indicator');
         var simulationModal = document.getElementById('board-simulation-modal');
@@ -1349,7 +1352,7 @@
         }
 
         function isAdminTabAllowed_(tabId) {
-          var user = model && model.user ? model.user : {};
+          var user = shellModel && shellModel.user ? shellModel.user : (state && state.user ? state.user : {});
           var normalized = String(tabId || '');
           if (user.isSuperAdmin) {
             return true;
@@ -1413,40 +1416,9 @@
           });
         }
 
-        function showNeutralAdminLanding_() {
-          activeTabId = 'landing';
-          tabPanels.forEach(function (panel) {
-            panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === 'landing');
-          });
-          tabButtons.forEach(function (button) {
-            button.classList.remove('active');
-          });
-        }
-
         function getRequestedAdminTab_() {
           var requested = getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
           return requested === 'report' ? 'reports' : requested;
-        }
-
-        function getInitialRequestedAdminTab_() {
-          var requested = getRequestedAdminTab_();
-          if (requested && isAdminTabAllowed_(requested)) {
-            return requested;
-          }
-          return requested ? (getFirstAllowedAdminTab_() || 'landing') : '';
-        }
-
-        function initializeAdminLanding_() {
-          var requested = getInitialRequestedAdminTab_();
-          if (requested) {
-            loadAdminTab(requested);
-            return;
-          }
-          if (!getFirstAllowedAdminTab_()) {
-            showNoAdminTabAccess_();
-            return;
-          }
-          showNeutralAdminLanding_();
         }
 
         function parseSimulationDateTime_(value) {
@@ -1722,6 +1694,9 @@
           updateSimulationUi_(state);
 
           var root = document.getElementById('board-root');
+          if (!root) {
+            return;
+          }
           ROOMS_UI.clearNode(root);
           if (!visiblePages.length) {
             root.appendChild(ROOMS_UI.el('div', 'notice', 'Nessuna pagina configurata.'));
@@ -7472,6 +7447,12 @@
             })
             .catch(function (error) {
               var root = document.getElementById('board-root');
+              if (!root) {
+                if (window.console && typeof window.console.error === 'function') {
+                  window.console.error('[board] refresh failed without board root', error);
+                }
+                return;
+              }
               ROOMS_UI.clearNode(root);
               root.appendChild(ROOMS_UI.el('div', 'notice error', error.message));
             });
@@ -8168,17 +8149,40 @@
           });
         }
 
+        function showNeutralAdminLanding_() {
+          activeTabId = 'landing';
+          tabPanels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === 'landing');
+          });
+          tabButtons.forEach(function (button) {
+            button.classList.remove('active');
+          });
+        }
+
         function getRequestedAdminTab_() {
           var requested = getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
           return requested === 'report' ? 'reports' : requested;
         }
 
-        function getInitialAdminTab_() {
+        function getInitialRequestedAdminTab_() {
           var requested = getRequestedAdminTab_();
           if (requested && isAdminTabAllowed_(requested)) {
             return requested;
           }
-          return getFirstAllowedAdminTab_() || 'landing';
+          return requested ? (getFirstAllowedAdminTab_() || 'landing') : '';
+        }
+
+        function initializeAdminLanding_() {
+          var requested = getInitialRequestedAdminTab_();
+          if (requested) {
+            loadAdminTab(requested);
+            return;
+          }
+          if (!getFirstAllowedAdminTab_()) {
+            showNoAdminTabAccess_();
+            return;
+          }
+          showNeutralAdminLanding_();
         }
 
         function setAdminShellReady_(ready, message) {
