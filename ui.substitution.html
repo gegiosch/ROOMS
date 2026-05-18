@@ -1413,17 +1413,40 @@
           });
         }
 
+        function showNeutralAdminLanding_() {
+          activeTabId = 'landing';
+          tabPanels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === 'landing');
+          });
+          tabButtons.forEach(function (button) {
+            button.classList.remove('active');
+          });
+        }
+
         function getRequestedAdminTab_() {
           var requested = getQueryParamLocal_('adminTab') || getQueryParamLocal_('tab');
           return requested === 'report' ? 'reports' : requested;
         }
 
-        function getInitialAdminTab_() {
+        function getInitialRequestedAdminTab_() {
           var requested = getRequestedAdminTab_();
           if (requested && isAdminTabAllowed_(requested)) {
             return requested;
           }
-          return getFirstAllowedAdminTab_() || 'landing';
+          return requested ? (getFirstAllowedAdminTab_() || 'landing') : '';
+        }
+
+        function initializeAdminLanding_() {
+          var requested = getInitialRequestedAdminTab_();
+          if (requested) {
+            loadAdminTab(requested);
+            return;
+          }
+          if (!getFirstAllowedAdminTab_()) {
+            showNoAdminTabAccess_();
+            return;
+          }
+          showNeutralAdminLanding_();
         }
 
         function parseSimulationDateTime_(value) {
@@ -10731,7 +10754,7 @@
         renderAdminExistingOccupancies_();
         applyAdminTabAccess();
         setAdminShellReady_(true, '');
-        loadAdminTab(getInitialAdminTab_());
+        initializeAdminLanding_();
       }());
     </script>
   </body>
