@@ -30,6 +30,7 @@ ROOMS_APP.SHEET_NAMES = {
   REPORT_ARCHIVE_HISTORY: 'ROOMS_REPORT_ARCHIVE_HISTORY',
   HOLIDAYS: 'ROOMS_HOLIDAYS',
   CLOSURES: 'ROOMS_CLOSURES',
+  LESSON_OVERRIDES: 'ROOMS_LESSON_OVERRIDES',
   WEEK_SCHEDULE: 'ROOMS_WEEK_SCHEDULE',
   SPECIAL_OPENINGS: 'ROOMS_SPECIAL_OPENINGS',
   POLICY_OVERRIDES: 'ROOMS_POLICY_OVERRIDES'
@@ -50,6 +51,8 @@ ROOMS_APP.DEFAULT_CONFIG_ROWS = [
   { Key: 'SLOT_MINUTES', Value: '30', Notes: 'Slot granularity used by free slot calculations.' },
   { Key: 'OPEN_TIME', Value: '08:00', Notes: 'Fallback opening time.' },
   { Key: 'CLOSE_TIME', Value: '18:00', Notes: 'Fallback closing time.' },
+  { Key: 'LESSONS_VALID_FROM', Value: '', Notes: 'Editable start date for the standard school timetable validity window.' },
+  { Key: 'LESSONS_VALID_TO', Value: '', Notes: 'Editable end date for the standard school timetable validity window.' },
   { Key: 'BOARD_REFRESH_SEC', Value: '60', Notes: 'Refresh interval for the public board.' },
   { Key: 'BOARD_ROTATION_SEC', Value: '15', Notes: 'Page rotation interval for the public board.' },
   { Key: 'BOARD_PAGE_COUNT', Value: '2', Notes: 'Maximum visible board pages.' },

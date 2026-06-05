@@ -58,6 +58,7 @@ ROOMS_APP.Schema = {
     sheets[ROOMS_APP.SHEET_NAMES.RESOURCES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.HOLIDAYS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.CLOSURES] = true;
+    sheets[ROOMS_APP.SHEET_NAMES.LESSON_OVERRIDES] = true;
     sheets[ROOMS_APP.SHEET_NAMES.WEEK_SCHEDULE] = true;
     sheets[ROOMS_APP.SHEET_NAMES.SPECIAL_OPENINGS] = true;
     sheets[ROOMS_APP.SHEET_NAMES.POLICY_OVERRIDES] = true;
@@ -112,6 +113,7 @@ ROOMS_APP.Schema = {
     this.ensureWeekSchedule();
     this.ensureHolidays();
     this.ensureClosures();
+    this.ensureLessonOverrides();
     this.ensureSpecialOpenings();
     this.ensurePolicyOverrides();
   },
@@ -189,6 +191,24 @@ ROOMS_APP.Schema = {
   ensureClosures: function () {
     var headers = ['ClosureId', 'StartDate', 'EndDate', 'StartTime', 'EndTime', 'Label', 'IsBlocked', 'Notes'];
     this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.CLOSURES, headers);
+  },
+
+  ensureLessonOverrides: function () {
+    var headers = [
+      'OverrideId',
+      'Date',
+      'Mode',
+      'OpenTime',
+      'CloseTime',
+      'LastLessonPeriod',
+      'LessonsEnabled',
+      'RoomsBookable',
+      'LabsBookable',
+      'Label',
+      'IsEnabled',
+      'Notes'
+    ];
+    this.ensureSheetStructure_(ROOMS_APP.SHEET_NAMES.LESSON_OVERRIDES, headers);
   },
 
   ensureSpecialOpenings: function () {
