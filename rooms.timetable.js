@@ -509,6 +509,9 @@ ROOMS_APP.Timetable = {
     var weekday = ROOMS_APP.getWeekdayName(targetDate);
     var normalizedTargetResource = ROOMS_APP.normalizeString(targetResource);
     var hasResourceFilter = Boolean(normalizedTargetResource);
+    var lessonPolicy = ROOMS_APP.Policy && typeof ROOMS_APP.Policy.getLessonDayPolicy === 'function'
+      ? ROOMS_APP.Policy.getLessonDayPolicy(targetDate)
+      : null;
 
     return (rows || [])
       .filter(function (row) {
@@ -519,11 +522,56 @@ ROOMS_APP.Timetable = {
         if (hasResourceFilter && !ROOMS_APP.Timetable.matchesResourceId_(row.ResourceId, normalizedTargetResource)) {
           return false;
         }
+        if (!ROOMS_APP.Timetable.isTimetableRowAllowedByLessonPolicy_(row, lessonPolicy)) {
+          return false;
+        }
         return Boolean(row.StartTime && row.EndTime);
       })
       .map(function (row) {
         return ROOMS_APP.Timetable.buildOccurrenceView_(row, targetDate, hasResourceFilter ? normalizedTargetResource : '');
       });
+  },
+
+  isTimetableRowAllowedByLessonPolicy_: function (row, lessonPolicy) {
+    var period = Number(ROOMS_APP.normalizeString(row && row.Period));
+    var startTime = ROOMS_APP.toTimeString(row && row.StartTime);
+    var endTime = ROOMS_APP.toTimeString(row && row.EndTime);
+    if (!lessonPolicy) {
+      return true;
+    }
+    if (!lessonPolicy.lessonsEnabled) {
+      return false;
+    }
+    if ((lessonPolicy.closureRows || []).some(function (closure) {
+      return ROOMS_APP.Timetable.closureOverlapsTimetableRow_(closure, startTime, endTime);
+    })) {
+      return false;
+    }
+    if (lessonPolicy.lastLessonPeriod && isFinite(period) && period > lessonPolicy.lastLessonPeriod) {
+      return false;
+    }
+    if (lessonPolicy.openTime && startTime && startTime < lessonPolicy.openTime) {
+      return false;
+    }
+    if (lessonPolicy.closeTime && endTime && endTime > lessonPolicy.closeTime) {
+      return false;
+    }
+    return true;
+  },
+
+  closureOverlapsTimetableRow_: function (closure, startTime, endTime) {
+    var closureStart = ROOMS_APP.Policy && typeof ROOMS_APP.Policy.normalizeOptionalTime_ === 'function'
+      ? ROOMS_APP.Policy.normalizeOptionalTime_(closure && closure.StartTime)
+      : '';
+    var closureEnd = ROOMS_APP.Policy && typeof ROOMS_APP.Policy.normalizeOptionalTime_ === 'function'
+      ? ROOMS_APP.Policy.normalizeOptionalTime_(closure && closure.EndTime)
+      : '';
+    closureStart = closureStart || '00:00';
+    closureEnd = closureEnd || '23:59';
+    if (!startTime || !endTime) {
+      return false;
+    }
+    return !(endTime <= closureStart || startTime >= closureEnd);
   },
 
   filterDisabledOccurrences_: function (occurrences, targetDate, targetResource) {

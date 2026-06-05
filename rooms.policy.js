@@ -60,6 +60,63 @@ ROOMS_APP.Policy = {
     });
   },
 
+  getLessonOverrideForDate: function (dateString) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString || '');
+    if (!targetDate || !ROOMS_APP.SHEET_NAMES.LESSON_OVERRIDES) {
+      return null;
+    }
+    return ROOMS_APP.DB.readRows(ROOMS_APP.SHEET_NAMES.LESSON_OVERRIDES).filter(function (row) {
+      return ROOMS_APP.toIsoDate(row.Date) === targetDate && ROOMS_APP.asBoolean(row.IsEnabled);
+    })[0] || null;
+  },
+
+  getLessonDayPolicy: function (dateString) {
+    var targetDate = ROOMS_APP.toIsoDate(dateString || '');
+    var closures = this.getClosuresForDate(targetDate);
+    var fullDayClosure = closures.filter(function (closure) {
+      return ROOMS_APP.Policy.isFullDayClosure_(closure);
+    })[0] || null;
+    var override = this.getLessonOverrideForDate(targetDate);
+    var validFrom = this.normalizeConfigDate_(ROOMS_APP.getConfigValue('LESSONS_VALID_FROM', ''));
+    var validTo = this.normalizeConfigDate_(ROOMS_APP.getConfigValue('LESSONS_VALID_TO', ''));
+    var insideValidity = (!validFrom || targetDate >= validFrom) && (!validTo || targetDate <= validTo);
+    // Calendar precedence: closures, lesson overrides, lesson validity window, then standard timetable.
+    if (fullDayClosure) {
+      return {
+        date: targetDate,
+        source: 'CLOSURE',
+        lessonsEnabled: false,
+        closureRows: closures,
+        fullDayClosure: fullDayClosure,
+        label: fullDayClosure.Label || 'Chiusura'
+      };
+    }
+    if (override) {
+      return {
+        date: targetDate,
+        source: 'LESSON_OVERRIDE',
+        lessonsEnabled: ROOMS_APP.asBoolean(override.LessonsEnabled),
+        openTime: this.normalizeOptionalTime_(override.OpenTime),
+        closeTime: this.normalizeOptionalTime_(override.CloseTime),
+        lastLessonPeriod: this.normalizeOptionalPositiveNumber_(override.LastLessonPeriod),
+        roomsBookable: this.normalizeOptionalBoolean_(override.RoomsBookable),
+        labsBookable: this.normalizeOptionalBoolean_(override.LabsBookable),
+        mode: ROOMS_APP.normalizeString(override.Mode),
+        label: ROOMS_APP.normalizeString(override.Label),
+        override: override,
+        closureRows: closures
+      };
+    }
+    return {
+      date: targetDate,
+      source: insideValidity ? 'LESSON_VALIDITY' : 'LESSON_VALIDITY_OUTSIDE',
+      lessonsEnabled: insideValidity,
+      validFrom: validFrom,
+      validTo: validTo,
+      closureRows: closures
+    };
+  },
+
   getDailyOpening: function (dateString) {
     var holiday = this.getHoliday(dateString);
     if (holiday) {
@@ -71,11 +128,14 @@ ROOMS_APP.Policy = {
     }
 
     var closures = this.getClosuresForDate(dateString);
-    if (closures.length) {
+    var fullDayClosure = closures.filter(function (closure) {
+      return ROOMS_APP.Policy.isFullDayClosure_(closure);
+    })[0] || null;
+    if (fullDayClosure) {
       return {
         isOpen: false,
         source: 'CLOSURE',
-        label: ROOMS_APP.normalizeString(closures[0].Label) || 'Chiusura straordinaria'
+        label: ROOMS_APP.normalizeString(fullDayClosure.Label) || 'Chiusura straordinaria'
       };
     }
 
@@ -126,10 +186,35 @@ ROOMS_APP.Policy = {
     }
 
     var resource = this.getResource(resourceId) || {};
+    var lessonPolicy = this.getLessonDayPolicy(dateString);
+    var lessonBookable = this.getLessonOverrideBookabilityForResource_(lessonPolicy, resource);
     var resourceOpen = this.normalizeOptionalTime_(resource.OpenTime);
     var resourceClose = this.normalizeOptionalTime_(resource.CloseTime);
     var finalOpen = base.openTime;
     var finalClose = base.closeTime;
+
+    if (lessonBookable === false) {
+      return {
+        isOpen: false,
+        source: 'LESSON_OVERRIDE',
+        label: lessonPolicy.label || 'Giorno non prenotabile',
+        openTime: '',
+        closeTime: '',
+        baseOpenTime: base.openTime,
+        baseCloseTime: base.closeTime,
+        resourceOpenTime: resourceOpen,
+        resourceCloseTime: resourceClose
+      };
+    }
+
+    if (lessonPolicy && lessonPolicy.source === 'LESSON_OVERRIDE') {
+      if (lessonPolicy.openTime && lessonPolicy.openTime > finalOpen) {
+        finalOpen = lessonPolicy.openTime;
+      }
+      if (lessonPolicy.closeTime && lessonPolicy.closeTime < finalClose) {
+        finalClose = lessonPolicy.closeTime;
+      }
+    }
 
     if (resourceOpen && resourceOpen > finalOpen) {
       finalOpen = resourceOpen;
@@ -173,6 +258,60 @@ ROOMS_APP.Policy = {
     return /^\d{2}:\d{2}$/.test(normalized) ? normalized : '';
   },
 
+  normalizeConfigDate_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value);
+    return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
+  },
+
+  normalizeOptionalPositiveNumber_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value);
+    var parsed;
+    if (!normalized) {
+      return 0;
+    }
+    parsed = Number(normalized);
+    return isFinite(parsed) && parsed > 0 ? parsed : 0;
+  },
+
+  normalizeOptionalBoolean_: function (value) {
+    var normalized = ROOMS_APP.normalizeString(value).toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+    return normalized === 'TRUE';
+  },
+
+  isFullDayClosure_: function (closure) {
+    var start = this.normalizeOptionalTime_(closure && closure.StartTime) || '00:00';
+    var end = this.normalizeOptionalTime_(closure && closure.EndTime) || '23:59';
+    return start <= '00:00' && end >= '23:59';
+  },
+
+  getLessonOverrideBookabilityForResource_: function (lessonPolicy, resource) {
+    var kind = this.getResourceCalendarKind_(resource);
+    if (!lessonPolicy || lessonPolicy.source !== 'LESSON_OVERRIDE') {
+      return null;
+    }
+    if (kind === 'LAB') {
+      return lessonPolicy.labsBookable;
+    }
+    return lessonPolicy.roomsBookable;
+  },
+
+  getResourceCalendarKind_: function (resource) {
+    var areaCode = ROOMS_APP.normalizeString(resource && resource.AreaCode).toUpperCase();
+    var areaLabel = ROOMS_APP.normalizeString(resource && resource.AreaLabel).toUpperCase();
+    var sideLabel = ROOMS_APP.normalizeString(resource && resource.SideLabel).toUpperCase();
+    var displayName = ROOMS_APP.normalizeString(resource && resource.DisplayName).toUpperCase();
+    if (areaCode === 'LAB' ||
+        areaLabel.indexOf('LABORATOR') >= 0 ||
+        sideLabel.indexOf('LABORATOR') >= 0 ||
+        displayName.indexOf('LAB') >= 0) {
+      return 'LAB';
+    }
+    return 'ROOM';
+  },
+
   findBlockingClosure: function (dateString, startTime, endTime) {
     var closures = this.getClosuresForDate(dateString);
 
@@ -181,6 +320,28 @@ ROOMS_APP.Policy = {
       var closureEnd = closure.EndTime || '23:59';
       return !(endTime <= closureStart || startTime >= closureEnd);
     })[0] || null;
+  },
+
+  listClosureOccupanciesForDate: function (resourceId, dateString) {
+    var normalizedResourceId = ROOMS_APP.normalizeString(resourceId);
+    var targetDate = ROOMS_APP.toIsoDate(dateString || '');
+    return this.getClosuresForDate(targetDate).map(function (closure) {
+      var startTime = ROOMS_APP.Policy.normalizeOptionalTime_(closure.StartTime) || '00:00';
+      var endTime = ROOMS_APP.Policy.normalizeOptionalTime_(closure.EndTime) || '23:59';
+      return {
+        BookingId: 'CLOSURE-' + targetDate + '-' + startTime + '-' + endTime,
+        ResourceId: normalizedResourceId,
+        BookingDate: targetDate,
+        StartTime: startTime,
+        EndTime: endTime,
+        Title: closure.Label || 'Chiusura',
+        DisplayLabel: closure.Label || 'Chiusura',
+        SourceKind: 'CLOSURE',
+        SourceType: 'CLOSURE',
+        IsNonBlocking: 'FALSE',
+        Notes: closure.Notes || ''
+      };
+    });
   },
 
   hasConflict: function (resourceId, dateString, startTime, endTime, ignoreBookingId) {

@@ -16,6 +16,9 @@ ROOMS_APP.Slots = {
     var settings = options || {};
     var windowOpenTime = this.normalizeTimeValue_(openingWindow.openTime);
     var windowCloseTime = this.normalizeTimeValue_(openingWindow.closeTime);
+    var closureOccupancies = ROOMS_APP.Policy && typeof ROOMS_APP.Policy.listClosureOccupanciesForDate === 'function'
+      ? ROOMS_APP.Policy.listClosureOccupanciesForDate(resourceId, dateString)
+      : [];
     var occupancies = this.sortOccupancies_(
       (bookings || []).map(function (booking) {
         var enriched = {};
@@ -26,7 +29,7 @@ ROOMS_APP.Slots = {
         enriched.SourceType = 'USER_BOOKING';
         enriched.DisplayLabel = ROOMS_APP.normalizeString(booking.BookerSurname || booking.BookerName || booking.Title || 'N/D');
         return enriched;
-      }).concat(timetableOccupancies || [])
+      }).concat(timetableOccupancies || []).concat(closureOccupancies)
     );
 
     if (!openingWindow.isOpen || !windowOpenTime || !windowCloseTime || this.toMinutes_(windowOpenTime) >= this.toMinutes_(windowCloseTime)) {
