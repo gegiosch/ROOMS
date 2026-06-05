@@ -79,7 +79,12 @@ ROOMS_APP.Policy = {
     var override = this.getLessonOverrideForDate(targetDate);
     var validFrom = this.normalizeConfigDate_(ROOMS_APP.getConfigValue('LESSONS_VALID_FROM', ''));
     var validTo = this.normalizeConfigDate_(ROOMS_APP.getConfigValue('LESSONS_VALID_TO', ''));
-    var insideValidity = (!validFrom || targetDate >= validFrom) && (!validTo || targetDate <= validTo);
+    var targetDateValue = this.parseLocalDateOnly_(targetDate, false);
+    var validFromValue = this.parseLocalDateOnly_(validFrom, false);
+    var validToValue = this.parseLocalDateOnly_(validTo, true);
+    var insideValidity = Boolean(targetDateValue) &&
+      (!validFromValue || targetDateValue >= validFromValue) &&
+      (!validToValue || targetDateValue <= validToValue);
     // Calendar precedence: closures, lesson overrides, lesson validity window, then standard timetable.
     if (fullDayClosure) {
       return {
@@ -259,8 +264,38 @@ ROOMS_APP.Policy = {
   },
 
   normalizeConfigDate_: function (value) {
+    if (value instanceof Date) {
+      return Utilities.formatDate(value, ROOMS_APP.getTimezone(), 'yyyy-MM-dd');
+    }
     var normalized = ROOMS_APP.normalizeString(value);
-    return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
+    return /^\d{4}-\d{2}-\d{2}/.test(normalized) ? normalized.slice(0, 10) : '';
+  },
+
+  parseLocalDateOnly_: function (dateString, endOfDay) {
+    var normalized = this.normalizeConfigDate_(dateString);
+    var match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    var parsed;
+    if (!match) {
+      return null;
+    }
+    parsed = new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0
+    );
+    if (
+      isNaN(parsed.getTime()) ||
+      parsed.getFullYear() !== Number(match[1]) ||
+      parsed.getMonth() !== Number(match[2]) - 1 ||
+      parsed.getDate() !== Number(match[3])
+    ) {
+      return null;
+    }
+    return parsed;
   },
 
   normalizeOptionalPositiveNumber_: function (value) {
