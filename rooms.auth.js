@@ -4,7 +4,7 @@ ROOMS_APP.Auth = {
   SIMULATION_INPUT_PATTERN_: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
   USER_CONTEXT_CACHE_TTL_: 3600,
   USER_CONTEXT_CACHE_VERSION_KEY_: 'rooms:user-context-cache-version',
-  USER_CONTEXT_CACHE_SCHEMA_VERSION_: 'booking-views-v1',
+  USER_CONTEXT_CACHE_SCHEMA_VERSION_: 'booking-views-v2',
   TAB_PERMISSION_KEYS_: {
     absences: 'canAccessAbsences',
     classEvents: 'canAccessClassEvents',
@@ -541,6 +541,8 @@ ROOMS_APP.Auth = {
       };
     }
 
+    var bookingViewPermissions = this.buildBookingViewPermissionsFromEntry_(entry, role);
+
     return {
       role: role,
       canBook: this.readPermissionValue_(entry && entry.CanBook, false),
@@ -554,12 +556,40 @@ ROOMS_APP.Auth = {
       canAccessDailyReplacements: this.readPermissionValue_(entry && entry.CanAccessDailyReplacements, false),
       canAccessBookings: this.readPermissionValue_(entry && entry.CanAccessBookings, false),
       canAccessReport: this.readPermissionValue_(entry && entry.CanAccessReport, false),
-      canViewBookingCreate: this.readPermissionValue_(entry && entry.CanViewBookingCreate, false),
-      canViewBookingMine: this.readPermissionValue_(entry && entry.CanViewBookingMine, false),
-      canViewDailyBookings: this.readPermissionValue_(entry && entry.CanViewDailyBookings, false),
-      canViewFutureBookings: this.readPermissionValue_(entry && entry.CanViewFutureBookings, false),
-      canViewReplacementReport: this.readPermissionValue_(entry && entry.CanViewReplacementReport, false),
-      canViewOwnRecovery: this.readPermissionValue_(entry && entry.CanViewOwnRecovery, false)
+      canViewBookingCreate: bookingViewPermissions.canViewBookingCreate,
+      canViewBookingMine: bookingViewPermissions.canViewBookingMine,
+      canViewDailyBookings: bookingViewPermissions.canViewDailyBookings,
+      canViewFutureBookings: bookingViewPermissions.canViewFutureBookings,
+      canViewReplacementReport: bookingViewPermissions.canViewReplacementReport,
+      canViewOwnRecovery: bookingViewPermissions.canViewOwnRecovery
+    };
+  },
+
+  buildBookingViewPermissionsFromEntry_: function (entry, role) {
+    var defaults = this.buildLegacyBookingViewDefaults_(entry, role);
+    return {
+      canViewBookingCreate: this.readPermissionValue_(entry && entry.CanViewBookingCreate, defaults.canViewBookingCreate),
+      canViewBookingMine: this.readPermissionValue_(entry && entry.CanViewBookingMine, defaults.canViewBookingMine),
+      canViewDailyBookings: this.readPermissionValue_(entry && entry.CanViewDailyBookings, defaults.canViewDailyBookings),
+      canViewFutureBookings: this.readPermissionValue_(entry && entry.CanViewFutureBookings, defaults.canViewFutureBookings),
+      canViewReplacementReport: this.readPermissionValue_(entry && entry.CanViewReplacementReport, defaults.canViewReplacementReport),
+      canViewOwnRecovery: this.readPermissionValue_(entry && entry.CanViewOwnRecovery, defaults.canViewOwnRecovery)
+    };
+  },
+
+  buildLegacyBookingViewDefaults_: function (entry, role) {
+    var canBook = this.readPermissionValue_(entry && entry.CanBook, false);
+    var canAccessBookings = this.readPermissionValue_(entry && entry.CanAccessBookings, false);
+    var canManageReplacement = this.readPermissionValue_(entry && entry.CanManageReplacement, false);
+    var canAccessDailyReplacements = this.readPermissionValue_(entry && entry.CanAccessDailyReplacements, false);
+    var isDocente = this.isDocenteLikeEntry_(entry, role);
+    return {
+      canViewBookingCreate: canBook,
+      canViewBookingMine: canBook,
+      canViewDailyBookings: canAccessBookings,
+      canViewFutureBookings: canAccessBookings,
+      canViewReplacementReport: canManageReplacement || canAccessDailyReplacements || (isDocente && canBook),
+      canViewOwnRecovery: isDocente && canBook
     };
   },
 
@@ -618,6 +648,15 @@ ROOMS_APP.Auth = {
     return ROOMS_APP.asBoolean(value);
   },
 
+  isDocenteLikeEntry_: function (entry, role) {
+    var normalizedRole = ROOMS_APP.normalizeString(role || entry && entry.Role).toUpperCase();
+    var orgUnitPath = this.normalizeOrgUnitPath_(entry && entry.OrgUnitPath).toUpperCase();
+    return normalizedRole === 'DOCENTE' ||
+      normalizedRole === 'DOCENTI' ||
+      orgUnitPath === '/DOCENTI' ||
+      orgUnitPath.indexOf('/DOCENTI/') === 0;
+  },
+
   normalizeOrgUnitPath_: function (value) {
     var normalized = ROOMS_APP.normalizeString(value);
     if (!normalized) {
@@ -639,6 +678,8 @@ ROOMS_APP.Auth = {
     if (normalizedEntryPath === '/') {
       return true;
     }
+    normalizedUserPath = normalizedUserPath.toUpperCase();
+    normalizedEntryPath = normalizedEntryPath.toUpperCase();
     return normalizedUserPath === normalizedEntryPath ||
       normalizedUserPath.indexOf(normalizedEntryPath + '/') === 0;
   }
